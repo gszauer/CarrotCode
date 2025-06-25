@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrot.Code</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Title Bar -->
+    <div class="title-bar">
+        <div class="title">Carrot.Code</div>
+        <div class="window-controls">
+            <button class="window-btn minimize">➖</button>
+            <button class="window-btn maximize">🔲</button>
+            <button class="window-btn close">❌</button>
+        </div>
+    </div>
+
+    <!-- File Menu -->
+    <nav class="file-menu">
+        <a href="index.html" class="menu-item">HOME</a>
+        <a href="features.html" class="menu-item">FEATURES</a>
+        <a href="docs.html" class="menu-item">DOCUMENTATION</a>
+        <a href="download.html" class="menu-item active">DOWNLOAD</a>
+        <a href="about.html" class="menu-item">ABOUT</a>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">Quick Links</div>
+            <div class="file-tree">
+                <!--div class="file-item active">
+                    <a href="index.html">
+                        <span class="file-icon">📄</span>
+                        <span>Welcome.md</span>
+                    </a>
+                </div-->
+                <div class="file-item">
+                    <a href="editor/index.html">
+                        <span class="file-icon">🌐</span>
+                        <span>Try Web Version</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Windows.zip">
+                        <span class="file-icon">🪟</span>
+                        <span>Download Win</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Mac.zip">
+                        <span class="file-icon">🍎</span>
+                        <span>Download Mac</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="https://github.com/gszauer/CarrotCode">
+                        <span class="file-icon">📄</span>
+                        <span>Source Code</span>
+                    </a>
+                </div>
+                <!--div class="file-item">
+                    <a href="http://gabormakesgames.com">
+                        <span class="file-icon">👨‍💻</span>
+                        <span>Made by Gabor</span>
+                    </a>
+                </div-->
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button class="menu-toggle" id="menuToggle">☰</button>
+                <div class="tab active">
+                    <span>download.html</span>
+                </div>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="editor-content">
+                <h1>Download Carrot.Code</h1>
+                
+                <div class="feature-grid" style="margin: 30px 0;">
+                    <div class="feature-card" style="text-align: center;">
+                        <h3>🪟 Windows</h3>
+                        <a href="releases/Windows.zip" class="download-btn">Download</a>
+                        <p style="font-size: 12px; margin-top: 10px;">~2.1 MB</p>
+                    </div>
+                    
+                    <div class="feature-card" style="text-align: center;">
+                        <h3>🍎 Mac</h3>
+                        <a href="releases/Mac.zip" class="download-btn">Download</a>
+                        <p style="font-size: 12px; margin-top: 10px;">Unsigned</p>
+                    </div>
+
+                    <div class="feature-card" style="text-align: center;">
+                        <h3>🌐 Web</h3>
+                        <a href="editor/index.html" class="download-btn">Launch</a>
+                        <p style="font-size: 12px; margin-top: 10px;">Runs in browser</p>
+                    </div>
+                </div>
+
+                <h2>Source Code</h2>
+                <p>Carrot.Code is "open source". I consider the project complete and do not review or take pull requests. So it's more source available.</p>
+                <div style="text-align: center; margin: 20px 0;">
+                    <a href="https://github.com/gszauer/CarrotCode" class="download-btn" target="_blank">View on GitHub</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrot.Code</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Title Bar -->
+    <div class="title-bar">
+        <div class="title">Carrot.Code</div>
+        <div class="window-controls">
+            <button class="window-btn minimize">➖</button>
+            <button class="window-btn maximize">🔲</button>
+            <button class="window-btn close">❌</button>
+        </div>
+    </div>
+
+    <!-- File Menu -->
+    <nav class="file-menu">
+        <a href="index.html" class="menu-item">HOME</a>
+        <a href="features.html" class="menu-item">FEATURES</a>
+        <a href="docs.html" class="menu-item">DOCUMENTATION</a>
+        <a href="download.html" class="menu-item">DOWNLOAD</a>
+        <a href="about.html" class="menu-item active">ABOUT</a>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">Quick Links</div>
+            <div class="file-tree">
+                <!--div class="file-item active">
+                    <a href="index.html">
+                        <span class="file-icon">📄</span>
+                        <span>Welcome.md</span>
+                    </a>
+                </div-->
+                <div class="file-item">
+                    <a href="editor/index.html">
+                        <span class="file-icon">🌐</span>
+                        <span>Try Web Version</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Windows.zip">
+                        <span class="file-icon">🪟</span>
+                        <span>Download Win</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Mac.zip">
+                        <span class="file-icon">🍎</span>
+                        <span>Download Mac</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="https://github.com/gszauer/CarrotCode">
+                        <span class="file-icon">📄</span>
+                        <span>Source Code</span>
+                    </a>
+                </div>
+                <!--div class="file-item">
+                    <a href="http://gabormakesgames.com">
+                        <span class="file-icon">👨‍💻</span>
+                        <span>Made by Gabor</span>
+                    </a>
+                </div-->
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button class="menu-toggle" id="menuToggle">☰</button>
+                <div class="tab active">
+                    <span>about.html</span>
+                </div>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="editor-content">
+                <h1>About Carrot.Code</h1>
+                
+                <p style="font-size: 18px; line-height: 1.8;">Carrot.Code is my attempt at writing an IDE to streamline code prompt generation. The editor can bundle all your code into one AI prompt. The generated prompt will contain instructs for the AI to reply using only LUA with the Carrot API . The editor is very simple and was inspired by <a href="https://github.com/rxi/lite">lite</a>. The editor is not project or directory based - what's loaded into memory is all that exists to the editor.</p>
+
+                <p style="font-size: 18px; line-height: 1.8;">Of course, a tool for AI editing was written with AI assistance. I implemented all of the Document class, some of the DocumentView, and none of the DocumentContainer class. DocumentContainer is fully AI generated. AI also provided assistance in porting to other platforms. Carrot.Code was built on windows, and ported to SDL with Claude to support other platforms.</p>
+
+                <h2>Technical highlights</h2>
+                
+                <ul style="line-height: 2;">
+                    <li>C++ core with OpenGL rendering</li>
+                    <li>Lua scripting via embedded interpreter</li>
+                    <li>UTF-32 internal text representation</li>
+                    <li>Regex bases syntax highlighting engine</li>
+                    <li>Syntax highlighting is amortized across frames</li>
+                </ul>
+
+                <h2>Author</h2>
+                <p>Created with ❤️ and 🤖 by <a href="https://gabormakesgames.com/">Gabor</a></p>
+                
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

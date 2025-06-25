@@ -1,0 +1,477 @@
+/* styles.css - Carrot.Code Website Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #1a1a1f;
+    color: #ebebf2;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Title Bar */
+.title-bar {
+    background-color: #1f1f24;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0;
+    user-select: none;
+    -webkit-app-region: drag;
+    position: relative;
+}
+
+.title {
+    color: #ebebf2;
+    font-size: 13px;
+    font-weight: 500;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.minimize {
+    margin-top: 4px;
+}
+
+.window-controls {
+    display: flex;
+    gap: 0;
+    -webkit-app-region: no-drag;
+    margin-left: auto;
+}
+
+.window-btn {
+    width: 46px;
+    height: 28px;
+    background: none;
+    border: none;
+    color: #ebebf2;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    font-size: 12px;
+}
+
+.window-btn:hover {
+    background-color: #3f3f47;
+}
+
+.window-btn.close:hover {
+    background-color: #d93f3f;
+}
+
+/* File Menu */
+.file-menu {
+    background-color: #1f1f24;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    user-select: none;
+    border-bottom: 1px solid #2d2d33;
+}
+
+.menu-item {
+    padding: 0 15px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s;
+    position: relative;
+    color: #ebebf2;
+    text-decoration: none;
+}
+
+.menu-item:hover {
+    background-color: #d96ba5;
+}
+
+.menu-item.active {
+    background-color: #d96ba5;
+}
+
+/* Main Layout */
+.main-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 200px;
+    min-width: 150px;
+    background-color: #262630;
+    border-right: 1px solid #2d2d33;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.sidebar-header {
+    padding: 10px;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #7f7f8c;
+    font-weight: 600;
+}
+
+.file-tree {
+    flex: 1;
+    padding: 0 5px;
+}
+
+.file-item {
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.file-item a {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #ebebf2;
+    text-decoration: none;
+    width: 100%;
+}
+
+.file-item:hover {
+    background-color: #3f3f47;
+}
+
+.file-item.active {
+    background-color: #d96ba5;
+}
+
+.file-icon {
+    font-size: 14px;
+}
+
+/* Editor Area */
+.editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #1a1a1f;
+}
+
+/* Tab Bar */
+.tab-bar {
+    height: 30px;
+    background-color: #262630;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #2d2d33;
+    overflow-x: auto;
+}
+
+/* Mobile menu toggle button */
+.menu-toggle {
+    display: none;
+    background-color: transparent;
+    color: #ebebf2;
+    border: none;
+    height: 30px;
+    width: 40px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.menu-toggle:hover {
+    background-color: #3f3f47;
+}
+
+@media (max-width: 768px) {
+    .menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+.tab {
+    height: 100%;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    background-color: #1f1f24;
+    border-right: 1px solid #2d2d33;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+
+.tab:hover {
+    background-color: #2d2d33;
+}
+
+.tab.active {
+    background-color: #1a1a1f;
+    border-bottom: 1px solid #1a1a1f;
+}
+
+/* Editor Content */
+.editor-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+.editor-content pre {
+    background-color: #262630;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    margin: 10px 0;
+    border: 1px solid #3f3f47;
+}
+
+.editor-content code {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+}
+
+/* Syntax Highlighting Colors from Styles.cpp */
+.keyword { color: #73a6f3; }
+.string { color: #8cd98c; }
+.number { color: #f38c59; }
+.comment { color: #7f7f8c; }
+.function { color: #59bfd9; }
+.operator { color: #f37373; }
+
+/* Content Styles */
+h1 {
+    color: #f3c0bf;
+    margin-bottom: 20px;
+    font-size: 32px;
+}
+
+h2 {
+    color: #d96ba5;
+    margin: 20px 0 10px 0;
+    font-size: 24px;
+}
+
+h3 {
+    color: #8cd98c;
+    margin: 15px 0 10px 0;
+    font-size: 20px;
+}
+
+p {
+    margin-bottom: 15px;
+    color: #ebebf2;
+}
+
+ol, ul {
+    margin-left: 20px;
+    margin-bottom: 15px;
+}
+
+li {
+    margin-bottom: 8px;
+}
+
+a {
+    color: #d96ba5;
+}
+
+table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #2d2d33;
+}
+
+tr:nth-child(even) {
+    background-color: #1f1f24;
+}
+
+.highlight {
+    color: #f3c0bf;
+    font-weight: 500;
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.feature-card {
+    background-color: #262630;
+    padding: 20px;
+    border-radius: 5px;
+    border: 1px solid #3f3f47;
+    transition: border-color 0.3s;
+}
+
+.feature-card > p {
+    margin: 0;
+}
+
+.feature-card > h3 {
+    margin-top: 0;
+}
+
+.feature-card:hover {
+    border-color: #d96ba5;
+}
+
+.download-btn {
+    display: inline-block;
+    background-color: #d96ba5;
+    color: #1a1a1f;
+    padding: 12px 30px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background-color 0.3s;
+    margin: 10px 5px;
+}
+
+.download-btn:hover {
+    background-color: #f3c0bf;
+}
+
+/* Color swatches for theme display */
+.color-swatch {
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #2d2d33;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #595966;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #d96ba5;
+}
+
+/* Overlay for mobile sidebar */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.sidebar-overlay.active {
+    display: block;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -200px;
+        top: 56px;
+        bottom: 0;
+        z-index: 1000;
+        transition: left 0.3s ease;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar.active {
+        left: 0;
+    }
+
+    .file-menu {
+        padding: 0 5px;
+    }
+
+    .menu-item {
+        padding: 0 10px;
+        font-size: 12px;
+    }
+
+    .title {
+        font-size: 12px;
+    }
+
+    .window-btn {
+        width: 40px;
+    }
+
+    .feature-grid {
+        grid-template-columns: 1fr;
+    }
+
+    h1 {
+        font-size: 24px;
+    }
+
+    h2 {
+        font-size: 20px;
+    }
+
+    .editor-content {
+        padding: 15px;
+    }
+
+    .download-btn {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .menu-item {
+        padding: 0 8px;
+        font-size: 11px;
+    }
+
+    .window-btn {
+        width: 36px;
+    }
+
+    .tab {
+        padding: 0 15px;
+        font-size: 12px;
+    }
+}

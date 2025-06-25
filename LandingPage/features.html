@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Features - Carrot.Code</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Title Bar -->
+    <div class="title-bar">
+        <div class="title">Carrot.Code</div>
+        <div class="window-controls">
+            <button class="window-btn minimize">➖</button>
+            <button class="window-btn maximize">🔲</button>
+            <button class="window-btn close">❌</button>
+        </div>
+    </div>
+
+    <!-- File Menu -->
+    <nav class="file-menu">
+        <a href="index.html" class="menu-item">HOME</a>
+        <a href="features.html" class="menu-item active">FEATURES</a>
+        <a href="docs.html" class="menu-item">DOCUMENTATION</a>
+        <a href="download.html" class="menu-item">DOWNLOAD</a>
+        <a href="about.html" class="menu-item">ABOUT</a>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">Quick Links</div>
+            <div class="file-tree">
+                <!--div class="file-item active">
+                    <a href="index.html">
+                        <span class="file-icon">📄</span>
+                        <span>Welcome.md</span>
+                    </a>
+                </div-->
+                <div class="file-item">
+                    <a href="editor/index.html">
+                        <span class="file-icon">🌐</span>
+                        <span>Try Web Version</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Windows.zip">
+                        <span class="file-icon">🪟</span>
+                        <span>Download Win</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Mac.zip">
+                        <span class="file-icon">🍎</span>
+                        <span>Download Mac</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="https://github.com/gszauer/CarrotCode">
+                        <span class="file-icon">📄</span>
+                        <span>Source Code</span>
+                    </a>
+                </div>
+                <!--div class="file-item">
+                    <a href="http://gabormakesgames.com">
+                        <span class="file-icon">👨‍💻</span>
+                        <span>Made by Gabor</span>
+                    </a>
+                </div-->
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button class="menu-toggle" id="menuToggle">☰</button>
+                <div class="tab active">
+                    <span>features.html</span>
+                </div>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="editor-content">
+                <h2>🚀 AI Centric Workflow</h2>
+                <p>Carrot.Code was built to make working with AI a little bit faster. Tools for working with AI can be found under the <code>AUTOMATION</code> menu. This is what they do:</p>
+                
+                <h3>Bundle Files</h3>
+                <div class="feature-card">
+                    <p>This option will combine all open tabs into a markdown document that you can copy / paste into a chat ai to provide it some additional code context.</p>
+                </div>
+
+                <h3>Copy Prompt</h3>
+                <div class="feature-card">
+                    <p>Treats the current file as a prompt for AI, and all other open files as context. This bundles everything into a formatted prompt that instructs the AI to respond with executable Lua code.</p>
+                </div>
+                
+                <h3>Execute File</h3>
+                <div class="feature-card">
+                    <p>Executes the automation code returned from the AI prompt, automatically creating and modifying files in your project. You can also just run lua code to experiment.</p>
+                </div>
+
+                <h2>✨ Useful Features</h2>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>Multi-Document Interface</h3>
+                        <p>Work with multiple files with tabbed interface</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Syntax Highlighting</h3>
+                        <p>Syntax highlighting for C++ and JavaScrip</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Unicode &amp; Emoji Support</h3>
+                        <p>Full UTF-32 support with emoji rendering</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Undo/Redo System</h3>
+                        <p>Comprehensive undo/redo with per tab history tracking</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Cross-Platform</h3>
+                        <p>Available for Windows, macOS, and Web</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Scriptable</h3>
+                        <p>LUA API for documents executes directly in editor</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

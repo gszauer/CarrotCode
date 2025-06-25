@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - Carrot.Code</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+   <!-- Title Bar -->
+   <div class="title-bar">
+    <div class="title">Carrot.Code</div>
+    <div class="window-controls">
+        <button class="window-btn minimize">➖</button>
+        <button class="window-btn maximize">🔲</button>
+        <button class="window-btn close">❌</button>
+    </div>
+</div>
+
+<!-- File Menu -->
+<nav class="file-menu">
+    <a href="index.html" class="menu-item">HOME</a>
+    <a href="features.html" class="menu-item">FEATURES</a>
+    <a href="docs.html" class="menu-item active">DOCUMENTATION</a>
+    <a href="download.html" class="menu-item">DOWNLOAD</a>
+    <a href="about.html" class="menu-item">ABOUT</a>
+</nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">Quick Links</div>
+            <div class="file-tree">
+                <!--div class="file-item active">
+                    <a href="index.html">
+                        <span class="file-icon">📄</span>
+                        <span>Welcome.md</span>
+                    </a>
+                </div-->
+                <div class="file-item">
+                    <a href="editor/index.html">
+                        <span class="file-icon">🌐</span>
+                        <span>Try Web Version</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Windows.zip">
+                        <span class="file-icon">🪟</span>
+                        <span>Download Win</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Mac.zip">
+                        <span class="file-icon">🍎</span>
+                        <span>Download Mac</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="https://github.com/gszauer/CarrotCode">
+                        <span class="file-icon">📄</span>
+                        <span>Source Code</span>
+                    </a>
+                </div>
+                <!--div class="file-item">
+                    <a href="http://gabormakesgames.com">
+                        <span class="file-icon">👨‍💻</span>
+                        <span>Made by Gabor</span>
+                    </a>
+                </div-->
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button class="menu-toggle" id="menuToggle">☰</button>
+                <div class="tab active">
+                    <span>documentation.md</span>
+                </div>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="editor-content">
+                <h1>Documentation</h1>
+
+                <p>The editor has a built in LUA interpreter and provides a limited API to update open documents using LUA. All LUA edits create undo entries, and can be undone.
+                </p>
+
+                <h2>Lua API Reference</h2>
+
+                <p>The following LUA functions are provided to work with C++ files:</p>
+                
+                <h3>C++ File Operations</h3>
+                <pre><code><span class="comment">-- Create a new C++ file (.h, .cpp, .hpp, .c)</span>
+<span class="function">CreateCppFile</span>(filename: <span class="keyword">string</span>)
+
+<span class="comment">-- Replace entire file contents (creates if doesn't exist)</span>
+<span class="function">ReplaceCppFileContent</span>(filename: <span class="keyword">string</span>, content: <span class="keyword">string</span>)
+
+<span class="comment">-- Replace a class definition</span>
+<span class="function">ReplaceCppClass</span>(filename: <span class="keyword">string</span>, classDefinition: <span class="keyword">string</span>)
+
+<span class="comment">-- Replace a function (creates if doesn't exist)</span>
+<span class="function">ReplaceCppFunction</span>(filename: <span class="keyword">string</span>, functionName: <span class="keyword">string</span>, 
+                         functionDefinition: <span class="keyword">string</span>)</code></pre>
+
+                <h3>JavaScript File Operations</h3>
+
+                <p>The following LUA functions are provided to work with Javascript files:</p>
+
+                <pre><code><span class="comment">-- Create a new JavaScript file</span>
+<span class="function">CreateJsFile</span>(filename: <span class="keyword">string</span>)
+
+<span class="comment">-- Replace entire file contents</span>
+<span class="function">ReplaceJsFileContents</span>(filename: <span class="keyword">string</span>, content: <span class="keyword">string</span>)
+
+<span class="comment">-- Replace a class definition</span>
+<span class="function">ReplaceJsClass</span>(filename: <span class="keyword">string</span>, classDefinition: <span class="keyword">string</span>)
+
+<span class="comment">-- Replace a function (use "" for global functions)</span>
+<span class="function">ReplaceJsFunction</span>(filename: <span class="keyword">string</span>, className: <span class="keyword">string</span>, 
+                        functionName: <span class="keyword">string</span>, functionDefinition: <span class="keyword">string</span>)</code></pre>
+
+                        <h2>Sample Workfrlow</h2>
+                
+                        <p>Let's implement a basic game together - pong:</p>
+                        
+                        <ol style="line-height: 2;">
+                            <li><strong>Create a new file</strong> and write your initial prompt in this file. For our game it should be:
+                                <pre><code>Create a pong game using javascript and html. 
+It should be powered by phaserjs and use no external dependencies (phaser can be linked from cdn).
+The game should be in game.js, not html. The generated HTML file should support unicode.</code></pre>
+                            </li>
+                            
+                            <li><strong>Select AUTOMATION > Copy Prompt</strong><br>
+                                This copies an AI prompt to your clipboard. If there are any other open tabs, they will be included for context. Paste the prompt in your prefered AI and run it.</li>
+                            
+                            <li><strong>Execute the returned Lua code</strong><br>
+                                Close the prompt tab or clear it. The provided prompt made your AI reply using LUA. Paste the Lua code from the AI into a document, then select AUTOMATION > Execute File.</li>
+                            
+                            <li><strong>Save your files</strong> - You now have a Phaser-powered pong game! Iterate from here.</li>
+                        </ol>
+        
+                        <h3>Tips and Notes</h3>
+                        <ul style="line-height: 2;">
+                            <li>All future prompts will include every open file</li>
+                            <li>Always start a new chat - all relevant context is in the prompt</li>
+                            <li>The active file when Copy Prompt is selected is excluded from context</li>
+                            <li>Consider keeping the first tab as your prompt tab for reuse</li>
+                        </ul>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

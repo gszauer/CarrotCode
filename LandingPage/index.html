@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrot.Code</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Title Bar -->
+    <div class="title-bar">
+        <div class="title">Carrot.Code</div>
+        <div class="window-controls">
+            <button class="window-btn minimize">➖</button>
+            <button class="window-btn maximize">🔲</button>
+            <button class="window-btn close">❌</button>
+        </div>
+    </div>
+
+    <!-- File Menu -->
+    <nav class="file-menu">
+        <a href="index.html" class="menu-item active">HOME</a>
+        <a href="features.html" class="menu-item">FEATURES</a>
+        <a href="docs.html" class="menu-item">DOCUMENTATION</a>
+        <a href="download.html" class="menu-item">DOWNLOAD</a>
+        <a href="about.html" class="menu-item">ABOUT</a>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">Quick Links</div>
+            <div class="file-tree">
+                <!--div class="file-item active">
+                    <a href="index.html">
+                        <span class="file-icon">📄</span>
+                        <span>Welcome.md</span>
+                    </a>
+                </div-->
+                <div class="file-item">
+                    <a href="editor/index.html">
+                        <span class="file-icon">🌐</span>
+                        <span>Try Web Version</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Windows.zip">
+                        <span class="file-icon">🪟</span>
+                        <span>Download Win</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="releases/Mac.zip">
+                        <span class="file-icon">🍎</span>
+                        <span>Download Mac</span>
+                    </a>
+                </div>
+                <div class="file-item">
+                    <a href="https://github.com/gszauer/CarrotCode">
+                        <span class="file-icon">📄</span>
+                        <span>Source Code</span>
+                    </a>
+                </div>
+                <!--div class="file-item">
+                    <a href="http://gabormakesgames.com">
+                        <span class="file-icon">👨‍💻</span>
+                        <span>Made by Gabor</span>
+                    </a>
+                </div-->
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button class="menu-toggle" id="menuToggle">☰</button>
+                <div class="tab active">
+                    <span>index.html</span>
+                </div>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="editor-content">
+                <h1>🥕 Carrot.Code 🥕</h1>
+                
+                <!--div style="text-align: center; margin: 30px 0;">
+                    <a href="download.html" class="download-btn">Download for Windows</a>
+                    <a href="download.html" class="download-btn">Download for macOS</a>
+                    <a href="download.html" class="download-btn">Try Web Version</a>
+                </div-->
+
+                <p style="font-size: 18px; line-height: 1.8;">Carrot is a scriptable editor withsyntax highlighting, undo/redo and Unicode support.
+                    The editor aims to streamline your AI workflow by bundling all your code into one prompt. This prompt embeds the editor scripting API and instructs AI to reply with a script you can run in the editor. This creates a semi-automated workflow.</p>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>🤖 Prompt Generation</h3>
+                        <p>Generate prompts that include open files as context for AI, along with extra context.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🎨 Lua API</h3>
+                        <p>LUA bindings for editing documents enables scripted/automated file editing.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📝 Automated Coding</h3>
+                        <p>Generated prompts can instruct the AI to integrate feedback by generating LUA code</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>🌍 Text Editing</h3>
+                        <p>Full Unicode support with emoji rendering. Syntax highlighting for C++ and javascript</p>
+                    </div>
+                </div>
+
+                <h2>How It Works</h2>
+                <p>Carrot was inspired by <a href="https://github.com/rxi/lite">lite</a>. Like lite, Carrot implements a document as a large list of lines. At its simplest, each line is a string. But in practice, the line also contains tokenized highlighting information. This was the starting point, and is still the heart of Carrot:</p>
+                <pre><code><span class="keyword">class</span> <span class="function">Document</span> {
+    std::vector&lt;std::u32string&gt; Lines;
+    
+    <span class="keyword">void</span> <span class="function">Insert</span>(<span class="keyword">unsigned int</span> line, <span class="keyword">unsigned int</span> column, <span class="keyword">const</span> std::u32string& text);
+    <span class="keyword">void</span> <span class="function">Remove</span>(<span class="keyword">unsigned int</span> firstLine, <span class="keyword">unsigned int</span> firstColumn, 
+                   <span class="keyword">unsigned int</span> lastLine, <span class="keyword">unsigned int</span> lastColumn);
+};</code></pre>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
