@@ -4,6 +4,8 @@
 
 A modern code editor built with C++, featuring embedded Lua scripting support and cross-platform compatibility.
 
+[Web Demo](https://gabormakesgames.com/Prototypes/Carrot/)
+
 ## Features
 
 - Cross-platform support
