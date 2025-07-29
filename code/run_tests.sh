@@ -4,7 +4,7 @@
 echo "Compiling string library and unit tests..."
 
 # Compile with debugging symbols and warnings
-g++ -g -Wall -Wextra -o string_tests strings.cpp units_string.cpp
+g++ -g -Wall -Wextra -o string_tests strings.cpp units_strings.cpp
 
 # Check if compilation was successful
 if [ $? -eq 0 ]; then
