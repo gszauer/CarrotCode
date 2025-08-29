@@ -1,5 +1,5 @@
-#ifndef _H_UTF32_STR_CARROT_
-#define _H_UTF32_STR_CARROT_ 
+#ifndef _H_STRINGS_CARROT_
+#define _H_STRINGS_CARROT_ 
 
 #include "types.h"
 
