@@ -2,29 +2,11 @@
 #include <cstring>
 #include <cstdlib>
 
-struct u8_string {
-    u8* buffer;        // Null terminated, utf8 string (may be null if capacity is 0)
-    u32 lengthChars;   // How many logical characters / codepoints are in the string (if there are unicode pairs, length can be less than size)
-    u32 sizeBytes;     // How many bytes the string takes up (always less than or equal to capacity)
-    u32 capacityBytes; // How many bytes buffer is
-};
+#include "definitions.h"
 
-struct u16_string {
-    u16* buffer;       // Null terminated, utf16 string (may be null if capacity is 0)
-    u32 lengthChars;   // How many logical characters / codepoints are in the string (if there are unicode pairs, length can be less than size)
-    u32 sizeBytes;     // How many bytes the string takes up (always less than or equal to capacity)
-    u32 capacityBytes; // How many bytes buffer is
-};
-
-struct u32_string {
-    u32* buffer;       // Null terminated, utf16 string (may be null if capacity is 0)
-    u32 lengthChars;   // How many logical characters / codepoints are in the string (if there are unicode pairs, length can be less than size)
-    u32 sizeBytes;     // How many bytes the string takes up (always less than or equal to capacity)
-    u32 capacityBytes; // How many bytes buffer is
-};
 
 // Helper functions for UTF-8 encoding/decoding
-static u32 utf8_decode_char(const u8* str, u32* bytes_read) {
+u32 utf8_decode_char(const u8* str, u32* bytes_read) {
     if ((str[0] & 0x80) == 0) {
         *bytes_read = 1;
         return str[0];
@@ -42,7 +24,7 @@ static u32 utf8_decode_char(const u8* str, u32* bytes_read) {
     return 0xFFFD;
 }
 
-static u32 utf8_encode_char(u32 codepoint, u8* out) {
+u32 utf8_encode_char(u32 codepoint, u8* out) {
     if (codepoint <= 0x7F) {
         out[0] = (u8)codepoint;
         return 1;
@@ -66,7 +48,7 @@ static u32 utf8_encode_char(u32 codepoint, u8* out) {
 }
 
 // Helper functions for UTF-16 encoding/decoding
-static u32 utf16_decode_char(const u16* str, u32* units_read) {
+u32 utf16_decode_char(const u16* str, u32* units_read) {
     if (str[0] < 0xD800 || str[0] > 0xDFFF) {
         *units_read = 1;
         return str[0];
@@ -81,7 +63,7 @@ static u32 utf16_decode_char(const u16* str, u32* units_read) {
     return 0xFFFD;
 }
 
-static u32 utf16_encode_char(u32 codepoint, u16* out) {
+u32 utf16_encode_char(u32 codepoint, u16* out) {
     if (codepoint <= 0xFFFF) {
         out[0] = (u16)codepoint;
         return 1;
