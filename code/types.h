@@ -24,4 +24,6 @@ struct vector_str8;
 struct vector_str16;
 struct vector_str32;
 
+struct document;
+
 #endif
