@@ -117,4 +117,10 @@ void doc_tokenize(document* doc, u32 line);
 // Returns true if the line needs re-tokenization
 bool doc_is_line_dirty(document* doc, u32 line);
 
+// Returns pointer to the token array for a line (NULL if line is dirty or invalid)
+token_span* doc_get_line_tokens(document* doc, u32 line_index);
+
+// Returns the number of tokens for a line (0 if line is dirty or invalid)
+u32 doc_get_line_token_count(document* doc, u32 line_index);
+
 #endif

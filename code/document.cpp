@@ -1,7 +1,9 @@
 #include "document.h"
 #include "strings.h"
 #include "vectors.h"
+#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
+#undef CARROT_INCLUDE_SYNTAX_DEFS
 #include <cstdlib>
 #include <cstring>
 
@@ -701,4 +703,22 @@ bool doc_is_line_dirty(document* doc, u32 line) {
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
     return doc_line ? doc_line->dirty : false;
+}
+
+token_span* doc_get_line_tokens(document* doc, u32 line_index) {
+    if (!doc || line_index >= vec_docline_size(doc->lines)) return nullptr;
+    
+    document_line* doc_line = vec_docline_get(doc->lines, line_index);
+    if (!doc_line || doc_line->dirty) return nullptr;
+    
+    return doc_line->tokens;
+}
+
+u32 doc_get_line_token_count(document* doc, u32 line_index) {
+    if (!doc || line_index >= vec_docline_size(doc->lines)) return 0;
+    
+    document_line* doc_line = vec_docline_get(doc->lines, line_index);
+    if (!doc_line || doc_line->dirty) return 0;
+    
+    return doc_line->token_count;
 }

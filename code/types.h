@@ -29,5 +29,6 @@ struct canvas;
 struct font;
 
 struct document;
+struct token_span;
 
 #endif

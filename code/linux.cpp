@@ -355,7 +355,7 @@ int main(int argc, char** argv) {
                                             
                                             // Limit canvas size to reasonable maximum
                                             const u32 MAX_WIDTH = 1920;
-                                            const u32 MAX_HEIGHT = 1080;
+                                            const u32 MAX_HEIGHT = 1080 * 5;
                                             if (canvas_width > MAX_WIDTH) canvas_width = MAX_WIDTH;
                                             if (canvas_height > MAX_HEIGHT) canvas_height = MAX_HEIGHT;
                                             

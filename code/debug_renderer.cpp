@@ -3,7 +3,9 @@
 #include "strings.h"
 #undef CARROT_INCLUDE_STRING_DEFS
 #include "document.h"
+#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
+#undef CARROT_INCLUDE_SYNTAX_DEFS
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
@@ -176,6 +178,42 @@ u32 canvas_draw_text(canvas* context, font* fnt, const u32_string* text, u32 x, 
     return max_width;
 }
 
+u32 canvas_draw_subtext(canvas* context, font* fnt, const u32_string* text, u32 start_index, u32 length, u32 x, u32 y, u8 r, u8 g, u8 b) {
+    u32 max_width = 0;
+    u32 current_x = x;
+    u32 text_length = u32str_length((u32_string*)text);
+    u32 end_index = std::min(start_index + length, text_length);
+    
+    for (u32 i = start_index; i < end_index; i++) {
+        u32 character = u32str_get((u32_string*)text, i);
+        
+        if (character == '\n') {
+            max_width = std::max(max_width, current_x - x);
+            current_x = x;
+            y += CHAR_HEIGHT;
+            continue;
+        }
+        
+        if (character == '\t') {
+            // Handle tab - advance to next tab stop (4 spaces)
+            u32 spaces_to_tab = 4 - ((current_x - x) / CHAR_WIDTH) % 4;
+            current_x += spaces_to_tab * CHAR_WIDTH;
+            continue;
+        }
+        
+        // Draw the character if it fits in the clip region
+        if (current_x + CHAR_WIDTH <= context->clip_x + context->clip_w) {
+            draw_char(context, character, current_x, y, r, g, b);
+        }
+        
+        // Advance cursor by character width
+        current_x += CHAR_WIDTH;
+    }
+    
+    max_width = std::max(max_width, current_x - x);
+    return max_width;
+}
+
 void canvas_set_clip(canvas* context, u32 x, u32 y, u32 w, u32 h) {
     if (w == 0 && h == 0) {
         context->clip_x = 0;
@@ -205,6 +243,36 @@ u32 font_get_width(font* fnt, const u32_string* text, u32 num_chars) {
     u32 current_x = 0; // Track position for tab calculation
     
     for (u32 i = 0; i < length; i++) {
+        u32 character = u32str_get((u32_string*)text, i);
+        if (character == '\n') {
+            max_width = std::max(max_width, current_width);
+            current_width = 0;
+            current_x = 0;
+        } else if (character == '\t') {
+            // Handle tab - advance to next tab stop (4 spaces)
+            u32 spaces_to_tab = 4 - (current_x / CHAR_WIDTH) % 4;
+            u32 tab_width = spaces_to_tab * CHAR_WIDTH;
+            current_width += tab_width;
+            current_x += tab_width;
+        } else {
+            current_width += CHAR_WIDTH;
+            current_x += CHAR_WIDTH;
+        }
+    }
+    
+    max_width = std::max(max_width, current_width);
+    return max_width;
+}
+
+u32 font_get_subwidth(font* fnt, const u32_string* text, u32 start_index, u32 length) {
+    u32 text_length = u32str_length((u32_string*)text);
+    u32 end_index = std::min(start_index + length, text_length);
+    
+    u32 max_width = 0;
+    u32 current_width = 0;
+    u32 current_x = 0; // Track position for tab calculation
+    
+    for (u32 i = start_index; i < end_index; i++) {
         u32 character = u32str_get((u32_string*)text, i);
         if (character == '\n') {
             max_width = std::max(max_width, current_width);
@@ -299,6 +367,7 @@ canvas* canvas_debug_doc(document* doc, font* fnt) {
     const u8 color_comment[3] = {87, 166, 74};        // Green for comments
     const u8 color_preprocessor[3] = {155, 155, 155}; // Gray for preprocessor
     const u8 color_whitespace[3] = {200, 200, 200};   // Same as default
+    const u8 color_literal[3] = {206, 145, 120};      // Light orange for literals
     
     // Render each line
     for (u32 line_idx = 0; line_idx < line_count; line_idx++) {
@@ -312,42 +381,50 @@ canvas* canvas_debug_doc(document* doc, font* fnt) {
         // Tokenize the line if needed
         doc_tokenize(doc, line_idx);
         
-        // Get the document_line to access tokens
-        // Since we don't have direct access to document_line from document.h,
-        // we'll render the entire line with default color for now
-        // In a real implementation, we'd need to expose token information
+        // Get tokens for this line
+        token_span* tokens = doc_get_line_tokens(doc, line_idx);
+        u32 token_count = doc_get_line_token_count(doc, line_idx);
         
-        // For now, let's check if line is dirty and render with simple keyword detection
-        if (doc_is_line_dirty(doc, line_idx)) {
-            // Line hasn't been tokenized yet, render with default color
+        if (token_count == 0 || !tokens) {
+            // No tokens available (line is dirty or empty), render with default color
             canvas_draw_text(cnvs, fnt, line_text, 0, y, 
                            color_default[0], color_default[1], color_default[2]);
         } else {
-            // Line has been tokenized
-            // Since we can't access tokens directly, we'll do simple rendering
-            // In a complete implementation, we'd need to expose token spans
-            
-            // For demonstration, let's render the whole line with syntax colors
-            // We'll do a simple check for common patterns
-            u32 len = u32str_length(line_text);
-            if (len > 0) {
-                u32 first_char = u32str_get(line_text, 0);
+            // Render each token with its appropriate color
+            u32 x = 0;
+            for (u32 tok_idx = 0; tok_idx < token_count; tok_idx++) {
+                const token_span& token = tokens[tok_idx];
                 
-                // Check for preprocessor directives
-                if (first_char == '#') {
-                    canvas_draw_text(cnvs, fnt, line_text, 0, y,
-                                   color_preprocessor[0], color_preprocessor[1], color_preprocessor[2]);
+                // Choose color based on token type
+                const u8* color = color_default;
+                switch (token.type) {
+                    case TOKEN_KEYWORD:
+                        color = color_keyword;
+                        break;
+                    case TOKEN_COMMENT:
+                        color = color_comment;
+                        break;
+                    case TOKEN_PREPROCESSOR:
+                        color = color_preprocessor;
+                        break;
+                    case TOKEN_WHITESPACE:
+                        color = color_whitespace;
+                        break;
+                    case TOKEN_LITERAL:
+                        color = color_literal;
+                        break;
+                    case TOKEN_NONE:
+                    default:
+                        color = color_default;
+                        break;
                 }
-                // Check for single-line comments
-                else if (len >= 2 && first_char == '/' && u32str_get(line_text, 1) == '/') {
-                    canvas_draw_text(cnvs, fnt, line_text, 0, y,
-                                   color_comment[0], color_comment[1], color_comment[2]);
-                }
-                // Default rendering
-                else {
-                    canvas_draw_text(cnvs, fnt, line_text, 0, y,
-                                   color_default[0], color_default[1], color_default[2]);
-                }
+                
+                // Draw the token text directly without creating a substring
+                canvas_draw_subtext(cnvs, fnt, line_text, token.start, token.end - token.start, x, y, 
+                                  color[0], color[1], color[2]);
+                // Calculate width of this token and advance x position
+                u32 token_width = font_get_subwidth(fnt, line_text, token.start, token.end - token.start);
+                x += token_width;
             }
         }
     }

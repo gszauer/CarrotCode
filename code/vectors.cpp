@@ -2,7 +2,9 @@
 #define CARROT_INCLUDE_STRING_DEFS
 #include "strings.h"
 #undef CARROT_INCLUDE_STRING_DEFS
+#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
+#undef CARROT_INCLUDE_SYNTAX_DEFS
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>

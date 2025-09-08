@@ -1,8 +1,11 @@
+#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
+#undef CARROT_INCLUDE_SYNTAX_DEFS
 #include "vectors.h"
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+
 
 document_line* docline_create() {
     document_line* line = (document_line*)malloc(sizeof(document_line));
@@ -141,7 +144,7 @@ void docline_tokenize(document_line* line) {
                     i++;
                 }
             }
-            docline_add_token(line, start, i, TOKEN_NONE);
+            docline_add_token(line, start, i, TOKEN_LITERAL);
         }
         else if (ch == '\'') {
             u32 start = i;
@@ -154,7 +157,7 @@ void docline_tokenize(document_line* line) {
             if (i < len && u32str_get(line->text, i) == '\'') {
                 i++;
             }
-            docline_add_token(line, start, i, TOKEN_NONE);
+            docline_add_token(line, start, i, TOKEN_LITERAL);
         }
         else if ((ch >= '0' && ch <= '9') || (ch == '.' && i + 1 < len && u32str_get(line->text, i + 1) >= '0' && u32str_get(line->text, i + 1) <= '9')) {
             u32 start = i;
@@ -175,7 +178,7 @@ void docline_tokenize(document_line* line) {
                     break;
                 }
             }
-            docline_add_token(line, start, i, TOKEN_NONE);
+            docline_add_token(line, start, i, TOKEN_LITERAL);
         }
         else if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_') {
             u32 start = i;
