@@ -7,6 +7,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include "renderer.h"
+#include "strings.h"
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -27,6 +29,8 @@ struct WindowData {
 struct UserData {
     float offset;
     int frameCount;
+    canvas* cnvs;
+    font* fnt;
 };
 
 void* Initialize(const WindowData& windowData);
@@ -160,6 +164,11 @@ int main(int argc, char** argv) {
                             32,
                             0
                         );
+                        
+                        // Recreate canvas with new size
+                        UserData* user = (UserData*)userData;
+                        canvas_destroy(user->cnvs);
+                        user->cnvs = canvas_create(windowData.width, windowData.height);
                     }
                     break;
                     
@@ -216,6 +225,8 @@ void* Initialize(const WindowData& windowData) {
     UserData* user = new UserData();
     user->offset = 0.0f;
     user->frameCount = 0;
+    user->cnvs = canvas_create(windowData.width, windowData.height);
+    user->fnt = font_create(nullptr, 0, 32); // Using bitmap font
     return user;
 }
 
@@ -231,66 +242,53 @@ void Update(void* userData, float deltaTime) {
 void Render(void* userData, WindowData& windowData) {
     UserData* user = (UserData*)userData;
     
-    // Clear to dark gray background
-    unsigned int bgColor = 0xFF1E1E1E; // ARGB format
-    for (int i = 0; i < windowData.width * windowData.height; i++) {
-        windowData.pixels[i] = bgColor;
-    }
+    // Clear canvas to dark gray
+    canvas_clear(user->cnvs, 30, 30, 30);
     
-    // Draw checker pattern (128x128 tiles)
-    const int tileSize = 128;
-    unsigned int color1 = 0xFF404040; // Dark gray
-    unsigned int color2 = 0xFF606060; // Light gray
+    // Draw several colored squares
+    // Red square
+    canvas_draw_rect(user->cnvs, 50, 50, 100, 100, 255, 68, 68);
     
-    // Add animated offset to make it more interesting
-    int offsetX = (int)user->offset;
+    // Green square
+    canvas_draw_rect(user->cnvs, 200, 50, 100, 100, 68, 255, 68);
     
-    for (int y = 0; y < windowData.height; y++) {
-        for (int x = 0; x < windowData.width; x++) {
-            int tileX = (x + offsetX) / tileSize;
-            int tileY = y / tileSize;
-            
-            // Checker pattern logic
-            bool isLight = (tileX + tileY) % 2 == 0;
-            unsigned int color = isLight ? color2 : color1;
-            
-            windowData.pixels[y * windowData.width + x] = color;
-        }
-    }
+    // Blue square
+    canvas_draw_rect(user->cnvs, 350, 50, 100, 100, 68, 68, 255);
     
-    // Draw a moving red square to show animation
-    int squareSize = 100;
-    int squareX = (int)(user->offset * 2) % (windowData.width - squareSize);
-    int squareY = windowData.height / 2 - squareSize / 2;
-    unsigned int squareColor = 0xFFFF4444; // Red
+    // Yellow square
+    canvas_draw_rect(user->cnvs, 500, 50, 100, 100, 255, 255, 68);
     
-    for (int y = squareY; y < squareY + squareSize && y < windowData.height; y++) {
-        for (int x = squareX; x < squareX + squareSize && x < windowData.width; x++) {
-            if (x >= 0 && y >= 0) {
-                windowData.pixels[y * windowData.width + x] = squareColor;
-            }
-        }
-    }
+    // Moving purple square
+    int movingX = (int)(user->offset * 2) % (windowData.width - 80);
+    canvas_draw_rect(user->cnvs, movingX, 250, 80, 80, 200, 68, 255);
     
-    // Draw frame counter in top left (simple block representation)
-    int counterX = 10;
-    int counterY = 10;
-    int blockSize = 5;
-    int digitWidth = 20;
-    unsigned int counterColor = 0xFFFFFFFF; // White
+    // Draw text strings
+    u32 hello_data[] = {'h', 'e', 'l', 'l', 'o', '\t', 'l', 'a', 'n', 'd', 0};
+    u32_string* hello_str = u32str_init(hello_data);
+    canvas_draw_text(user->cnvs, user->fnt, hello_str, 50, 400, 255, 255, 255);
+    u32str_destroy(hello_str);
     
-    // Simple visual frame counter (shows blocks for every 10 frames)
-    int blocks = (user->frameCount / 10) % 20;
-    for (int i = 0; i < blocks; i++) {
-        for (int y = counterY; y < counterY + blockSize && y < windowData.height; y++) {
-            for (int x = counterX + i * (blockSize + 2); x < counterX + i * (blockSize + 2) + blockSize && x < windowData.width; x++) {
-                windowData.pixels[y * windowData.width + x] = counterColor;
-            }
-        }
-    }
+    u32 world_data[] = {'h', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', 0};
+    u32_string* world_str = u32str_init(world_data);
+    canvas_draw_text(user->cnvs, user->fnt, world_str, 50, 450, 255, 200, 100);
+    u32str_destroy(world_str);
+    
+    // Draw animated text
+    u32 anim_data[] = {'M', 'o', 'v', 'i', 'n', 'g', '!', 0};
+    u32_string* anim_str = u32str_init(anim_data);
+    canvas_draw_text(user->cnvs, user->fnt, anim_str, movingX, 350, 100, 255, 200);
+    u32str_destroy(anim_str);
+    
+    // Copy canvas pixels to window buffer
+    // The canvas struct has pixels as its first member, so we can access it by dereferencing
+    // after casting to u32**
+    u32* canvas_pixels = *((u32**)user->cnvs);
+    memcpy(windowData.pixels, canvas_pixels, windowData.width * windowData.height * sizeof(u32));
 }
 
 void Shutdown(void* userData) {
     UserData* user = (UserData*)userData;
+    canvas_destroy(user->cnvs);
+    font_destroy(user->fnt);
     delete user;
 }
