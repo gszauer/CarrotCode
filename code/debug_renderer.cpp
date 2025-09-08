@@ -1,5 +1,9 @@
 #include "renderer.h"
+#define CARROT_INCLUDE_STRING_DEFS
 #include "strings.h"
+#undef CARROT_INCLUDE_STRING_DEFS
+#include "document.h"
+#include "syntax.h"
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
@@ -57,10 +61,15 @@ void canvas_destroy(canvas* cnvs) {
 }
 
 font* font_create(const void* fontData, u32 fontBytes, u32 fontSize) {
-    return 0;
+    // Create a dummy font object - we're using the built-in font8x16
+    font* fnt = (font*)malloc(sizeof(font));
+    return fnt;
 }
 
 void font_destroy(font* fnt) {
+    if (fnt) {
+        free(fnt);
+    }
 }
 
 void canvas_clear(canvas* context, u8 r, u8 g, u8 b) {
@@ -223,4 +232,125 @@ u32 font_get_char_width(font* fnt, u32 character) {
         return TAB_WIDTH;
     }
     return CHAR_WIDTH;
+}
+
+u32* canvas_get_raw_pixels(canvas* cnvs) {
+    if (!cnvs) return nullptr;
+    return cnvs->pixels;
+}
+
+u32 canvas_get_width(canvas* cnvs) {
+    if (!cnvs) return 0;
+    return cnvs->width;
+}
+
+u32 canvas_get_height(canvas* cnvs) {
+    if (!cnvs) return 0;
+    return cnvs->height;
+}
+
+canvas* canvas_debug_doc(document* doc, font* fnt) {
+    if (!doc || !fnt) {
+        printf("canvas_debug_doc: doc or fnt is null\n");
+        return nullptr;
+    }
+    
+    u32 line_count = doc_line_count(doc);
+    if (line_count == 0) {
+        printf("canvas_debug_doc: line_count is 0\n");
+        return nullptr;
+    }
+    
+    // Calculate dimensions
+    u32 line_height = font_get_line_height(fnt);
+    u32 canvas_height = line_count * line_height;
+    printf("canvas_debug_doc: line_height=%u, canvas_height=%u\n", line_height, canvas_height);
+    
+    // Find the width of the longest line
+    u32 max_width = 0;
+    for (u32 i = 0; i < line_count; i++) {
+        u32_string* line_text = doc_get_line(doc, i);
+        if (line_text) {
+            u32 line_width = font_get_width(fnt, line_text, 0);
+            if (line_width > max_width) {
+                max_width = line_width;
+            }
+        }
+    }
+    
+    printf("canvas_debug_doc: max_width=%u\n", max_width);
+    if (max_width == 0 || canvas_height == 0) {
+        printf("canvas_debug_doc: dimensions are 0, returning null\n");
+        return nullptr;
+    }
+    
+    // Create canvas
+    canvas* cnvs = canvas_create(max_width, canvas_height);
+    if (!cnvs) {
+        return nullptr;
+    }
+    
+    // Clear canvas with dark background
+    canvas_clear(cnvs, 30, 30, 40);
+    
+    // Define colors for different token types
+    const u8 color_default[3] = {200, 200, 200};      // Light gray for default text
+    const u8 color_keyword[3] = {86, 156, 214};       // Blue for keywords
+    const u8 color_comment[3] = {87, 166, 74};        // Green for comments
+    const u8 color_preprocessor[3] = {155, 155, 155}; // Gray for preprocessor
+    const u8 color_whitespace[3] = {200, 200, 200};   // Same as default
+    
+    // Render each line
+    for (u32 line_idx = 0; line_idx < line_count; line_idx++) {
+        u32_string* line_text = doc_get_line(doc, line_idx);
+        if (!line_text) {
+            continue;
+        }
+        
+        u32 y = line_idx * line_height;
+        
+        // Tokenize the line if needed
+        doc_tokenize(doc, line_idx);
+        
+        // Get the document_line to access tokens
+        // Since we don't have direct access to document_line from document.h,
+        // we'll render the entire line with default color for now
+        // In a real implementation, we'd need to expose token information
+        
+        // For now, let's check if line is dirty and render with simple keyword detection
+        if (doc_is_line_dirty(doc, line_idx)) {
+            // Line hasn't been tokenized yet, render with default color
+            canvas_draw_text(cnvs, fnt, line_text, 0, y, 
+                           color_default[0], color_default[1], color_default[2]);
+        } else {
+            // Line has been tokenized
+            // Since we can't access tokens directly, we'll do simple rendering
+            // In a complete implementation, we'd need to expose token spans
+            
+            // For demonstration, let's render the whole line with syntax colors
+            // We'll do a simple check for common patterns
+            u32 len = u32str_length(line_text);
+            if (len > 0) {
+                u32 first_char = u32str_get(line_text, 0);
+                
+                // Check for preprocessor directives
+                if (first_char == '#') {
+                    canvas_draw_text(cnvs, fnt, line_text, 0, y,
+                                   color_preprocessor[0], color_preprocessor[1], color_preprocessor[2]);
+                }
+                // Check for single-line comments
+                else if (len >= 2 && first_char == '/' && u32str_get(line_text, 1) == '/') {
+                    canvas_draw_text(cnvs, fnt, line_text, 0, y,
+                                   color_comment[0], color_comment[1], color_comment[2]);
+                }
+                // Default rendering
+                else {
+                    canvas_draw_text(cnvs, fnt, line_text, 0, y,
+                                   color_default[0], color_default[1], color_default[2]);
+                }
+            }
+        }
+    }
+    
+    return cnvs;
 }

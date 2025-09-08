@@ -44,4 +44,21 @@ u32_string* vec_str32_get(vector_str32* vec, unsigned int index); // Returns a s
 void vec_str32_insert(vector_str32* vec, unsigned int index, u32_string* string); // Insert at index
 void vec_str32_remove(vector_str32* vec, unsigned int index); // Remove element at index
 vector_str32* vec_str32_clone(vector_str32* vec); // Deep copy
+
+// vector_docline - forward declaration for document_line is in syntax.h
+struct document_line;
+
+vector_docline* vec_docline_create(); // Empty vector
+void vec_docline_destroy(vector_docline* vec); // Destroy / free / cleanup
+void vec_docline_clear(vector_docline* vec); // Only affects size, but does destroy lines
+void vec_docline_reserve(vector_docline* vec, u32 count);
+void vec_docline_resize(vector_docline* vec, u32 size); // Allocates empty lines if new size is bigger
+void vec_docline_push(vector_docline* vec, document_line* line); // Takes ownership of line
+
+u32 vec_docline_size(vector_docline* vec); // Returns size of vector
+document_line* vec_docline_get(vector_docline* vec, u32 index); // Returns a line that can be edited
+void vec_docline_insert(vector_docline* vec, u32 index, document_line* line); // Insert at index
+void vec_docline_remove(vector_docline* vec, u32 index); // Remove element at index
+vector_docline* vec_docline_clone(vector_docline* vec); // Deep copy
+
 #endif

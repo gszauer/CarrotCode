@@ -106,4 +106,15 @@ bool doc_can_undo(document* doc);
 // Returns true if there are operations that can be redone
 bool doc_can_redo(document* doc);
 
+// Syntax highlighting
+
+// Marks a line as dirty (needs re-tokenization)
+void doc_mark_dirty(document* doc, u32 line);
+
+// Tokenizes a specific line if it's dirty
+void doc_tokenize(document* doc, u32 line);
+
+// Returns true if the line needs re-tokenization
+bool doc_is_line_dirty(document* doc, u32 line);
+
 #endif

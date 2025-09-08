@@ -21,4 +21,12 @@ u32 font_get_line_height(font* fnt);
 u32 font_get_width(font* fnt, const u32_string* text, u32 num_chars); // num_chars = 0 means the whole string
 u32 font_get_char_width(font* fnt, u32 character);
 
+// Canvas accessor functions
+u32* canvas_get_raw_pixels(canvas* cnvs);
+u32 canvas_get_width(canvas* cnvs);
+u32 canvas_get_height(canvas* cnvs);
+
+// Debug rendering for document with syntax highlighting
+canvas* canvas_debug_doc(document* doc, font* fnt);
+
 #endif

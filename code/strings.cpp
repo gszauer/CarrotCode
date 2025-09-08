@@ -1,8 +1,10 @@
+#define CARROT_INCLUDE_STRING_DEFS
 #include "strings.h"
+#undef CARROT_INCLUDE_STRING_DEFS
 #include <cstring>
 #include <cstdlib>
 
-#include "definitions.h"
+
 
 
 // Helper functions for UTF-8 encoding/decoding
