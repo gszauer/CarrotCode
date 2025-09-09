@@ -680,7 +680,7 @@ bool doc_can_redo(document* doc) {
     return doc && doc->max_undo_levels > 0 && doc->undo_position < doc->undo_stack_size;
 }
 
-void doc_mark_dirty(document* doc, u32 line) {
+void doc_mark_line_dirty(document* doc, u32 line) {
     if (!doc || line >= vec_docline_size(doc->lines)) return;
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
@@ -689,7 +689,7 @@ void doc_mark_dirty(document* doc, u32 line) {
     }
 }
 
-void doc_tokenize(document* doc, u32 line) {
+void doc_tokenize_line(document* doc, u32 line) {
     if (!doc || line >= vec_docline_size(doc->lines)) return;
     
     document_line* doc_line = vec_docline_get(doc->lines, line);

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <fstream>
 #include <vector>
+#include <cctype>
 #include "renderer.h"
 #include "strings.h"
 #include "document.h"
@@ -339,11 +340,29 @@ int main(int argc, char** argv) {
                                         u32str_destroy(file_str);
                                         printf("Document created with %u lines\n", doc_line_count(user->doc));
                                         
+                                        // Check file extension to determine if syntax highlighting should be applied
+                                        bool should_highlight = false;
+                                        size_t dot_pos = filepath.rfind('.');
+                                        if (dot_pos != std::string::npos) {
+                                            std::string extension = filepath.substr(dot_pos);
+                                            // Convert to lowercase for case-insensitive comparison
+                                            for (char& c : extension) {
+                                                c = std::tolower(c);
+                                            }
+                                            // Check if it's a supported extension
+                                            if (extension == ".c" || extension == ".h" || 
+                                                extension == ".cpp" || extension == ".inl" || 
+                                                extension == ".js" || extension == ".ts") {
+                                                should_highlight = true;
+                                            }
+                                        }
+                                        printf("Syntax highlighting: %s\n", should_highlight ? "enabled" : "disabled");
+                                        
                                         // Create debug canvas
                                         if (user->doc_canvas) {
                                             canvas_destroy(user->doc_canvas);
                                         }
-                                        user->doc_canvas = canvas_debug_doc(user->doc, user->fnt);
+                                        user->doc_canvas = canvas_debug_doc(user->doc, user->fnt, should_highlight);
                                         user->has_document = (user->doc_canvas != nullptr);
                                         printf("Canvas created: %s\n", user->has_document ? "yes" : "no");
                                         

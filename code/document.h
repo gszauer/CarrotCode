@@ -5,6 +5,7 @@
 
 // Forward declaration
 struct document;
+struct token_span;
 
 // Document creation and destruction
 
@@ -109,10 +110,10 @@ bool doc_can_redo(document* doc);
 // Syntax highlighting
 
 // Marks a line as dirty (needs re-tokenization)
-void doc_mark_dirty(document* doc, u32 line);
+void doc_mark_line_dirty(document* doc, u32 line);
 
 // Tokenizes a specific line if it's dirty
-void doc_tokenize(document* doc, u32 line);
+void doc_tokenize_line(document* doc, u32 line);
 
 // Returns true if the line needs re-tokenization
 bool doc_is_line_dirty(document* doc, u32 line);

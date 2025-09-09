@@ -317,7 +317,7 @@ u32 canvas_get_height(canvas* cnvs) {
     return cnvs->height;
 }
 
-canvas* canvas_debug_doc(document* doc, font* fnt) {
+canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     if (!doc || !fnt) {
         printf("canvas_debug_doc: doc or fnt is null\n");
         return nullptr;
@@ -378,53 +378,59 @@ canvas* canvas_debug_doc(document* doc, font* fnt) {
         
         u32 y = line_idx * line_height;
         
-        // Tokenize the line if needed
-        doc_tokenize(doc, line_idx);
-        
-        // Get tokens for this line
-        token_span* tokens = doc_get_line_tokens(doc, line_idx);
-        u32 token_count = doc_get_line_token_count(doc, line_idx);
-        
-        if (token_count == 0 || !tokens) {
-            // No tokens available (line is dirty or empty), render with default color
+        if (!highlight_syntax) {
+            // Render entire line with default color
             canvas_draw_text(cnvs, fnt, line_text, 0, y, 
                            color_default[0], color_default[1], color_default[2]);
         } else {
-            // Render each token with its appropriate color
-            u32 x = 0;
-            for (u32 tok_idx = 0; tok_idx < token_count; tok_idx++) {
-                const token_span& token = tokens[tok_idx];
-                
-                // Choose color based on token type
-                const u8* color = color_default;
-                switch (token.type) {
-                    case TOKEN_KEYWORD:
-                        color = color_keyword;
-                        break;
-                    case TOKEN_COMMENT:
-                        color = color_comment;
-                        break;
-                    case TOKEN_PREPROCESSOR:
-                        color = color_preprocessor;
-                        break;
-                    case TOKEN_WHITESPACE:
-                        color = color_whitespace;
-                        break;
-                    case TOKEN_LITERAL:
-                        color = color_literal;
-                        break;
-                    case TOKEN_NONE:
-                    default:
-                        color = color_default;
-                        break;
+            // Tokenize the line if needed
+            doc_tokenize_line(doc, line_idx);
+            
+            // Get tokens for this line
+            token_span* tokens = doc_get_line_tokens(doc, line_idx);
+            u32 token_count = doc_get_line_token_count(doc, line_idx);
+            
+            if (token_count == 0 || !tokens) { // This is fallback only, doc_tokenize_line should ensure that tokens exist
+                // No tokens available (line is dirty or empty), render with default color
+                canvas_draw_text(cnvs, fnt, line_text, 0, y, 
+                               color_default[0], color_default[1], color_default[2]);
+            } else {
+                // Render each token with its appropriate color
+                u32 x = 0;
+                for (u32 tok_idx = 0; tok_idx < token_count; tok_idx++) {
+                    const token_span& token = tokens[tok_idx];
+                    
+                    // Choose color based on token type
+                    const u8* color = color_default;
+                    switch (token.type) {
+                        case TOKEN_KEYWORD:
+                            color = color_keyword;
+                            break;
+                        case TOKEN_COMMENT:
+                            color = color_comment;
+                            break;
+                        case TOKEN_PREPROCESSOR:
+                            color = color_preprocessor;
+                            break;
+                        case TOKEN_WHITESPACE:
+                            color = color_whitespace;
+                            break;
+                        case TOKEN_LITERAL:
+                            color = color_literal;
+                            break;
+                        case TOKEN_NONE:
+                        default:
+                            color = color_default;
+                            break;
+                    }
+                    
+                    // Draw the token text directly without creating a substring
+                    canvas_draw_subtext(cnvs, fnt, line_text, token.start, token.end - token.start, x, y, 
+                                      color[0], color[1], color[2]);
+                    // Calculate width of this token and advance x position
+                    u32 token_width = font_get_subwidth(fnt, line_text, token.start, token.end - token.start);
+                    x += token_width;
                 }
-                
-                // Draw the token text directly without creating a substring
-                canvas_draw_subtext(cnvs, fnt, line_text, token.start, token.end - token.start, x, y, 
-                                  color[0], color[1], color[2]);
-                // Calculate width of this token and advance x position
-                u32 token_width = font_get_subwidth(fnt, line_text, token.start, token.end - token.start);
-                x += token_width;
             }
         }
     }
