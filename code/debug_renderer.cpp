@@ -114,8 +114,8 @@ static void draw_char(canvas* context, u32 character, u32 x, u32 y, u8 r, u8 g, 
         return;
     }
     
-    // If character is out of font8x16 range (0-255), use '?'
-    if (character > 255) {
+    // If character is out of font8x16 range (0-127), use '?'
+    if (character > 127) {
         character = '?';
     }
     
@@ -346,14 +346,21 @@ canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
         }
     }
     
+    // Ensure minimum width to avoid issues
+    if (max_width == 0) {
+        max_width = 100; // Minimum width for empty documents
+    }
+    
     printf("canvas_debug_doc: max_width=%u\n", max_width);
-    if (max_width == 0 || canvas_height == 0) {
-        printf("canvas_debug_doc: dimensions are 0, returning null\n");
+    if (canvas_height == 0) {
+        printf("canvas_debug_doc: canvas_height is 0, returning null\n");
         return nullptr;
     }
     
     // Create canvas
+    printf("canvas_debug_doc: About to create canvas %ux%u\n", max_width, canvas_height);
     canvas* cnvs = canvas_create(max_width, canvas_height);
+    printf("canvas_debug_doc: Canvas created at %p\n", cnvs);
     if (!cnvs) {
         return nullptr;
     }
@@ -373,13 +380,14 @@ canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     for (u32 line_idx = 0; line_idx < line_count; line_idx++) {
         u32_string* line_text = doc_get_line(doc, line_idx);
         if (!line_text) {
+            printf("Warning: line %u returned null text\n", line_idx);
             continue;
         }
         
         u32 y = line_idx * line_height;
         
         if (!highlight_syntax) {
-            // Render entire line with default color
+            // Render entire line with default color - no tokenization needed
             canvas_draw_text(cnvs, fnt, line_text, 0, y, 
                            color_default[0], color_default[1], color_default[2]);
         } else {
