@@ -92,8 +92,11 @@ void ImGuiBeginFrame(ImGui* context) {
     // Clear the canvas
     canvas_clear(context->cnvs, Colors::BACKGROUND_R, Colors::BACKGROUND_G, Colors::BACKGROUND_B);
 
-    // Reset ID counter
+    // Reset ID counter for the new frame
     context->nextId = 1;
+
+    // Reset hot item - will be set by controls if hovered
+    context->hotItem = 0;
 
     // Reset scroll delta after frame
     context->scrollDelta = 0;
@@ -212,16 +215,17 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
     return clicked;
 }
 
-bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32_string* text, bool* checked) {
+bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* checked) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
 
-    const u32 boxSize = 20;
+    // Use the smaller of width or height for the checkbox box size
+    u32 boxSize = (w < h) ? w : h;
     const u32 textPadding = 8;
 
-    // Calculate total hit area
+    // Calculate total hit area (includes text if present)
     u32 textWidth = text ? font_get_width(context->fnt, text, 0) : 0;
-    u32 totalWidth = boxSize + textPadding + textWidth;
+    u32 totalWidth = text ? (boxSize + textPadding + textWidth) : boxSize;
     u32 totalHeight = boxSize;
 
     bool isHovered = IsMouseInRect(context, x, y, totalWidth, totalHeight) && !isDisabled;
@@ -290,11 +294,14 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32_string* text, bool* checked
     return clicked;
 }
 
-f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue) {
+f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
     bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
     bool isActive = context->activeItem == id;
+
+    // Initialize valueChanged to false if provided
+    if (valueChanged) *valueChanged = false;
 
     // Handle mouse interaction
     if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
@@ -306,12 +313,18 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
 
     // Update value if active
     if (isActive && context->mouseLeftDown) {
+        f32 oldValue = value;
         // Cast to signed int first to handle negative values correctly
         i32 relativeX = (i32)context->mouseX - (i32)x;
         f32 t = (f32)relativeX / (f32)w;
         if (t < 0) t = 0;
         if (t > 1) t = 1;
         value = minValue + t * (maxValue - minValue);
+
+        // Check if value changed and report it
+        if (valueChanged && value != oldValue) {
+            *valueChanged = true;
+        }
     }
 
     // Draw track
@@ -355,11 +368,14 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
     return value;
 }
 
-f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue) {
+f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
     bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
     bool isActive = context->activeItem == id;
+
+    // Initialize valueChanged to false if provided
+    if (valueChanged) *valueChanged = false;
 
     // Handle mouse interaction
     if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
@@ -371,12 +387,18 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
 
     // Update value if active
     if (isActive && context->mouseLeftDown) {
+        f32 oldValue = value;
         // Cast to signed int first to handle negative values correctly
         i32 relativeY = (i32)context->mouseY - (i32)y;
         f32 t = (f32)relativeY / (f32)h;
         if (t < 0) t = 0;
         if (t > 1) t = 1;
         value = minValue + t * (maxValue - minValue);
+
+        // Check if value changed and report it
+        if (valueChanged && value != oldValue) {
+            *valueChanged = true;
+        }
     }
 
     // Draw track

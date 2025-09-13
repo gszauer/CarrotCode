@@ -620,31 +620,11 @@ void Render(void* userData, WindowData& windowData) {
         // Showcase all other controls below the quit button
         u32 current_y = button_y + button_height + 20;
 
-        // Checkbox
-        u32 checkbox_text[] = {'E', 'n', 'a', 'b', 'l', 'e', ' ', 'D', 'e', 'm', 'o', ' ', 'M', 'o', 'd', 'e', 0};
-        u32_string* checkbox_str = u32str_init(checkbox_text);
-        ImGuiCheckbox(user->imgui_context, button_x, current_y, checkbox_str, &user->checkbox_state);
-        u32str_destroy(checkbox_str);
-        current_y += 40;
+        
 
-        // Horizontal scrollbar
-        u32 h_scroll_label[] = {'H', 'o', 'r', 'i', 'z', 'o', 'n', 't', 'a', 'l', ':', ' ', 0};
-        u32_string* h_label_str = u32str_init(h_scroll_label);
-        canvas_draw_text(user->cnvs, user->fnt, h_label_str, button_x - 100, current_y + 5, 180, 180, 200);
-        u32str_destroy(h_label_str);
-        user->h_scrollbar_value = ImGuiHorizontalScrollBar(user->imgui_context,
-                                                          button_x, current_y, 200, 30,
-                                                          user->h_scrollbar_value, 0.0f, 1.0f);
-        current_y += 40;
+        
 
-        // Vertical scrollbar (positioned to the right)
-        u32 v_scroll_label[] = {'V', 'e', 'r', 't', 'i', 'c', 'a', 'l', ':', 0};
-        u32_string* v_label_str = u32str_init(v_scroll_label);
-        canvas_draw_text(user->cnvs, user->fnt, v_label_str, button_x + 220, button_y, 180, 180, 200);
-        u32str_destroy(v_label_str);
-        user->v_scrollbar_value = ImGuiVerticalScrollBar(user->imgui_context,
-                                                        button_x + 220, button_y + 30, 30, 150,
-                                                        user->v_scrollbar_value, 0.0f, 1.0f);
+        
 
         // Collapsable header
         u32 header_text[] = {'A', 'd', 'v', 'a', 'n', 'c', 'e', 'd', ' ', 'O', 'p', 't', 'i', 'o', 'n', 's', 0};
@@ -655,23 +635,39 @@ void Render(void* userData, WindowData& windowData) {
 
         if (user->header_open) {
             current_y += 40;
-            // Show some content under the header
-            u32 content_text[] = {'C', 'o', 'n', 't', 'e', 'n', 't', ' ', 'u', 'n', 'd', 'e', 'r', ' ',
-                                 'c', 'o', 'l', 'l', 'a', 'p', 's', 'a', 'b', 'l', 'e', ' ',
-                                 'h', 'e', 'a', 'd', 'e', 'r', 0};
-            u32_string* content_str = u32str_init(content_text);
-            canvas_draw_text(user->cnvs, user->fnt, content_str, button_x, current_y, 150, 150, 180);
-            u32str_destroy(content_str);
+
+            // Checkbox
+            u32 checkbox_text[] = {'E', 'n', 'a', 'b', 'l', 'e', ' ', 'D', 'e', 'm', 'o', ' ', 'M', 'o', 'd', 'e', 0};
+            u32_string* checkbox_str = u32str_init(checkbox_text);
+            ImGuiCheckbox(user->imgui_context, button_x, current_y, 40, 40, checkbox_str, &user->checkbox_state);
+            u32str_destroy(checkbox_str);
+            current_y += 60;
 
             // Add another button inside the collapsable section
             u32 inner_button_text[] = {'N', 'e', 's', 't', 'e', 'd', ' ', 'B', 'u', 't', 't', 'o', 'n', 0};
             u32_string* inner_button_str = u32str_init(inner_button_text);
-            current_y += 30;
-            if (ImGuiButton(user->imgui_context, button_x, current_y, 150, 35, inner_button_str)) {
+            if (ImGuiButton(user->imgui_context, button_x, current_y, 250, 40, inner_button_str)) {
                 // Just for demo - toggle the checkbox when this button is clicked
                 user->checkbox_state = !user->checkbox_state;
             }
             u32str_destroy(inner_button_str);
+
+
+            current_y += 60;
+            // Horizontal scrollbar
+            u32 h_scroll_label[] = {'H', 'o', 'r', 'i', 'z', 'o', 'n', 't', 'a', 'l', ':', ' ', 0};
+            u32_string* h_label_str = u32str_init(h_scroll_label);
+            canvas_draw_text(user->cnvs, user->fnt, h_label_str, button_x, current_y + 5, 180, 180, 200);
+            u32str_destroy(h_label_str);
+            user->h_scrollbar_value = ImGuiHorizontalScrollBar(user->imgui_context,
+                                                            button_x + 200, current_y, 200, 30,
+                                                            user->h_scrollbar_value, 0.0f, 1.0f);
+
+            // Vertical scrollbar (positioned to the right)
+            user->v_scrollbar_value = ImGuiVerticalScrollBar(user->imgui_context,
+                                                        button_x + 400, current_y + 30 - 150 - 30, 30, 150,
+                                                        user->v_scrollbar_value, 0.0f, 1.0f);
+            current_y += 40;
         }
 
         // Copy canvas pixels to window buffer

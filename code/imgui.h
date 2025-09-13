@@ -23,9 +23,9 @@ void ImGuiPopDisabled(ImGui* context);
 
 // Control functions
 bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text);
-bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32_string* text, bool* checked);
-f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue);
-f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue);
+bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* checked);
+f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged = nullptr);
+f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged = nullptr);
 bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* isOpen);
 
 #endif
