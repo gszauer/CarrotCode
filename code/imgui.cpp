@@ -156,7 +156,7 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
     bool clicked = false;
 
     // Handle mouse interaction
-    if (isHovered) {
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
@@ -167,6 +167,7 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
     }
 
     // Draw button background
+    bool canShowHover = (context->activeItem == 0 || context->activeItem == id);
     u8 bgR, bgG, bgB;
     if (isDisabled) {
         bgR = Colors::CONTROL_R;
@@ -176,7 +177,7 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
         bgR = Colors::PRIMARY_ACTIVE_R;
         bgG = Colors::PRIMARY_ACTIVE_G;
         bgB = Colors::PRIMARY_ACTIVE_B;
-    } else if (isHovered) {
+    } else if (isHovered && canShowHover) {
         bgR = Colors::PRIMARY_HOVER_R;
         bgG = Colors::PRIMARY_HOVER_G;
         bgB = Colors::PRIMARY_HOVER_B;
@@ -228,7 +229,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32_string* text, bool* checked
     bool clicked = false;
 
     // Handle mouse interaction
-    if (isHovered) {
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
@@ -240,6 +241,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32_string* text, bool* checked
     }
 
     // Draw checkbox background
+    bool canShowHover = (context->activeItem == 0 || context->activeItem == id);
     u8 bgR, bgG, bgB;
     if (isDisabled) {
         bgR = Colors::CONTROL_R;
@@ -249,7 +251,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32_string* text, bool* checked
         bgR = Colors::CONTROL_ACTIVE_R;
         bgG = Colors::CONTROL_ACTIVE_G;
         bgB = Colors::CONTROL_ACTIVE_B;
-    } else if (isHovered) {
+    } else if (isHovered && canShowHover) {
         bgR = Colors::CONTROL_HOVER_R;
         bgG = Colors::CONTROL_HOVER_G;
         bgB = Colors::CONTROL_HOVER_B;
@@ -295,7 +297,7 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
     bool isActive = context->activeItem == id;
 
     // Handle mouse interaction
-    if (isHovered) {
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
@@ -304,7 +306,9 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
 
     // Update value if active
     if (isActive && context->mouseLeftDown) {
-        f32 t = (f32)(context->mouseX - x) / (f32)w;
+        // Cast to signed int first to handle negative values correctly
+        i32 relativeX = (i32)context->mouseX - (i32)x;
+        f32 t = (f32)relativeX / (f32)w;
         if (t < 0) t = 0;
         if (t > 1) t = 1;
         value = minValue + t * (maxValue - minValue);
@@ -336,7 +340,7 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
         thumbR = Colors::PRIMARY_ACTIVE_R;
         thumbG = Colors::PRIMARY_ACTIVE_G;
         thumbB = Colors::PRIMARY_ACTIVE_B;
-    } else if (isHovered) {
+    } else if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         thumbR = Colors::PRIMARY_HOVER_R;
         thumbG = Colors::PRIMARY_HOVER_G;
         thumbB = Colors::PRIMARY_HOVER_B;
@@ -358,7 +362,7 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
     bool isActive = context->activeItem == id;
 
     // Handle mouse interaction
-    if (isHovered) {
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
@@ -367,7 +371,9 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
 
     // Update value if active
     if (isActive && context->mouseLeftDown) {
-        f32 t = (f32)(context->mouseY - y) / (f32)h;
+        // Cast to signed int first to handle negative values correctly
+        i32 relativeY = (i32)context->mouseY - (i32)y;
+        f32 t = (f32)relativeY / (f32)h;
         if (t < 0) t = 0;
         if (t > 1) t = 1;
         value = minValue + t * (maxValue - minValue);
@@ -399,7 +405,7 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
         thumbR = Colors::PRIMARY_ACTIVE_R;
         thumbG = Colors::PRIMARY_ACTIVE_G;
         thumbB = Colors::PRIMARY_ACTIVE_B;
-    } else if (isHovered) {
+    } else if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         thumbR = Colors::PRIMARY_HOVER_R;
         thumbG = Colors::PRIMARY_HOVER_G;
         thumbB = Colors::PRIMARY_HOVER_B;
@@ -422,7 +428,7 @@ bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_stri
     bool clicked = false;
 
     // Handle mouse interaction
-    if (isHovered) {
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
@@ -434,6 +440,7 @@ bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_stri
     }
 
     // Draw header background
+    bool canShowHover = (context->activeItem == 0 || context->activeItem == id);
     u8 bgR, bgG, bgB;
     if (isDisabled) {
         bgR = Colors::SURFACE_R;
@@ -443,7 +450,7 @@ bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_stri
         bgR = Colors::CONTROL_ACTIVE_R;
         bgG = Colors::CONTROL_ACTIVE_G;
         bgB = Colors::CONTROL_ACTIVE_B;
-    } else if (isHovered) {
+    } else if (isHovered && canShowHover) {
         bgR = Colors::CONTROL_HOVER_R;
         bgG = Colors::CONTROL_HOVER_G;
         bgB = Colors::CONTROL_HOVER_B;

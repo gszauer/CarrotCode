@@ -14,6 +14,7 @@
 #include "renderer.h"
 #include "strings.h"
 #include "document.h"
+#include "imgui.h"
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -39,6 +40,12 @@ struct UserData {
     document* doc;
     canvas* doc_canvas;
     bool has_document;
+    ImGui* imgui_context;
+    // Demo control states
+    bool checkbox_state;
+    f32 h_scrollbar_value;
+    f32 v_scrollbar_value;
+    bool header_open;
 };
 
 void* Initialize(const WindowData& windowData);
@@ -81,7 +88,7 @@ int main(int argc, char** argv) {
     windowAttributes.background_pixel = BlackPixel(windowData.display, windowData.screen);
     windowAttributes.border_pixel = BlackPixel(windowData.display, windowData.screen);
     windowAttributes.backing_store = Always;
-    windowAttributes.event_mask = ExposureMask | KeyPressMask | StructureNotifyMask | PropertyChangeMask;
+    windowAttributes.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask | PropertyChangeMask;
     
     windowData.window = XCreateWindow(
         windowData.display,
@@ -209,6 +216,8 @@ int main(int argc, char** argv) {
                         UserData* user = (UserData*)userData;
                         canvas_destroy(user->cnvs);
                         user->cnvs = canvas_create(windowData.width, windowData.height);
+                        // Update ImGui canvas target
+                        ImGuiSetTargets(user->imgui_context, user->cnvs, user->fnt);
                     }
                     break;
                     
@@ -414,9 +423,71 @@ int main(int argc, char** argv) {
                     break;
                     
                 case KeyPress:
-                    // Exit on Escape key
-                    if (XLookupKeysym(&event.xkey, 0) == XK_Escape) {
-                        windowData.closeWindow = true;
+                case KeyRelease:
+                    {
+                        bool isKeyDown = (event.type == KeyPress);
+                        KeySym keysym = XLookupKeysym(&event.xkey, 0);
+
+                        // Exit on Escape key
+                        if (isKeyDown && keysym == XK_Escape) {
+                            windowData.closeWindow = true;
+                        }
+
+                        // Pass keyboard input to ImGui
+                        UserData* user = (UserData*)userData;
+                        u32 virtualKeyCode = (u32)keysym;
+                        u32 characterCode = 0;
+
+                        // Convert some common keys to character codes
+                        if (isKeyDown && keysym >= 0x20 && keysym <= 0x7E) {
+                            characterCode = keysym;
+                        }
+
+                        bool altDown = (event.xkey.state & Mod1Mask) != 0;
+                        bool ctrlDown = (event.xkey.state & ControlMask) != 0;
+                        bool shiftDown = (event.xkey.state & ShiftMask) != 0;
+
+                        ImGuiKeyboardInput(user->imgui_context, characterCode, virtualKeyCode,
+                                         isKeyDown, altDown, ctrlDown, shiftDown);
+                    }
+                    break;
+
+                case ButtonPress:
+                case ButtonRelease:
+                case MotionNotify:
+                    {
+                        UserData* user = (UserData*)userData;
+
+                        // Get mouse position
+                        u32 mouseX = event.xbutton.x;
+                        u32 mouseY = event.xbutton.y;
+                        f32 normX = (f32)mouseX / windowData.width;
+                        f32 normY = (f32)mouseY / windowData.height;
+
+                        // Get button states
+                        bool leftDown = false;
+                        bool middleDown = false;
+                        bool rightDown = false;
+                        f32 scrollDir = 0.0f;
+
+                        if (event.type == ButtonPress || event.type == ButtonRelease) {
+                            bool isPressed = (event.type == ButtonPress);
+                            switch (event.xbutton.button) {
+                                case Button1: leftDown = isPressed; break;
+                                case Button2: middleDown = isPressed; break;
+                                case Button3: rightDown = isPressed; break;
+                                case Button4: if (isPressed) scrollDir = 1.0f; break;  // Scroll up
+                                case Button5: if (isPressed) scrollDir = -1.0f; break; // Scroll down
+                            }
+                        } else if (event.type == MotionNotify) {
+                            // For motion events, check current button states
+                            leftDown = (event.xmotion.state & Button1Mask) != 0;
+                            middleDown = (event.xmotion.state & Button2Mask) != 0;
+                            rightDown = (event.xmotion.state & Button3Mask) != 0;
+                        }
+
+                        ImGuiMouseInput(user->imgui_context, mouseX, mouseY, normX, normY,
+                                      scrollDir, leftDown, middleDown, rightDown);
                     }
                     break;
             }
@@ -464,6 +535,12 @@ void* Initialize(const WindowData& windowData) {
     user->doc = nullptr;
     user->doc_canvas = nullptr;
     user->has_document = false;
+    user->imgui_context = ImGuiInit(user->cnvs, user->fnt);
+    // Initialize demo control states
+    user->checkbox_state = false;
+    user->h_scrollbar_value = 0.5f;
+    user->v_scrollbar_value = 0.3f;
+    user->header_open = true;
     return user;
 }
 
@@ -475,22 +552,25 @@ void Update(void* userData, float deltaTime) {
 
 void Render(void* userData, WindowData& windowData) {
     UserData* user = (UserData*)userData;
-    
+
+    // Begin ImGui frame
+    ImGuiBeginFrame(user->imgui_context);
+
     if (user->has_document && user->doc_canvas) {
         // Display the document canvas
         u32* doc_canvas_pixels = canvas_get_raw_pixels(user->doc_canvas);
         u32 doc_canvas_width = canvas_get_width(user->doc_canvas);
         u32 doc_canvas_height = canvas_get_height(user->doc_canvas);
-        
+
         // Clear the window buffer first
         memset(windowData.pixels, 0, windowData.width * windowData.height * sizeof(u32));
-        
+
         // Safety check
         if (doc_canvas_pixels && doc_canvas_width > 0 && doc_canvas_height > 0) {
             // Copy what fits into the window buffer
             u32 copy_width = (doc_canvas_width < (u32)windowData.width) ? doc_canvas_width : windowData.width;
             u32 copy_height = (doc_canvas_height < (u32)windowData.height) ? doc_canvas_height : windowData.height;
-            
+
             for (u32 y = 0; y < copy_height; y++) {
                 memcpy(windowData.pixels + y * windowData.width,
                        doc_canvas_pixels + y * doc_canvas_width,
@@ -500,36 +580,112 @@ void Render(void* userData, WindowData& windowData) {
     } else {
         // Clear canvas to dark gray
         canvas_clear(user->cnvs, 40, 40, 50);
-        
+
         // Draw a rectangle behind the text
         u32 rect_width = 400;
         u32 rect_height = 60;
         u32 rect_x = (windowData.width - rect_width) / 2;
         u32 rect_y = (windowData.height - rect_height) / 2;
         canvas_draw_rect(user->cnvs, rect_x, rect_y, rect_width, rect_height, 60, 60, 80);
-        
+
         // Draw "Drop file here to preview" text
         u32 drop_text[] = {'D', 'r', 'o', 'p', ' ', 'f', 'i', 'l', 'e', ' ',
                           'h', 'e', 'r', 'e', ' ', 't', 'o', ' ',
                           'p', 'r', 'e', 'v', 'i', 'e', 'w', 0};
         u32_string* drop_str = u32str_init(drop_text);
-        
+
         // Center the text
         u32 text_width = font_get_width(user->fnt, drop_str, 0);
         u32 text_x = (windowData.width - text_width) / 2;
         u32 text_y = rect_y + (rect_height - font_get_line_height(user->fnt)) / 2;
-        
+
         canvas_draw_text(user->cnvs, user->fnt, drop_str, text_x, text_y, 200, 200, 220);
         u32str_destroy(drop_str);
-        
+
+        // Add ImGui quit button underneath
+        u32 quit_text[] = {'Q', 'u', 'i', 't', 0};
+        u32_string* quit_str = u32str_init(quit_text);
+
+        u32 button_width = 100;
+        u32 button_height = 40;
+        u32 button_x = (windowData.width - button_width) / 2;
+        u32 button_y = rect_y + rect_height + 20; // 20 pixels below the text rectangle
+
+        if (ImGuiButton(user->imgui_context, button_x, button_y, button_width, button_height, quit_str)) {
+            windowData.closeWindow = true;
+        }
+
+        u32str_destroy(quit_str);
+
+        // Showcase all other controls below the quit button
+        u32 current_y = button_y + button_height + 20;
+
+        // Checkbox
+        u32 checkbox_text[] = {'E', 'n', 'a', 'b', 'l', 'e', ' ', 'D', 'e', 'm', 'o', ' ', 'M', 'o', 'd', 'e', 0};
+        u32_string* checkbox_str = u32str_init(checkbox_text);
+        ImGuiCheckbox(user->imgui_context, button_x, current_y, checkbox_str, &user->checkbox_state);
+        u32str_destroy(checkbox_str);
+        current_y += 40;
+
+        // Horizontal scrollbar
+        u32 h_scroll_label[] = {'H', 'o', 'r', 'i', 'z', 'o', 'n', 't', 'a', 'l', ':', ' ', 0};
+        u32_string* h_label_str = u32str_init(h_scroll_label);
+        canvas_draw_text(user->cnvs, user->fnt, h_label_str, button_x - 100, current_y + 5, 180, 180, 200);
+        u32str_destroy(h_label_str);
+        user->h_scrollbar_value = ImGuiHorizontalScrollBar(user->imgui_context,
+                                                          button_x, current_y, 200, 30,
+                                                          user->h_scrollbar_value, 0.0f, 1.0f);
+        current_y += 40;
+
+        // Vertical scrollbar (positioned to the right)
+        u32 v_scroll_label[] = {'V', 'e', 'r', 't', 'i', 'c', 'a', 'l', ':', 0};
+        u32_string* v_label_str = u32str_init(v_scroll_label);
+        canvas_draw_text(user->cnvs, user->fnt, v_label_str, button_x + 220, button_y, 180, 180, 200);
+        u32str_destroy(v_label_str);
+        user->v_scrollbar_value = ImGuiVerticalScrollBar(user->imgui_context,
+                                                        button_x + 220, button_y + 30, 30, 150,
+                                                        user->v_scrollbar_value, 0.0f, 1.0f);
+
+        // Collapsable header
+        u32 header_text[] = {'A', 'd', 'v', 'a', 'n', 'c', 'e', 'd', ' ', 'O', 'p', 't', 'i', 'o', 'n', 's', 0};
+        u32_string* header_str = u32str_init(header_text);
+        ImGuiCollapsableHeader(user->imgui_context, button_x - 50, current_y,
+                             300, 35, header_str, &user->header_open);
+        u32str_destroy(header_str);
+
+        if (user->header_open) {
+            current_y += 40;
+            // Show some content under the header
+            u32 content_text[] = {'C', 'o', 'n', 't', 'e', 'n', 't', ' ', 'u', 'n', 'd', 'e', 'r', ' ',
+                                 'c', 'o', 'l', 'l', 'a', 'p', 's', 'a', 'b', 'l', 'e', ' ',
+                                 'h', 'e', 'a', 'd', 'e', 'r', 0};
+            u32_string* content_str = u32str_init(content_text);
+            canvas_draw_text(user->cnvs, user->fnt, content_str, button_x, current_y, 150, 150, 180);
+            u32str_destroy(content_str);
+
+            // Add another button inside the collapsable section
+            u32 inner_button_text[] = {'N', 'e', 's', 't', 'e', 'd', ' ', 'B', 'u', 't', 't', 'o', 'n', 0};
+            u32_string* inner_button_str = u32str_init(inner_button_text);
+            current_y += 30;
+            if (ImGuiButton(user->imgui_context, button_x, current_y, 150, 35, inner_button_str)) {
+                // Just for demo - toggle the checkbox when this button is clicked
+                user->checkbox_state = !user->checkbox_state;
+            }
+            u32str_destroy(inner_button_str);
+        }
+
         // Copy canvas pixels to window buffer
         u32* canvas_pixels = canvas_get_raw_pixels(user->cnvs);
         memcpy(windowData.pixels, canvas_pixels, windowData.width * windowData.height * sizeof(u32));
     }
+
+    // End ImGui frame
+    ImGuiEndFrame(user->imgui_context);
 }
 
 void Shutdown(void* userData) {
     UserData* user = (UserData*)userData;
+    ImGuiShutdown(user->imgui_context);
     canvas_destroy(user->cnvs);
     if (user->doc_canvas) {
         canvas_destroy(user->doc_canvas);
