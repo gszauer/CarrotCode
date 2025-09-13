@@ -46,6 +46,9 @@ struct UserData {
     f32 h_scrollbar_value;
     f32 v_scrollbar_value;
     bool header_open;
+    // Tab bar demo state
+    u32 active_tab;
+    bool tab_states[5];  // Track which tabs are open
 };
 
 void* Initialize(const WindowData& windowData);
@@ -541,6 +544,11 @@ void* Initialize(const WindowData& windowData) {
     user->h_scrollbar_value = 0.5f;
     user->v_scrollbar_value = 0.3f;
     user->header_open = true;
+    // Initialize tab bar state
+    user->active_tab = 0;
+    for (int i = 0; i < 5; i++) {
+        user->tab_states[i] = true;  // All tabs start open
+    }
     return user;
 }
 
@@ -634,6 +642,92 @@ void Render(void* userData, WindowData& windowData) {
         u32str_destroy(header_str);
 
         if (user->header_open) {
+            current_y += 40;
+
+            // Tab bar demo
+            u32 num_open_tabs = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) num_open_tabs++;
+            }
+
+            ImGuiBeginTabBar(user->imgui_context, button_x - 50, current_y, 400, 30, num_open_tabs, user->active_tab);
+
+            u32 tab_index = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) {
+                    // Create tab text
+                    u32 tab_text[20];
+                    int len = 0;
+                    tab_text[len++] = 'T';
+                    tab_text[len++] = 'a';
+                    tab_text[len++] = 'b';
+                    tab_text[len++] = ' ';
+                    tab_text[len++] = '0' + i + 1;
+                    tab_text[len++] = 0;
+
+                    u32_string* tab_str = u32str_init(tab_text);
+                    bool is_open = ImGuiTab(user->imgui_context, tab_str);
+                    u32str_destroy(tab_str);
+
+                    if (!is_open) {
+                        user->tab_states[i] = false;
+                        // If we closed the active tab, select another one
+                        if (tab_index == user->active_tab) {
+                            // Find the next open tab
+                            for (int j = 0; j < 5; j++) {
+                                if (user->tab_states[j]) {
+                                    user->active_tab = 0; // Will be recalculated
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    tab_index++;
+                }
+            }
+
+            user->active_tab = ImGuiEndTabBar(user->imgui_context);
+            current_y += 80;
+
+            // Show content based on active tab
+            u32 content_text[100];
+            int len = 0;
+            content_text[len++] = 'C';
+            content_text[len++] = 'o';
+            content_text[len++] = 'n';
+            content_text[len++] = 't';
+            content_text[len++] = 'e';
+            content_text[len++] = 'n';
+            content_text[len++] = 't';
+            content_text[len++] = ' ';
+            content_text[len++] = 'f';
+            content_text[len++] = 'o';
+            content_text[len++] = 'r';
+            content_text[len++] = ' ';
+
+            // Find which actual tab number is active
+            int actual_tab_num = 0;
+            u32 current_tab_index = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) {
+                    if (current_tab_index == user->active_tab) {
+                        actual_tab_num = i + 1;
+                        break;
+                    }
+                    current_tab_index++;
+                }
+            }
+
+            content_text[len++] = 'T';
+            content_text[len++] = 'a';
+            content_text[len++] = 'b';
+            content_text[len++] = ' ';
+            content_text[len++] = '0' + actual_tab_num;
+            content_text[len++] = 0;
+
+            u32_string* content_str = u32str_init(content_text);
+            canvas_draw_text(user->cnvs, user->fnt, content_str, button_x, current_y, 200, 200, 220);
+            u32str_destroy(content_str);
             current_y += 40;
 
             // Checkbox

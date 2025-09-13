@@ -1,5 +1,6 @@
 #include "imgui.h"
 #include "renderer.h"
+#include "strings.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -46,6 +47,16 @@ struct ImGui {
 
     // ID generation
     u32 nextId;
+
+    // Tab bar state
+    struct TabBarState {
+        u32 x, y, w, h;
+        u32 numTabs;
+        u32 activeTab;
+        u32 currentTabIndex;
+        bool inTabBar;
+        u32 scrollOffset;
+    } tabBar;
 };
 
 static u32 GenerateId(ImGui* context) {
@@ -55,6 +66,16 @@ static u32 GenerateId(ImGui* context) {
 static bool IsMouseInRect(ImGui* context, u32 x, u32 y, u32 w, u32 h) {
     return context->mouseX >= x && context->mouseX < x + w &&
            context->mouseY >= y && context->mouseY < y + h;
+}
+
+// Helper function to calculate centered text Y position, handling cases where control is smaller than text
+static u32 GetCenteredTextY(u32 controlY, u32 controlHeight, u32 textHeight) {
+    if (controlHeight >= textHeight) {
+        return controlY + (controlHeight - textHeight) / 2;
+    } else {
+        // If control is smaller than text, just align to top
+        return controlY;
+    }
 }
 
 ImGui* ImGuiInit(canvas* cnvs, font* fnt) {
@@ -98,8 +119,7 @@ void ImGuiBeginFrame(ImGui* context) {
     // Reset hot item - will be set by controls if hovered
     context->hotItem = 0;
 
-    // Reset scroll delta after frame
-    context->scrollDelta = 0;
+    // Note: scrollDelta is now reset in EndFrame so controls can use it
 }
 
 void ImGuiKeyboardInput(ImGui* context, u32 characterCodeUnicode, u32 virtualKeyCode,
@@ -119,6 +139,9 @@ void ImGuiMouseInput(ImGui* context, u32 windowRelativeXPos, u32 windowRelativeY
     context->mouseY = windowRelativeYPos;
     context->mouseNormX = windowNormalizedXPos;
     context->mouseNormY = windowNormalizedYPos;
+
+    // Accumulate scroll delta
+
     context->scrollDelta += scrollDirection;
     context->mouseLeftDown = leftDown;
     context->mouseMiddleDown = middleDown;
@@ -133,6 +156,9 @@ void ImGuiEndFrame(ImGui* context) {
     if (!context->mouseLeftDown) {
         context->activeItem = 0;
     }
+
+    // Reset scroll delta after all controls have had a chance to use it
+    context->scrollDelta = 0;
 }
 
 void ImGuiShutdown(ImGui* context) {
@@ -203,7 +229,7 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
         u32 textWidth = font_get_width(context->fnt, text, 0);
         u32 textHeight = font_get_line_height(context->fnt);
         u32 textX = x + (w - textWidth) / 2;
-        u32 textY = y + (h - textHeight) / 2;
+        u32 textY = GetCenteredTextY(y, h, textHeight);
 
         u8 textR = isDisabled ? Colors::TEXT_DISABLED_R : Colors::TEXT_R;
         u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
@@ -283,7 +309,8 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text,
 
     // Draw label text
     if (text) {
-        u32 textY = y + (boxSize - font_get_line_height(context->fnt)) / 2;
+        u32 textHeight = font_get_line_height(context->fnt);
+        u32 textY = GetCenteredTextY(y, boxSize, textHeight);
         u8 textR = isDisabled ? Colors::TEXT_DISABLED_R : Colors::TEXT_R;
         u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
         u8 textB = isDisabled ? Colors::TEXT_DISABLED_B : Colors::TEXT_B;
@@ -513,7 +540,8 @@ bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_stri
     // Draw text
     if (text) {
         u32 textX = x + arrowSize + arrowPadding * 2;
-        u32 textY = y + (h - font_get_line_height(context->fnt)) / 2;
+        u32 textHeight = font_get_line_height(context->fnt);
+        u32 textY = GetCenteredTextY(y, h, textHeight);
 
         u8 textR = isDisabled ? Colors::TEXT_DISABLED_R : Colors::TEXT_R;
         u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
@@ -523,4 +551,210 @@ bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_stri
     }
 
     return clicked;
+}
+
+// Tab bar implementation
+void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u32 activeTab) {
+    // Initialize tab bar state
+    context->tabBar.x = x;
+    context->tabBar.y = y;
+    context->tabBar.w = w;
+    context->tabBar.h = h;
+    context->tabBar.numTabs = numTabs;
+    context->tabBar.activeTab = activeTab;
+    context->tabBar.currentTabIndex = 0;
+    context->tabBar.inTabBar = true;
+
+    // Calculate total width needed for all tabs and determine scroll offset
+    const u32 tabWidth = 150; // Fixed width per tab for simplicity
+    const u32 totalTabsWidth = numTabs * tabWidth;
+    const u32 moreButtonWidth = 30;
+
+    // Calculate scroll offset to ensure active tab is visible
+    if (totalTabsWidth > w) {
+        u32 activeTabX = activeTab * tabWidth;
+        u32 activeTabEndX = activeTabX + tabWidth;
+        u32 visibleWidth = w - moreButtonWidth;
+
+        // If active tab is beyond the visible area, adjust offset
+        if (activeTabX < context->tabBar.scrollOffset) {
+            context->tabBar.scrollOffset = activeTabX;
+        } else if (activeTabEndX > context->tabBar.scrollOffset + visibleWidth) {
+            context->tabBar.scrollOffset = activeTabEndX - visibleWidth;
+        }
+
+        // Ensure we don't scroll past the end
+        u32 maxScroll = totalTabsWidth - visibleWidth;
+        if (context->tabBar.scrollOffset > maxScroll) {
+            context->tabBar.scrollOffset = maxScroll;
+        }
+    } else {
+        context->tabBar.scrollOffset = 0;
+    }
+
+    // Draw tab bar background
+    canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
+
+    // Draw "more" button if tabs overflow
+    if (totalTabsWidth > w) {
+        u32 moreButtonX = x + w - moreButtonWidth;
+        u32 moreButtonY = y;
+        u32 moreButtonH = h;
+
+        // Draw button background
+        canvas_draw_rect(context->cnvs, moreButtonX, moreButtonY, moreButtonWidth, moreButtonH,
+                        Colors::CONTROL_R, Colors::CONTROL_G, Colors::CONTROL_B);
+
+        // Draw left border
+        canvas_draw_rect(context->cnvs, moreButtonX, moreButtonY, 1, moreButtonH,
+                        Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+
+        // Draw three dots
+        u32 dotSize = 3;
+        u32 dotSpacing = 4;
+        u32 totalDotsWidth = dotSize * 3 + dotSpacing * 2;
+        u32 dotX = moreButtonX + (moreButtonWidth - totalDotsWidth) / 2;
+        u32 dotY = moreButtonY + (moreButtonH - dotSize) / 2;
+
+        for (u32 i = 0; i < 3; i++) {
+            canvas_draw_rect(context->cnvs, dotX + i * (dotSize + dotSpacing), dotY, dotSize, dotSize,
+                            Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
+        }
+
+        // Set clip rectangle for tabs (excluding more button)
+        canvas_set_clip(context->cnvs, x, y, w - moreButtonWidth, h);
+    } else {
+        // Set clip rectangle for full tab bar
+        canvas_set_clip(context->cnvs, x, y, w, h);
+    }
+}
+
+bool ImGuiTab(ImGui* context, u32_string* text) {
+    if (!context->tabBar.inTabBar) return true;
+
+    u32 tabIndex = context->tabBar.currentTabIndex++;
+    bool isActiveTab = (tabIndex == context->tabBar.activeTab);
+
+    // Calculate tab dimensions
+    u32 textWidth = text ? font_get_width(context->fnt, text, 0) : 40;
+    const u32 padding = 10;
+    const u32 closeButtonSize = 16;
+    const u32 closeButtonPadding = 5;
+
+    // Clamp tab width between min and max
+    u32 tabWidth = textWidth + padding * 2 + closeButtonSize + closeButtonPadding;
+    if (tabWidth < 50) tabWidth = 50;
+    if (tabWidth > 300) tabWidth = 300;
+
+    // Calculate tab position with scroll offset
+    u32 tabX = context->tabBar.x + tabIndex * 150 - context->tabBar.scrollOffset;
+    u32 tabY = context->tabBar.y;
+    u32 tabH = context->tabBar.h;
+
+    // Don't render tabs that are completely outside the visible area
+    u32 visibleEndX = context->tabBar.x + context->tabBar.w;
+    if (context->tabBar.numTabs * 150 > context->tabBar.w) {
+        visibleEndX -= 30; // Account for "more" button
+    }
+
+    if (tabX >= visibleEndX || tabX + tabWidth <= context->tabBar.x) {
+        return true;
+    }
+
+    // Generate unique IDs for tab and close button
+    u32 tabId = GenerateId(context);
+    u32 closeId = GenerateId(context);
+
+    bool isTabHovered = IsMouseInRect(context, tabX, tabY, tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
+                        context->disabledDepth == 0;
+    bool isCloseHovered = IsMouseInRect(context, tabX + tabWidth - closeButtonSize - closeButtonPadding,
+                                        tabY + (tabH - closeButtonSize) / 2,
+                                        closeButtonSize, closeButtonSize) &&
+                         context->disabledDepth == 0;
+
+    // Handle tab click
+    if (isTabHovered && context->mouseLeftPressed) {
+        context->tabBar.activeTab = tabIndex;
+    }
+
+    // Draw tab background
+    u8 bgR, bgG, bgB;
+    if (isActiveTab) {
+        bgR = Colors::PRIMARY_R;
+        bgG = Colors::PRIMARY_G;
+        bgB = Colors::PRIMARY_B;
+    } else if (isTabHovered) {
+        bgR = Colors::CONTROL_HOVER_R;
+        bgG = Colors::CONTROL_HOVER_G;
+        bgB = Colors::CONTROL_HOVER_B;
+    } else {
+        bgR = Colors::CONTROL_R;
+        bgG = Colors::CONTROL_G;
+        bgB = Colors::CONTROL_B;
+    }
+
+    canvas_draw_rect(context->cnvs, tabX, tabY, tabWidth, tabH, bgR, bgG, bgB);
+
+    // Draw tab border
+    canvas_draw_rect(context->cnvs, tabX, tabY, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, tabX, tabY, 1, tabH, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, tabX + tabWidth - 1, tabY, 1, tabH, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+
+    // Draw active tab indicator (bottom border removal)
+    if (isActiveTab) {
+        canvas_draw_rect(context->cnvs, tabX + 1, tabY + tabH - 1, tabWidth - 2, 1, bgR, bgG, bgB);
+    } else {
+        canvas_draw_rect(context->cnvs, tabX, tabY + tabH - 1, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    }
+
+    // Draw tab text
+    if (text) {
+        u32 textHeight = font_get_line_height(context->fnt);
+        u32 textY = GetCenteredTextY(tabY, tabH, textHeight);
+        canvas_draw_text(context->cnvs, context->fnt, text, tabX + padding, textY,
+                        Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
+    }
+
+    // Draw close button
+    u32 closeX = tabX + tabWidth - closeButtonSize - closeButtonPadding;
+    u32 closeY = tabY + (tabH - closeButtonSize) / 2;
+
+    // Close button background
+    if (isCloseHovered) {
+        canvas_draw_rect(context->cnvs, closeX, closeY, closeButtonSize, closeButtonSize,
+                        Colors::CONTROL_HOVER_R, Colors::CONTROL_HOVER_G, Colors::CONTROL_HOVER_B);
+    }
+
+    // Draw X for close button
+    const u32 xPadding = 4;
+    u8 xR = isCloseHovered ? Colors::TEXT_R : Colors::TEXT_DISABLED_R;
+    u8 xG = isCloseHovered ? Colors::TEXT_G : Colors::TEXT_DISABLED_G;
+    u8 xB = isCloseHovered ? Colors::TEXT_B : Colors::TEXT_DISABLED_B;
+
+    // Draw X as two diagonal lines
+    for (u32 i = 0; i < 2; i++) {
+        canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + xPadding + i,
+                        closeButtonSize - xPadding * 2 - i * 2, 1, xR, xG, xB);
+        canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + closeButtonSize - xPadding - 1 - i,
+                        closeButtonSize - xPadding * 2 - i * 2, 1, xR, xG, xB);
+    }
+
+    // Handle close button click
+    if (isCloseHovered && context->mouseLeftPressed) {
+        return false; // Tab closed
+    }
+
+    return true; // Tab still open
+}
+
+u32 ImGuiEndTabBar(ImGui* context) {
+    if (!context->tabBar.inTabBar) return 0;
+
+    // Reset clip rectangle
+    canvas_set_clip(context->cnvs, 0, 0, 0, 0);
+
+    // Reset tab bar state
+    context->tabBar.inTabBar = false;
+
+    return context->tabBar.activeTab;
 }
