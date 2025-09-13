@@ -8,14 +8,16 @@ struct ImGui;
 
 // Lifecycle
 ImGui* ImGuiInit(canvas* cnvs, font* fnt);
-void ImGuiSetTargets(ImGui* context, canvas* cnvs, font* fnt);
-canvas* ImGuiGetCanvas(ImGui* context);
-font* ImGuiGetFont(ImGui* context);
 void ImGuiBeginFrame(ImGui* context);
 void ImGuiKeyboardInput(ImGui* context, u32 characterCodeUnicode, u32 virtualKeyCode, bool isKeyDown, bool altDown, bool ctrlDown, bool shiftDown);
 void ImGuiMouseInput(ImGui* context, u32 windowRelativeXPos, u32 windowRelativeYPos, f32 windowNormalizedXPos, f32 windowNormalizedYPos, f32 scrollDirection, bool leftDown, bool middleDown, bool rightDown);
 void ImGuiEndFrame(ImGui* context);
 void ImGuiShutdown(ImGui* context);
+
+// Manage targets for imgui system
+void ImGuiSetTargets(ImGui* context, canvas* cnvs, font* fnt);
+canvas* ImGuiGetCanvas(ImGui* context);
+font* ImGuiGetFont(ImGui* context);
 
 // State management
 void ImGuiPushDisabled(ImGui* context);
