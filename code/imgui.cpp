@@ -617,7 +617,7 @@ bool ImGuiTab(ImGui* context, const char* text) {
     // Calculate tab dimensions
     u32 textWidth = text ? font_get_width_cstr(context->fnt, text) : 40;
     const u32 padding = 10;
-    const u32 closeButtonSize = 16;
+    const u32 closeButtonSize = 32;
     const u32 closeButtonPadding = 5;
 
     // Calculate actual tab width based on content
@@ -693,10 +693,19 @@ bool ImGuiTab(ImGui* context, const char* text) {
     // For rendering, we'll cast to u32 (wraps negative values, but clip rect handles it)
     u32 drawX = (u32)tabX;
 
+    // Check if mouse is in the "more" button area (if overflow is active)
+    bool mouseInMoreButtonArea = false;
+    if (context->tabBar.hasOverflow) {
+        u32 moreButtonX = context->tabBar.x + context->tabBar.w - context->tabBar.h;
+        mouseInMoreButtonArea = IsMouseInRect(context, moreButtonX, context->tabBar.y,
+                                             context->tabBar.h, context->tabBar.h);
+    }
+
     // For hit testing the tab itself, check if mouse is in the visible portion
     // But only if mouse input hasn't been consumed by a higher-priority element
+    // AND not in the more button area
     bool isTabHovered = false;
-    if (!context->mouseInputConsumed) {
+    if (!context->mouseInputConsumed && !mouseInMoreButtonArea) {
         if (actualTabX >= 0) {
             // Tab starts in visible area
             isTabHovered = IsMouseInRect(context, (u32)actualTabX, tabY,
@@ -711,10 +720,10 @@ bool ImGuiTab(ImGui* context, const char* text) {
     }
 
     // For close button hit testing, calculate actual screen position
-    // Also check if input hasn't been consumed
+    // Also check if input hasn't been consumed AND not in more button area
     i32 closeButtonX = actualTabX + (i32)tabWidth - (i32)closeButtonSize - (i32)closeButtonPadding;
     bool isCloseHovered = false;
-    if (!context->mouseInputConsumed &&
+    if (!context->mouseInputConsumed && !mouseInMoreButtonArea &&
         closeButtonX >= 0 && closeButtonX + (i32)closeButtonSize <= (i32)(context->tabBar.x + context->tabBar.w)) {
         isCloseHovered = IsMouseInRect(context, (u32)closeButtonX,
                                       tabY + (tabH - closeButtonSize) / 2,
@@ -779,18 +788,18 @@ bool ImGuiTab(ImGui* context, const char* text) {
                         Colors::CONTROL_HOVER_R, Colors::CONTROL_HOVER_G, Colors::CONTROL_HOVER_B);
     }
 
-    // Draw X for close button
-    const u32 xPadding = 4;
+    // Draw X for close button (scaled for larger button)
+    const u32 xPadding = 8;
     u8 xR = isCloseHovered ? Colors::TEXT_R : Colors::TEXT_DISABLED_R;
     u8 xG = isCloseHovered ? Colors::TEXT_G : Colors::TEXT_DISABLED_G;
     u8 xB = isCloseHovered ? Colors::TEXT_B : Colors::TEXT_DISABLED_B;
 
-    // Draw X as two diagonal lines
-    for (u32 i = 0; i < 2; i++) {
+    // Draw X as two diagonal lines (thicker for larger button)
+    for (u32 i = 0; i < 3; i++) {
         canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + xPadding + i,
-                        closeButtonSize - xPadding * 2 - i * 2, 1, xR, xG, xB);
-        canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + closeButtonSize - xPadding - 1 - i,
-                        closeButtonSize - xPadding * 2 - i * 2, 1, xR, xG, xB);
+                        closeButtonSize - xPadding * 2 - i * 2, 2, xR, xG, xB);
+        canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + closeButtonSize - xPadding - 2 - i,
+                        closeButtonSize - xPadding * 2 - i * 2, 2, xR, xG, xB);
     }
 
     // Handle close button click
