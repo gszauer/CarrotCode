@@ -661,18 +661,35 @@ bool ImGuiTab(ImGui* context, const char* text) {
     u32 tabId = GenerateId(context);
     u32 closeId = GenerateId(context);
 
-    // For hit testing, use clamped position, but for rendering use actual position
-    u32 tabXForHitTest = (actualTabX < 0) ? 0 : (u32)actualTabX;
-
     // Keep the actual tab position for rendering (can be negative)
     i32 tabX = actualTabX;
 
-    bool isTabHovered = IsMouseInRect(context, tabXForHitTest, tabY, tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
+    // For rendering, we'll cast to u32 (wraps negative values, but clip rect handles it)
+    u32 drawX = (u32)tabX;
+
+    // For hit testing the tab itself, check if mouse is in the visible portion
+    bool isTabHovered = false;
+    if (actualTabX >= 0) {
+        // Tab starts in visible area
+        isTabHovered = IsMouseInRect(context, (u32)actualTabX, tabY,
+                                    tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
+                       context->disabledDepth == 0;
+    } else if (actualTabX + (i32)tabWidth > 0) {
+        // Tab is partially visible on the left
+        isTabHovered = IsMouseInRect(context, 0, tabY,
+                                    (u32)(actualTabX + (i32)tabWidth - closeButtonSize - closeButtonPadding), tabH) &&
+                       context->disabledDepth == 0;
+    }
+
+    // For close button hit testing, calculate actual screen position
+    i32 closeButtonX = actualTabX + (i32)tabWidth - (i32)closeButtonSize - (i32)closeButtonPadding;
+    bool isCloseHovered = false;
+    if (closeButtonX >= 0 && closeButtonX + (i32)closeButtonSize <= (i32)(context->tabBar.x + context->tabBar.w)) {
+        isCloseHovered = IsMouseInRect(context, (u32)closeButtonX,
+                                      tabY + (tabH - closeButtonSize) / 2,
+                                      closeButtonSize, closeButtonSize) &&
                         context->disabledDepth == 0;
-    bool isCloseHovered = IsMouseInRect(context, tabXForHitTest + tabWidth - closeButtonSize - closeButtonPadding,
-                                        tabY + (tabH - closeButtonSize) / 2,
-                                        closeButtonSize, closeButtonSize) &&
-                         context->disabledDepth == 0;
+    }
 
     // Handle tab click
     if (isTabHovered && context->mouseLeftPressed) {
@@ -697,7 +714,6 @@ bool ImGuiTab(ImGui* context, const char* text) {
 
     // Draw with actual position - use the actual tabX position for everything
     // The clipping rectangle will handle cutting off parts outside the visible area
-    u32 drawX = (u32)tabX;  // Direct cast - will wrap around for negative values but clip rect handles it
     canvas_draw_rect(context->cnvs, drawX, tabY, tabWidth, tabH, bgR, bgG, bgB);
 
     // Draw tab border
@@ -746,14 +762,17 @@ bool ImGuiTab(ImGui* context, const char* text) {
     }
 
     // Handle close button click
+    bool tabClosed = false;
     if (isCloseHovered && context->mouseLeftPressed) {
-        return false; // Tab closed
+        tabClosed = true;
+        // Consume the click so it doesn't affect other tabs
+        context->activeItem = closeId;
     }
 
     // Update position for next tab
     context->tabBar.currentTabX += tabWidth;
 
-    return true; // Tab still open
+    return !tabClosed; // Return false if tab was closed
 }
 
 u32 ImGuiEndTabBar(ImGui* context) {
