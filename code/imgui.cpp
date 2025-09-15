@@ -405,6 +405,25 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
         }
     }
 
+    // Handle scroll wheel when hovering over scrollbar
+    if (isHovered && context->scrollDelta != 0) {
+        f32 oldValue = value;
+        // Calculate scroll step (5% of range per scroll tick)
+        f32 scrollStep = (maxValue - minValue) * 0.05f;
+        // For horizontal scrollbar, invert the scroll direction
+        // Scrolling down (negative delta) should increase value (move right)
+        value -= context->scrollDelta * scrollStep;
+
+        // Clamp to range
+        if (value < minValue) value = minValue;
+        if (value > maxValue) value = maxValue;
+
+        // Check if value changed and report it
+        if (valueChanged && value != oldValue) {
+            *valueChanged = true;
+        }
+    }
+
     // Draw track
     canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
 
@@ -472,6 +491,25 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
         if (t < 0) t = 0;
         if (t > 1) t = 1;
         value = minValue + t * (maxValue - minValue);
+
+        // Check if value changed and report it
+        if (valueChanged && value != oldValue) {
+            *valueChanged = true;
+        }
+    }
+
+    // Handle scroll wheel when hovering over scrollbar
+    if (isHovered && context->scrollDelta != 0) {
+        f32 oldValue = value;
+        // Calculate scroll step (5% of range per scroll tick)
+        f32 scrollStep = (maxValue - minValue) * 0.05f;
+        // For vertical scrollbar, invert the scroll direction
+        // Scrolling down (negative delta) should increase value (move down)
+        value -= context->scrollDelta * scrollStep;
+
+        // Clamp to range
+        if (value < minValue) value = minValue;
+        if (value > maxValue) value = maxValue;
 
         // Check if value changed and report it
         if (valueChanged && value != oldValue) {

@@ -70,6 +70,8 @@ canvas* Render(UserData* user) {
         ImGuiMenuBarItem(user->imgui_context, "VIEW");
         ImGuiMenuBarItem(user->imgui_context, "HELP");
         menuIndex = ImGuiEndMenuBar(user->imgui_context); 
+
+       
         
         u32 button_height = 40;
         u32 button_x = 50;
@@ -119,10 +121,6 @@ canvas* Render(UserData* user) {
 
         if (user->header_open) {
             current_y += 60;
-
-           
-
-            
 
             // Show content based on active tab
             // Find which actual tab number is active
@@ -175,6 +173,18 @@ canvas* Render(UserData* user) {
         //u32* canvas_pixels = canvas_get_raw_pixels(user->cnvs);
         //memcpy(windowData.pixels, canvas_pixels, windowData.width * windowData.height * sizeof(u32));
         result = user->cnvs;
+
+
+         // Display popup menus at the end!
+        if (menuIndex == 0) {
+            ImGuiBeginMenu(user->imgui_context, 0, 50);
+            ImGuiMenuItem(user->imgui_context, "New"); // returns true on click
+            ImGuiMenuItem(user->imgui_context, "Open"); // returns true on click
+            ImGuiMenuItem(user->imgui_context, "Save"); // returns true on click
+            ImGuiMenuItem(user->imgui_context, "Close"); // returns true on click
+            ImGuiMenuItem(user->imgui_context, "Exit"); // returns true on click
+            ImGuiEndMenu(user->imgui_context);
+        }
     }
 
     // End ImGui frame
