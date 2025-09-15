@@ -888,6 +888,22 @@ u32 ImGuiEndTabBar(ImGui* context) {
         }
     }
 
+    // Handle scroll wheel to change active tab
+    if (IsMouseInRect(context, context->tabBar.x, context->tabBar.y,
+                      context->tabBar.w, context->tabBar.h)) {
+        if (context->scrollDelta > 0) {
+            // Scrolling up - increase tab index (move right)
+            if (context->tabBar.activeTab < context->tabBar.numTabs - 1) {
+                context->tabBar.activeTab++;
+            }
+        } else if (context->scrollDelta < 0) {
+            // Scrolling down - decrease tab index (move left)
+            if (context->tabBar.activeTab > 0) {
+                context->tabBar.activeTab--;
+            }
+        }
+    }
+
     // Reset tab bar state
     context->tabBar.inTabBar = false;
 
