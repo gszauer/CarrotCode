@@ -56,6 +56,9 @@ struct ImGui {
         u32 currentTabIndex;
         bool inTabBar;
         u32 scrollOffset;
+        bool hasOverflow;        // Whether tabs overflow the available space
+        u32 desiredActiveTab;    // Tab to scroll to (for frame-delayed scrolling)
+        u32 currentTabX;         // Current X position while drawing tabs
     } tabBar;
 };
 
@@ -564,69 +567,19 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
     context->tabBar.activeTab = activeTab;
     context->tabBar.currentTabIndex = 0;
     context->tabBar.inTabBar = true;
+    context->tabBar.hasOverflow = false;
+    context->tabBar.currentTabX = x;
 
-    // Calculate total width needed for all tabs and determine scroll offset
-    const u32 tabWidth = 150; // Fixed width per tab for simplicity
-    const u32 totalTabsWidth = numTabs * tabWidth;
-    const u32 moreButtonWidth = 30;
-
-    // Calculate scroll offset to ensure active tab is visible
-    if (totalTabsWidth > w) {
-        u32 activeTabX = activeTab * tabWidth;
-        u32 activeTabEndX = activeTabX + tabWidth;
-        u32 visibleWidth = w - moreButtonWidth;
-
-        // If active tab is beyond the visible area, adjust offset
-        if (activeTabX < context->tabBar.scrollOffset) {
-            context->tabBar.scrollOffset = activeTabX;
-        } else if (activeTabEndX > context->tabBar.scrollOffset + visibleWidth) {
-            context->tabBar.scrollOffset = activeTabEndX - visibleWidth;
-        }
-
-        // Ensure we don't scroll past the end
-        u32 maxScroll = totalTabsWidth - visibleWidth;
-        if (context->tabBar.scrollOffset > maxScroll) {
-            context->tabBar.scrollOffset = maxScroll;
-        }
-    } else {
-        context->tabBar.scrollOffset = 0;
-    }
+    // Store the desired active tab for frame-delayed scrolling
+    // The actual scrolling will happen when we know the actual tab positions
+    context->tabBar.desiredActiveTab = activeTab;
 
     // Draw tab bar background
     canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
 
-    // Draw "more" button if tabs overflow
-    if (totalTabsWidth > w) {
-        u32 moreButtonX = x + w - moreButtonWidth;
-        u32 moreButtonY = y;
-        u32 moreButtonH = h;
-
-        // Draw button background
-        canvas_draw_rect(context->cnvs, moreButtonX, moreButtonY, moreButtonWidth, moreButtonH,
-                        Colors::CONTROL_R, Colors::CONTROL_G, Colors::CONTROL_B);
-
-        // Draw left border
-        canvas_draw_rect(context->cnvs, moreButtonX, moreButtonY, 1, moreButtonH,
-                        Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-
-        // Draw three dots
-        u32 dotSize = 3;
-        u32 dotSpacing = 4;
-        u32 totalDotsWidth = dotSize * 3 + dotSpacing * 2;
-        u32 dotX = moreButtonX + (moreButtonWidth - totalDotsWidth) / 2;
-        u32 dotY = moreButtonY + (moreButtonH - dotSize) / 2;
-
-        for (u32 i = 0; i < 3; i++) {
-            canvas_draw_rect(context->cnvs, dotX + i * (dotSize + dotSpacing), dotY, dotSize, dotSize,
-                            Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
-        }
-
-        // Set clip rectangle for tabs (excluding more button)
-        canvas_set_clip(context->cnvs, x, y, w - moreButtonWidth, h);
-    } else {
-        // Set clip rectangle for full tab bar
-        canvas_set_clip(context->cnvs, x, y, w, h);
-    }
+    // Set initial clip rectangle for the full tab bar
+    // This will be adjusted in ImGuiTab if overflow is detected
+    canvas_set_clip(context->cnvs, x, y, w, h);
 }
 
 bool ImGuiTab(ImGui* context, const char* text) {
@@ -641,33 +594,82 @@ bool ImGuiTab(ImGui* context, const char* text) {
     const u32 closeButtonSize = 16;
     const u32 closeButtonPadding = 5;
 
-    // Clamp tab width between min and max
+    // Calculate actual tab width based on content
     u32 tabWidth = textWidth + padding * 2 + closeButtonSize + closeButtonPadding;
     if (tabWidth < 50) tabWidth = 50;
     if (tabWidth > 300) tabWidth = 300;
 
     // Calculate tab position with scroll offset
-    u32 tabX = context->tabBar.x + tabIndex * 150 - context->tabBar.scrollOffset;
+    // Note: We use signed integers here because tabX can be negative when scrolled
+    i32 tabXSigned = (i32)context->tabBar.currentTabX - (i32)context->tabBar.scrollOffset;
+    i32 actualTabX = (i32)context->tabBar.x + tabXSigned;
     u32 tabY = context->tabBar.y;
     u32 tabH = context->tabBar.h;
 
-    // Don't render tabs that are completely outside the visible area
-    u32 visibleEndX = context->tabBar.x + context->tabBar.w;
-    if (context->tabBar.numTabs * 150 > context->tabBar.w) {
-        visibleEndX -= 30; // Account for "more" button
+    // Check if this tab would overflow the available area
+    u32 availableWidth = context->tabBar.w;
+    i32 tabEndX = actualTabX + (i32)tabWidth;
+
+    // Check for overflow conditions:
+    // 1. Tab extends beyond the available width minus the more button
+    // 2. Tab is partially cut off on the left side (scrolled)
+    bool isClippedRight = tabEndX > (i32)(context->tabBar.x + context->tabBar.w - context->tabBar.h);
+    bool isClippedLeft = actualTabX < (i32)context->tabBar.x;
+
+    if (isClippedRight || isClippedLeft) {
+        if (!context->tabBar.hasOverflow) {
+            // First tab to overflow - adjust the clip area
+            context->tabBar.hasOverflow = true;
+            canvas_set_clip(context->cnvs, context->tabBar.x, context->tabBar.y,
+                          context->tabBar.w - context->tabBar.h, context->tabBar.h);
+        }
     }
 
-    if (tabX >= visibleEndX || tabX + tabWidth <= context->tabBar.x) {
+    // Don't render tabs that are completely outside the visible area
+    u32 visibleEndX = context->tabBar.x + context->tabBar.w;
+    if (context->tabBar.hasOverflow) {
+        visibleEndX -= context->tabBar.h;  // Square button width equals height
+    }
+
+    // Only skip rendering if tab is COMPLETELY outside visible area
+    // (tabEndX <= context->tabBar.x means the entire tab is to the left of visible area)
+    bool skipRendering = (actualTabX >= (i32)visibleEndX) || (tabEndX <= (i32)context->tabBar.x);
+
+    if (skipRendering) {
+        // Update position for next tab even if not rendered
+        context->tabBar.currentTabX += tabWidth;
         return true;
+    }
+
+    // Handle scrolling to active tab (frame-delayed)
+    if (isActiveTab && context->tabBar.desiredActiveTab == tabIndex) {
+        u32 visibleWidth = context->tabBar.w;
+        if (context->tabBar.hasOverflow) {
+            visibleWidth -= context->tabBar.h;  // Account for more button
+        }
+
+        // If active tab is not fully visible, adjust scroll offset for next frame
+        if (actualTabX < (i32)context->tabBar.x) {
+            context->tabBar.scrollOffset -= (context->tabBar.x - actualTabX);
+            if ((i32)context->tabBar.scrollOffset < 0) context->tabBar.scrollOffset = 0;
+        } else if (tabEndX > (i32)(context->tabBar.x + visibleWidth)) {
+            context->tabBar.scrollOffset += (tabEndX - (context->tabBar.x + visibleWidth));
+        }
     }
 
     // Generate unique IDs for tab and close button
     u32 tabId = GenerateId(context);
     u32 closeId = GenerateId(context);
 
-    bool isTabHovered = IsMouseInRect(context, tabX, tabY, tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
+    // For hit testing, use clamped position, but for rendering use actual position
+    u32 tabXForHitTest = (actualTabX < 0) ? 0 : (u32)actualTabX;
+
+    // Keep the actual tab position for rendering (can be negative)
+    i32 tabX = actualTabX;
+
+    bool isTabHovered = IsMouseInRect(context, tabXForHitTest, tabY, tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
                         context->disabledDepth == 0;
-    bool isCloseHovered = IsMouseInRect(context, tabX + tabWidth - closeButtonSize - closeButtonPadding,
+    bool isCloseHovered = IsMouseInRect(context, tabXForHitTest + tabWidth - closeButtonSize - closeButtonPadding,
                                         tabY + (tabH - closeButtonSize) / 2,
                                         closeButtonSize, closeButtonSize) &&
                          context->disabledDepth == 0;
@@ -693,30 +695,34 @@ bool ImGuiTab(ImGui* context, const char* text) {
         bgB = Colors::CONTROL_B;
     }
 
-    canvas_draw_rect(context->cnvs, tabX, tabY, tabWidth, tabH, bgR, bgG, bgB);
+    // Draw with actual position - use the actual tabX position for everything
+    // The clipping rectangle will handle cutting off parts outside the visible area
+    u32 drawX = (u32)tabX;  // Direct cast - will wrap around for negative values but clip rect handles it
+    canvas_draw_rect(context->cnvs, drawX, tabY, tabWidth, tabH, bgR, bgG, bgB);
 
     // Draw tab border
-    canvas_draw_rect(context->cnvs, tabX, tabY, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, tabX, tabY, 1, tabH, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, tabX + tabWidth - 1, tabY, 1, tabH, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, drawX, tabY, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, drawX, tabY, 1, tabH, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, drawX + tabWidth - 1, tabY, 1, tabH, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
 
     // Draw active tab indicator (bottom border removal)
     if (isActiveTab) {
-        canvas_draw_rect(context->cnvs, tabX + 1, tabY + tabH - 1, tabWidth - 2, 1, bgR, bgG, bgB);
+        canvas_draw_rect(context->cnvs, drawX + 1, tabY + tabH - 1, tabWidth - 2, 1, bgR, bgG, bgB);
     } else {
-        canvas_draw_rect(context->cnvs, tabX, tabY + tabH - 1, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+        canvas_draw_rect(context->cnvs, drawX, tabY + tabH - 1, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
     }
 
     // Draw tab text
     if (text) {
         u32 textHeight = font_get_line_height(context->fnt);
         u32 textY = GetCenteredTextY(tabY, tabH, textHeight);
-        canvas_draw_text_cstr(context->cnvs, context->fnt, text, tabX + padding, textY,
+        // Use drawX for text position so it's properly clipped along with the tab
+        canvas_draw_text_cstr(context->cnvs, context->fnt, text, drawX + padding, textY,
                         Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
     }
 
     // Draw close button
-    u32 closeX = tabX + tabWidth - closeButtonSize - closeButtonPadding;
+    u32 closeX = drawX + tabWidth - closeButtonSize - closeButtonPadding;
     u32 closeY = tabY + (tabH - closeButtonSize) / 2;
 
     // Close button background
@@ -744,14 +750,58 @@ bool ImGuiTab(ImGui* context, const char* text) {
         return false; // Tab closed
     }
 
+    // Update position for next tab
+    context->tabBar.currentTabX += tabWidth;
+
     return true; // Tab still open
 }
 
 u32 ImGuiEndTabBar(ImGui* context) {
     if (!context->tabBar.inTabBar) return 0;
 
-    // Reset clip rectangle
+    // Reset clip rectangle before drawing more button
     canvas_set_clip(context->cnvs, 0, 0, 0, 0);
+
+    // Draw "more" button if tabs overflowed
+    if (context->tabBar.hasOverflow) {
+        u32 moreButtonSize = context->tabBar.h;  // Square button
+        u32 moreButtonX = context->tabBar.x + context->tabBar.w - moreButtonSize;
+        u32 moreButtonY = context->tabBar.y;
+
+        // Check if more button is hovered
+        bool isMoreHovered = IsMouseInRect(context, moreButtonX, moreButtonY,
+                                          moreButtonSize, moreButtonSize);
+
+        // Draw button background
+        u8 bgR = isMoreHovered ? Colors::CONTROL_HOVER_R : Colors::CONTROL_R;
+        u8 bgG = isMoreHovered ? Colors::CONTROL_HOVER_G : Colors::CONTROL_G;
+        u8 bgB = isMoreHovered ? Colors::CONTROL_HOVER_B : Colors::CONTROL_B;
+
+        canvas_draw_rect(context->cnvs, moreButtonX, moreButtonY,
+                        moreButtonSize, moreButtonSize,
+                        bgR, bgG, bgB);
+
+        // Draw left border
+        canvas_draw_rect(context->cnvs, moreButtonX, moreButtonY, 1, moreButtonSize,
+                        Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+
+        // Draw three dots centered in the square button
+        u32 dotSize = 3;
+        u32 dotSpacing = 4;
+        u32 totalDotsWidth = dotSize * 3 + dotSpacing * 2;
+        u32 dotX = moreButtonX + (moreButtonSize - totalDotsWidth) / 2;
+        u32 dotY = moreButtonY + (moreButtonSize - dotSize) / 2;
+
+        for (u32 i = 0; i < 3; i++) {
+            canvas_draw_rect(context->cnvs, dotX + i * (dotSize + dotSpacing), dotY, dotSize, dotSize,
+                            Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
+        }
+
+        // Handle more button click (could open a dropdown menu in the future)
+        if (isMoreHovered && context->mouseLeftPressed) {
+            // TODO: Implement dropdown menu for tab selection
+        }
+    }
 
     // Reset tab bar state
     context->tabBar.inTabBar = false;

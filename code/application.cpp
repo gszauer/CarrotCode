@@ -72,14 +72,14 @@ canvas* Render(UserData* user) {
             for (int i = 0; i < 5; i++) {
                 if (user->tab_states[i]) num_open_tabs++;
             }
-            ImGuiBeginTabBar(user->imgui_context, button_x - 50, current_y, 400, 50, num_open_tabs, user->active_tab);
+            ImGuiBeginTabBar(user->imgui_context, 0, current_y, canvasWidth, 50, num_open_tabs, user->active_tab);
 
             u32 tab_index = 0;
             for (int i = 0; i < 5; i++) {
                 if (user->tab_states[i]) {
                     // Create tab text
                     char tab_text[20];
-                    snprintf(tab_text, sizeof(tab_text), "Tab %d", i + 1);
+                    snprintf(tab_text, sizeof(tab_text), "Tabotha hodor %d", i + 1);
 
                     bool is_open = ImGuiTab(user->imgui_context, tab_text);
 
