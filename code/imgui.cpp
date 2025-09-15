@@ -788,19 +788,18 @@ bool ImGuiTab(ImGui* context, const char* text) {
                         Colors::CONTROL_HOVER_R, Colors::CONTROL_HOVER_G, Colors::CONTROL_HOVER_B);
     }
 
-    // Draw X for close button (scaled for larger button)
-    const u32 xPadding = 8;
+    // Draw X using a single 'x' character
     u8 xR = isCloseHovered ? Colors::TEXT_R : Colors::TEXT_DISABLED_R;
     u8 xG = isCloseHovered ? Colors::TEXT_G : Colors::TEXT_DISABLED_G;
     u8 xB = isCloseHovered ? Colors::TEXT_B : Colors::TEXT_DISABLED_B;
 
-    // Draw X as two diagonal lines (thicker for larger button)
-    for (u32 i = 0; i < 3; i++) {
-        canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + xPadding + i,
-                        closeButtonSize - xPadding * 2 - i * 2, 2, xR, xG, xB);
-        canvas_draw_rect(context->cnvs, closeX + xPadding + i, closeY + closeButtonSize - xPadding - 2 - i,
-                        closeButtonSize - xPadding * 2 - i * 2, 2, xR, xG, xB);
-    }
+    // Calculate position to center the 'x' in the close button
+    u32 textHeight = font_get_line_height(context->fnt);
+    u32 xPosX = closeX + (closeButtonSize - font_get_width_cstr(context->fnt, "x")) / 2;
+    u32 xPosY = closeY + (closeButtonSize - textHeight) / 2;
+
+    // Draw the 'x' character
+    canvas_draw_text_cstr(context->cnvs, context->fnt, "x", xPosX, xPosY, xR, xG, xB);
 
     // Handle close button click
     bool tabClosed = false;
