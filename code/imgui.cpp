@@ -6,18 +6,36 @@
 
 // Adobe Spectrum Dark color theme
 namespace Colors {
-    const u8 BACKGROUND_R = 30, BACKGROUND_G = 30, BACKGROUND_B = 30;
-    const u8 SURFACE_R = 50, SURFACE_G = 50, SURFACE_B = 50;
-    const u8 CONTROL_R = 62, CONTROL_G = 62, CONTROL_B = 62;
-    const u8 CONTROL_HOVER_R = 75, CONTROL_HOVER_G = 75, CONTROL_HOVER_B = 75;
-    const u8 CONTROL_ACTIVE_R = 45, CONTROL_ACTIVE_G = 45, CONTROL_ACTIVE_B = 45;
-    const u8 PRIMARY_R = 36, PRIMARY_G = 131, PRIMARY_B = 226;
-    const u8 PRIMARY_HOVER_R = 50, PRIMARY_HOVER_G = 145, PRIMARY_HOVER_B = 240;
-    const u8 PRIMARY_ACTIVE_R = 28, PRIMARY_ACTIVE_G = 105, PRIMARY_ACTIVE_B = 180;
-    const u8 TEXT_R = 255, TEXT_G = 255, TEXT_B = 255;
-    const u8 TEXT_DISABLED_R = 128, TEXT_DISABLED_G = 128, TEXT_DISABLED_B = 128;
-    const u8 BORDER_R = 70, BORDER_G = 70, BORDER_B = 70;
-    const u8 CHECK_R = 36, CHECK_G = 131, CHECK_B = 226;
+    // Corresponds to Spectrum's "gray-75"
+    const u8 BACKGROUND_R = 31, BACKGROUND_G = 31, BACKGROUND_B = 31;
+
+    // Corresponds to Spectrum's "gray-100"
+    const u8 SURFACE_R = 39, SURFACE_G = 39, SURFACE_B = 39;
+
+    // Based on Spectrum's gray tones for component backgrounds/borders
+    const u8 CONTROL_R = 80, CONTROL_G = 80, CONTROL_B = 80;
+    const u8 CONTROL_HOVER_R = 92, CONTROL_HOVER_G = 92, CONTROL_HOVER_B = 92;
+    const u8 CONTROL_ACTIVE_R = 69, CONTROL_ACTIVE_G = 69, CONTROL_ACTIVE_B = 69;
+
+    // Corresponds to Spectrum's primary Call To Action (CTA) blue
+    const u8 PRIMARY_R = 38, PRIMARY_G = 128, PRIMARY_B = 235;
+    const u8 PRIMARY_HOVER_R = 20, PRIMARY_HOVER_G = 115, PRIMARY_HOVER_B = 230;
+    const u8 PRIMARY_ACTIVE_R = 13, PRIMARY_ACTIVE_G = 102, PRIMARY_ACTIVE_B = 208;
+
+    // Corresponds to Spectrum's "gray-900"
+    const u8 TEXT_R = 226, TEXT_G = 226, TEXT_B = 226;
+
+    // Corresponds to Spectrum's "gray-700"
+    const u8 TEXT_DISABLED_R = 155, TEXT_DISABLED_G = 155, TEXT_DISABLED_B = 155;
+
+    // Corresponds to Spectrum's "gray-400"
+    const u8 BORDER_R = 80, BORDER_G = 80, BORDER_B = 80;
+
+    // The primary blue, used for checkmarks and other selected states
+    const u8 CHECK_R = 38, CHECK_G = 128, CHECK_B = 235;
+
+    // Shadow color for popup menus (darker than background)
+    const u8 SHADOW_R = 20, SHADOW_G = 20, SHADOW_B = 20;
 }
 
 struct ImGui {
@@ -232,17 +250,17 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text) {
         bgG = Colors::CONTROL_G;
         bgB = Colors::CONTROL_B;
     } else if (isActive && isHovered) {
-        bgR = Colors::PRIMARY_ACTIVE_R;
-        bgG = Colors::PRIMARY_ACTIVE_G;
-        bgB = Colors::PRIMARY_ACTIVE_B;
+        bgR = Colors::CONTROL_ACTIVE_R;
+        bgG = Colors::CONTROL_ACTIVE_G;
+        bgB = Colors::CONTROL_ACTIVE_B;
     } else if (isHovered && canShowHover) {
-        bgR = Colors::PRIMARY_HOVER_R;
-        bgG = Colors::PRIMARY_HOVER_G;
-        bgB = Colors::PRIMARY_HOVER_B;
+        bgR = Colors::CONTROL_HOVER_R;
+        bgG = Colors::CONTROL_HOVER_G;
+        bgB = Colors::CONTROL_HOVER_B;
     } else {
-        bgR = Colors::PRIMARY_R;
-        bgG = Colors::PRIMARY_G;
-        bgB = Colors::PRIMARY_B;
+        bgR = Colors::CONTROL_R;
+        bgG = Colors::CONTROL_G;
+        bgB = Colors::CONTROL_B;
     }
 
     canvas_draw_rect(context->cnvs, x, y, w, h, bgR, bgG, bgB);
@@ -406,17 +424,17 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
         thumbG = Colors::CONTROL_G;
         thumbB = Colors::CONTROL_B;
     } else if (isActive) {
-        thumbR = Colors::PRIMARY_ACTIVE_R;
-        thumbG = Colors::PRIMARY_ACTIVE_G;
-        thumbB = Colors::PRIMARY_ACTIVE_B;
+        thumbR = Colors::CONTROL_ACTIVE_R;
+        thumbG = Colors::CONTROL_ACTIVE_G;
+        thumbB = Colors::CONTROL_ACTIVE_B;
     } else if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
-        thumbR = Colors::PRIMARY_HOVER_R;
-        thumbG = Colors::PRIMARY_HOVER_G;
-        thumbB = Colors::PRIMARY_HOVER_B;
+        thumbR = Colors::CONTROL_HOVER_R;
+        thumbG = Colors::CONTROL_HOVER_G;
+        thumbB = Colors::CONTROL_HOVER_B;
     } else {
-        thumbR = Colors::PRIMARY_R;
-        thumbG = Colors::PRIMARY_G;
-        thumbB = Colors::PRIMARY_B;
+        thumbR = Colors::CONTROL_R;
+        thumbG = Colors::CONTROL_G;
+        thumbB = Colors::CONTROL_B;
     }
 
     canvas_draw_rect(context->cnvs, thumbX, y, thumbWidth, h, thumbR, thumbG, thumbB);
@@ -480,17 +498,17 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
         thumbG = Colors::CONTROL_G;
         thumbB = Colors::CONTROL_B;
     } else if (isActive) {
-        thumbR = Colors::PRIMARY_ACTIVE_R;
-        thumbG = Colors::PRIMARY_ACTIVE_G;
-        thumbB = Colors::PRIMARY_ACTIVE_B;
+        thumbR = Colors::CONTROL_ACTIVE_R;
+        thumbG = Colors::CONTROL_ACTIVE_G;
+        thumbB = Colors::CONTROL_ACTIVE_B;
     } else if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
-        thumbR = Colors::PRIMARY_HOVER_R;
-        thumbG = Colors::PRIMARY_HOVER_G;
-        thumbB = Colors::PRIMARY_HOVER_B;
+        thumbR = Colors::CONTROL_HOVER_R;
+        thumbG = Colors::CONTROL_HOVER_G;
+        thumbB = Colors::CONTROL_HOVER_B;
     } else {
-        thumbR = Colors::PRIMARY_R;
-        thumbG = Colors::PRIMARY_G;
-        thumbB = Colors::PRIMARY_B;
+        thumbR = Colors::CONTROL_R;
+        thumbG = Colors::CONTROL_G;
+        thumbB = Colors::CONTROL_B;
     }
 
     canvas_draw_rect(context->cnvs, x, thumbY, w, thumbHeight, thumbR, thumbG, thumbB);
@@ -1015,7 +1033,7 @@ void ImGuiBeginMenu(ImGui* context, u32 x_pos, u32 y_pos) {
     // Shadow
     canvas_draw_rect(context->cnvs, context->popupMenu.x + 2, context->popupMenu.y + 2,
                     context->popupMenu.width, 200,  // Temporary height
-                    20, 20, 20);
+                    Colors::SHADOW_R, Colors::SHADOW_G, Colors::SHADOW_B);
 
     // Background
     canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y,

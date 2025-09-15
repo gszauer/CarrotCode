@@ -465,9 +465,23 @@ int main(int argc, char** argv) {
                 u32 copy_height = (doc_canvas_height < (u32)windowData.height) ? doc_canvas_height : windowData.height;
 
                 for (u32 y = 0; y < copy_height; y++) {
+#ifdef RAW_COPY
                     memcpy(windowData.pixels + y * windowData.width,
                         doc_canvas_pixels + y * doc_canvas_width,
                         copy_width * sizeof(u32));
+#else
+                    // Swizzle RGBA to BGRA for X11
+                    for (u32 x = 0; x < copy_width; x++) {
+                        u32 pixel = doc_canvas_pixels[y * doc_canvas_width + x];
+                        // Extract RGBA components
+                        u32 r = pixel & 0xFF;
+                        u32 g = (pixel >> 8) & 0xFF;
+                        u32 b = (pixel >> 16) & 0xFF;
+                        u32 a = (pixel >> 24) & 0xFF;
+                        // Repack as BGRA for X11
+                        windowData.pixels[y * windowData.width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+                    }
+#endif
                 }
             }
         }
