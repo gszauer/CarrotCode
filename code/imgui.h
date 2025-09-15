@@ -42,8 +42,13 @@ void ImGuiMenuBarItem(ImGui* context, const char* itemName);
 i32 ImGuiEndMenuBar(ImGui* context); // Returns the index of the currently open menu (or -1)
 
 // This is a popup menu. It would appear if you click on File, or if you right click
-void ImGuiBeginMenu(ImGui* context, u32 x, u32 y);
-bool ImGuiMenuItem(ImGui* context, const char* itemName); // returns true on click
-void ImGuiEndMenu(ImGui* context);
+// Separated input/rendering API for popup menus
+void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCount);
+bool ImGuiProcessMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex);
+void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount);
+void ImGuiRenderMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex, const char* text);
+void ImGuiRenderEndMenu(ImGui* context);
+
+
 
 #endif

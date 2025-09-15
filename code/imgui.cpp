@@ -930,14 +930,14 @@ u32 ImGuiEndTabBar(ImGui* context) {
     if (IsMouseInRect(context, context->tabBar.x, context->tabBar.y,
                       context->tabBar.w, context->tabBar.h)) {
         if (context->scrollDelta > 0) {
-            // Scrolling up - increase tab index (move right)
-            if (context->tabBar.activeTab < context->tabBar.numTabs - 1) {
-                context->tabBar.activeTab++;
-            }
-        } else if (context->scrollDelta < 0) {
-            // Scrolling down - decrease tab index (move left)
+            // Scrolling up - decrease tab index (move left)
             if (context->tabBar.activeTab > 0) {
                 context->tabBar.activeTab--;
+            }
+        } else if (context->scrollDelta < 0) {
+            // Scrolling down - increase tab index (move right)
+            if (context->tabBar.activeTab < context->tabBar.numTabs - 1) {
+                context->tabBar.activeTab++;
             }
         }
     }
@@ -1066,135 +1066,121 @@ i32 ImGuiEndMenuBar(ImGui* context) {
     return context->menuBar.openMenuItem;
 }
 
-// Popup menu implementation
-void ImGuiBeginMenu(ImGui* context, u32 x_pos, u32 y_pos) {
-    // Only open menu if there's an active menu bar item
-    if (context->menuBar.openMenuItem < 0 ||
-        context->menuBar.openMenuItem >= (i32)context->menuBar.itemCount) {
-        context->popupMenu.isOpen = false;
-        return;
-    }
+// New separated input/rendering API for popup menus
 
-    context->popupMenu.isOpen = true;
+// Mark the entire popup menu area as consuming input
+void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCount) {
+    // Fixed item dimensions
+    const u32 itemHeight = 50;
+    const u32 menuWidth = 200;
 
-    // Position popup below the active menu bar item
-    u32 menuIndex = (u32)context->menuBar.openMenuItem;
-    context->popupMenu.x = x_pos;
-    context->popupMenu.y = y_pos;
-    context->popupMenu.width = 200;  // Default width, will adjust based on content
-    context->popupMenu.currentY = context->popupMenu.y;
-    context->popupMenu.itemHeight = 24;
+    // Calculate total menu height
+    u32 totalHeight = itemCount * itemHeight;
 
-    // Mark the entire popup area as consuming input (using temporary height)
-    if (IsMouseInRect(context, x_pos, y_pos, 200, 200)) {
+    // If mouse is anywhere in the menu area, mark input as consumed
+    if (IsMouseInRect(context, menuX, menuY, menuWidth, totalHeight)) {
         context->mouseInputConsumed = true;
     }
-
-    // Draw popup background with shadow effect
-    // Shadow
-    canvas_draw_rect(context->cnvs, context->popupMenu.x + 2, context->popupMenu.y + 2,
-                    context->popupMenu.width, 200,  // Temporary height
-                    Colors::SHADOW_R, Colors::SHADOW_G, Colors::SHADOW_B);
-
-    // Background
-    canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y,
-                    context->popupMenu.width, 200,  // Temporary height
-                    Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
-
-    // Border
-    canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y,
-                    context->popupMenu.width, 1,
-                    Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y,
-                    1, 200,
-                    Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, context->popupMenu.x + context->popupMenu.width - 1,
-                    context->popupMenu.y, 1, 200,
-                    Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
 }
 
-bool ImGuiMenuItem(ImGui* context, const char* itemName) {
-    if (!context->popupMenu.isOpen) return false;
+// Process input for a single menu item - returns true if clicked
+bool ImGuiProcessMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex) {
+    // Fixed item dimensions
+    const u32 itemHeight = 50;
+    const u32 menuWidth = 200;
 
-    u32 id = GenerateId(context);
-    u32 itemX = context->popupMenu.x;
-    u32 itemY = context->popupMenu.currentY;
-    u32 itemW = context->popupMenu.width;
-    u32 itemH = context->popupMenu.itemHeight;
+    // Calculate item position
+    u32 itemY = menuY + itemIndex * itemHeight;
 
-    // Check hover state (only if input hasn't been consumed)
-    bool isHovered = !context->mouseInputConsumed &&
-                    IsMouseInRect(context, itemX, itemY, itemW, itemH) &&
+    // Check if mouse is over this item
+    bool isHovered = IsMouseInRect(context, menuX, itemY, menuWidth, itemHeight) &&
                     context->disabledDepth == 0;
 
-    // Mark input as consumed if menu item is handling it
-    if (IsMouseInRect(context, itemX, itemY, itemW, itemH)) {
-        context->mouseInputConsumed = true;
+    // Check for click
+    if (isHovered && context->mouseLeftReleased) {
+        return true;  // Item was clicked
     }
+
+    return false;
+}
+
+// Begin rendering a popup menu
+void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
+    // Initialize render state for menu
+    context->popupMenu.x = x;
+    context->popupMenu.y = y;
+    context->popupMenu.width = 200;
+    context->popupMenu.currentY = y;
+    context->popupMenu.itemHeight = 50;
+
+    // Calculate actual menu height based on item count
+    u32 totalHeight = itemCount * context->popupMenu.itemHeight;
+
+    // Draw shadow
+    canvas_draw_rect(context->cnvs, x + 2, y + 2,
+                    context->popupMenu.width, totalHeight,
+                    Colors::SHADOW_R, Colors::SHADOW_G, Colors::SHADOW_B);
+
+    // Draw background
+    canvas_draw_rect(context->cnvs, x, y,
+                    context->popupMenu.width, totalHeight,
+                    Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
+}
+
+// Render a single menu item
+void ImGuiRenderMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex, const char* text) {
+    // Fixed item dimensions (must match ImGuiProcessMenuItem)
+    const u32 itemHeight = 50;
+    const u32 menuWidth = 200;
+
+    // Calculate item position
+    u32 itemY = menuY + itemIndex * itemHeight;
+
+    // Check if this item is hovered
+    bool isHovered = IsMouseInRect(context, menuX, itemY, menuWidth, itemHeight) &&
+                    context->disabledDepth == 0;
 
     // Draw hover background
     if (isHovered) {
-        canvas_draw_rect(context->cnvs, itemX + 1, itemY, itemW - 2, itemH,
+        canvas_draw_rect(context->cnvs, menuX + 1, itemY, menuWidth - 2, itemHeight,
                         Colors::PRIMARY_R, Colors::PRIMARY_G, Colors::PRIMARY_B);
     }
 
     // Draw item text
-    if (itemName) {
+    if (text) {
         const u32 padding = 12;
         u32 textHeight = font_get_line_height(context->fnt);
-        u32 textY = GetCenteredTextY(itemY, itemH, textHeight);
+        u32 textY = GetCenteredTextY(itemY, itemHeight, textHeight);
 
-        u8 textR = isHovered ? Colors::TEXT_R : Colors::TEXT_R;
-        u8 textG = isHovered ? Colors::TEXT_G : Colors::TEXT_G;
-        u8 textB = isHovered ? Colors::TEXT_B : Colors::TEXT_B;
-
-        canvas_draw_text_cstr(context->cnvs, context->fnt, itemName,
-                            itemX + padding, textY, textR, textG, textB);
+        canvas_draw_text_cstr(context->cnvs, context->fnt, text,
+                            menuX + padding, textY,
+                            Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
     }
 
-    // Update Y position for next item
-    context->popupMenu.currentY += itemH;
-
-    // Handle click
-    bool clicked = false;
-    if (isHovered && context->mouseLeftReleased) {
-        clicked = true;
-        // Close the menu when an item is clicked
-        context->menuBar.openMenuItem = -1;
-        context->popupMenu.isOpen = false;
-    }
-
-    return clicked;
+    // Track the bottom of the last item for border drawing
+    context->popupMenu.currentY = itemY + itemHeight;
 }
 
-void ImGuiEndMenu(ImGui* context) {
-    if (!context->popupMenu.isOpen) return;
-
-    // Draw bottom border of the popup
+// Finish rendering the popup menu
+void ImGuiRenderEndMenu(ImGui* context) {
+    // Calculate total height
     u32 totalHeight = context->popupMenu.currentY - context->popupMenu.y;
-    canvas_draw_rect(context->cnvs, context->popupMenu.x,
-                    context->popupMenu.y + totalHeight - 1,
+
+    // Draw borders only - background was already drawn in ImGuiRenderMenu
+    // Top border
+    canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y,
                     context->popupMenu.width, 1,
                     Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-
-    // Check if another control has become active (user clicked on something else)
-    if (context->activeItem != 0 && context->activeItem != context->menuBar.menuBarId) {
-        // Another control took focus, close the menu
-        context->menuBar.openMenuItem = -1;
-        context->popupMenu.isOpen = false;
-        return;
-    }
-
-    // Check if click is outside menu to close it
-    if (context->mouseLeftPressed) {
-        bool clickInMenu = IsMouseInRect(context, context->popupMenu.x, context->popupMenu.y,
-                                        context->popupMenu.width, totalHeight);
-        bool clickInMenuBar = IsMouseInRect(context, context->menuBar.x, context->menuBar.y,
-                                           context->menuBar.w, context->menuBar.h);
-
-        if (!clickInMenu && !clickInMenuBar) {
-            context->menuBar.openMenuItem = -1;
-            context->popupMenu.isOpen = false;
-        }
-    }
+    // Bottom border
+    canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y + totalHeight - 1,
+                    context->popupMenu.width, 1,
+                    Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    // Left border
+    canvas_draw_rect(context->cnvs, context->popupMenu.x, context->popupMenu.y,
+                    1, totalHeight,
+                    Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    // Right border
+    canvas_draw_rect(context->cnvs, context->popupMenu.x + context->popupMenu.width - 1,
+                    context->popupMenu.y, 1, totalHeight,
+                    Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
 }
