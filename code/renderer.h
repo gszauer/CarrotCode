@@ -52,6 +52,12 @@ u32 canvas_draw_text(canvas* context, font* fnt, const u32_string* text, u32 x, 
 // Returns the maximum width of all lines drawn
 u32 canvas_draw_subtext(canvas* context, font* fnt, const u32_string* text, u32 start_index, u32 length, u32 x, u32 y, u8 r, u8 g, u8 b);
 
+// Draws a C-style string at the specified position
+// Handles newlines (\n) and tabs (\t)
+// Text is clipped to current clip region
+// Returns the maximum width of all lines drawn
+u32 canvas_draw_text_cstr(canvas* context, font* fnt, const char* text, u32 x, u32 y, u8 r, u8 g, u8 b);
+
 // Clipping operations
 
 // Sets the clipping rectangle for all drawing operations
@@ -79,6 +85,10 @@ u32 font_get_subwidth(font* fnt, const u32_string* text, u32 start_index, u32 le
 // Returns the width in pixels of a single character
 // Tab width is context-dependent; returns a single tab stop width
 u32 font_get_char_width(font* fnt, u32 character);
+
+// Returns the width in pixels of a C-style string
+// Accounts for tabs and returns max width for multi-line text
+u32 font_get_width_cstr(font* fnt, const char* text);
 
 // Canvas accessor functions
 

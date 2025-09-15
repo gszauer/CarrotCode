@@ -183,33 +183,69 @@ u32 canvas_draw_subtext(canvas* context, font* fnt, const u32_string* text, u32 
     u32 current_x = x;
     u32 text_length = u32str_length((u32_string*)text);
     u32 end_index = std::min(start_index + length, text_length);
-    
+
     for (u32 i = start_index; i < end_index; i++) {
         u32 character = u32str_get((u32_string*)text, i);
-        
+
         if (character == '\n') {
             max_width = std::max(max_width, current_x - x);
             current_x = x;
             y += CHAR_HEIGHT;
             continue;
         }
-        
+
         if (character == '\t') {
             // Handle tab - advance to next tab stop (4 spaces)
             u32 spaces_to_tab = 4 - ((current_x - x) / CHAR_WIDTH) % 4;
             current_x += spaces_to_tab * CHAR_WIDTH;
             continue;
         }
-        
+
         // Draw the character if it fits in the clip region
         if (current_x + CHAR_WIDTH <= context->clip_x + context->clip_w) {
             draw_char(context, character, current_x, y, r, g, b);
         }
-        
+
         // Advance cursor by character width
         current_x += CHAR_WIDTH;
     }
-    
+
+    max_width = std::max(max_width, current_x - x);
+    return max_width;
+}
+
+u32 canvas_draw_text_cstr(canvas* context, font* fnt, const char* text, u32 x, u32 y, u8 r, u8 g, u8 b) {
+    if (!text) return 0;
+
+    u32 max_width = 0;
+    u32 current_x = x;
+
+    for (const char* p = text; *p; p++) {
+        char character = *p;
+
+        if (character == '\n') {
+            max_width = std::max(max_width, current_x - x);
+            current_x = x;
+            y += CHAR_HEIGHT;
+            continue;
+        }
+
+        if (character == '\t') {
+            // Handle tab - advance to next tab stop (4 spaces)
+            u32 spaces_to_tab = 4 - ((current_x - x) / CHAR_WIDTH) % 4;
+            current_x += spaces_to_tab * CHAR_WIDTH;
+            continue;
+        }
+
+        // Draw the character if it fits in the clip region
+        if (current_x + CHAR_WIDTH <= context->clip_x + context->clip_w) {
+            draw_char(context, (u32)(unsigned char)character, current_x, y, r, g, b);
+        }
+
+        // Advance cursor by character width
+        current_x += CHAR_WIDTH;
+    }
+
     max_width = std::max(max_width, current_x - x);
     return max_width;
 }
@@ -300,6 +336,35 @@ u32 font_get_char_width(font* fnt, u32 character) {
         return TAB_WIDTH;
     }
     return CHAR_WIDTH;
+}
+
+u32 font_get_width_cstr(font* fnt, const char* text) {
+    if (!text) return 0;
+
+    u32 max_width = 0;
+    u32 current_width = 0;
+    u32 current_x = 0; // Track position for tab calculation
+
+    for (const char* p = text; *p; p++) {
+        char character = *p;
+        if (character == '\n') {
+            max_width = std::max(max_width, current_width);
+            current_width = 0;
+            current_x = 0;
+        } else if (character == '\t') {
+            // Handle tab - advance to next tab stop (4 spaces)
+            u32 spaces_to_tab = 4 - (current_x / CHAR_WIDTH) % 4;
+            u32 tab_width = spaces_to_tab * CHAR_WIDTH;
+            current_width += tab_width;
+            current_x += tab_width;
+        } else {
+            current_width += CHAR_WIDTH;
+            current_x += CHAR_WIDTH;
+        }
+    }
+
+    max_width = std::max(max_width, current_width);
+    return max_width;
 }
 
 u32* canvas_get_raw_pixels(canvas* cnvs) {
