@@ -19,9 +19,6 @@ struct token_span {
     u32 end;
     token_type type;
 };
-#else
-struct token_span;
-#endif
 
 struct document_line {
     u32_string* text;
@@ -30,6 +27,11 @@ struct document_line {
     u32 token_count;
     u32 token_capacity;
 };
+#else
+struct document_line;
+struct token_span;
+#endif
+
 
 document_line* docline_create();
 document_line* docline_create_with_text(u32_string* text);
