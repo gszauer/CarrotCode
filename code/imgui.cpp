@@ -48,6 +48,9 @@ struct ImGui {
     // ID generation
     u32 nextId;
 
+    // Input blocking - when true, mouse input has been consumed by a higher-priority element
+    bool mouseInputConsumed;
+
     // Tab bar state
     struct TabBarState {
         u32 x, y, w, h;
@@ -139,6 +142,9 @@ void ImGuiBeginFrame(ImGui* context) {
     // Reset ID counter for the new frame
     context->nextId = 1;
 
+    // Reset input consumption flag for the new frame
+    context->mouseInputConsumed = false;
+
     // Reset hot item - will be set by controls if hovered
     context->hotItem = 0;
 
@@ -203,7 +209,7 @@ void ImGuiPopDisabled(ImGui* context) {
 bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
-    bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
     bool isActive = context->activeItem == id;
     bool clicked = false;
 
@@ -277,7 +283,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text,
     u32 totalWidth = text ? (boxSize + textPadding + textWidth) : boxSize;
     u32 totalHeight = boxSize;
 
-    bool isHovered = IsMouseInRect(context, x, y, totalWidth, totalHeight) && !isDisabled;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, totalWidth, totalHeight) && !isDisabled;
     bool isActive = context->activeItem == id;
     bool clicked = false;
 
@@ -347,7 +353,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text,
 f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
-    bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
     bool isActive = context->activeItem == id;
 
     // Initialize valueChanged to false if provided
@@ -421,7 +427,7 @@ f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 val
 f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
-    bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
     bool isActive = context->activeItem == id;
 
     // Initialize valueChanged to false if provided
@@ -495,7 +501,7 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
 bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* isOpen) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
-    bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
     bool isActive = context->activeItem == id;
     bool clicked = false;
 
@@ -588,7 +594,7 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
     context->tabBar.currentTabIndex = 0;
     context->tabBar.inTabBar = true;
     context->tabBar.hasOverflow = false;
-    context->tabBar.currentTabX = x;
+    context->tabBar.currentTabX = 0;
 
     // Store the desired active tab for frame-delayed scrolling
     // The actual scrolling will happen when we know the actual tab positions
@@ -688,23 +694,28 @@ bool ImGuiTab(ImGui* context, const char* text) {
     u32 drawX = (u32)tabX;
 
     // For hit testing the tab itself, check if mouse is in the visible portion
+    // But only if mouse input hasn't been consumed by a higher-priority element
     bool isTabHovered = false;
-    if (actualTabX >= 0) {
-        // Tab starts in visible area
-        isTabHovered = IsMouseInRect(context, (u32)actualTabX, tabY,
-                                    tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
-                       context->disabledDepth == 0;
-    } else if (actualTabX + (i32)tabWidth > 0) {
-        // Tab is partially visible on the left
-        isTabHovered = IsMouseInRect(context, 0, tabY,
-                                    (u32)(actualTabX + (i32)tabWidth - closeButtonSize - closeButtonPadding), tabH) &&
-                       context->disabledDepth == 0;
+    if (!context->mouseInputConsumed) {
+        if (actualTabX >= 0) {
+            // Tab starts in visible area
+            isTabHovered = IsMouseInRect(context, (u32)actualTabX, tabY,
+                                        tabWidth - closeButtonSize - closeButtonPadding, tabH) &&
+                           context->disabledDepth == 0;
+        } else if (actualTabX + (i32)tabWidth > 0) {
+            // Tab is partially visible on the left
+            isTabHovered = IsMouseInRect(context, 0, tabY,
+                                        (u32)(actualTabX + (i32)tabWidth - closeButtonSize - closeButtonPadding), tabH) &&
+                           context->disabledDepth == 0;
+        }
     }
 
     // For close button hit testing, calculate actual screen position
+    // Also check if input hasn't been consumed
     i32 closeButtonX = actualTabX + (i32)tabWidth - (i32)closeButtonSize - (i32)closeButtonPadding;
     bool isCloseHovered = false;
-    if (closeButtonX >= 0 && closeButtonX + (i32)closeButtonSize <= (i32)(context->tabBar.x + context->tabBar.w)) {
+    if (!context->mouseInputConsumed &&
+        closeButtonX >= 0 && closeButtonX + (i32)closeButtonSize <= (i32)(context->tabBar.x + context->tabBar.w)) {
         isCloseHovered = IsMouseInRect(context, (u32)closeButtonX,
                                       tabY + (tabH - closeButtonSize) / 2,
                                       closeButtonSize, closeButtonSize) &&
@@ -808,8 +819,9 @@ u32 ImGuiEndTabBar(ImGui* context) {
         u32 moreButtonX = context->tabBar.x + context->tabBar.w - moreButtonSize;
         u32 moreButtonY = context->tabBar.y;
 
-        // Check if more button is hovered
-        bool isMoreHovered = IsMouseInRect(context, moreButtonX, moreButtonY,
+        // Check if more button is hovered (only if input hasn't been consumed)
+        bool isMoreHovered = !context->mouseInputConsumed &&
+                            IsMouseInRect(context, moreButtonX, moreButtonY,
                                           moreButtonSize, moreButtonSize);
 
         // Draw button background
@@ -863,6 +875,11 @@ void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeIte
     context->menuBar.itemCount = 0;
     context->menuBar.menuBarId = GenerateId(context);  // Generate ID for the menu bar
 
+    // If mouse is in menu bar area, mark input as consumed
+    if (IsMouseInRect(context, x, y, w, h)) {
+        context->mouseInputConsumed = true;
+    }
+
     // Draw menu bar background
     canvas_draw_rect(context->cnvs, x, y, w, h,
                     Colors::CONTROL_R, Colors::CONTROL_G, Colors::CONTROL_B);
@@ -894,6 +911,11 @@ void ImGuiMenuBarItem(ImGui* context, const char* itemName) {
     bool isHovered = IsMouseInRect(context, itemX, itemY, itemWidth, itemH) &&
                     context->disabledDepth == 0;
     bool isActive = ((i32)itemIndex == context->menuBar.openMenuItem);
+
+    // If hovered, mark input as consumed so lower elements don't process it
+    if (isHovered) {
+        context->mouseInputConsumed = true;
+    }
 
     // Handle click - update the open menu item
     if (isHovered && context->mouseLeftPressed) {
@@ -976,6 +998,11 @@ void ImGuiBeginMenu(ImGui* context, u32 x_pos, u32 y_pos) {
     context->popupMenu.currentY = context->popupMenu.y;
     context->popupMenu.itemHeight = 24;
 
+    // Mark the entire popup area as consuming input (using temporary height)
+    if (IsMouseInRect(context, x_pos, y_pos, 200, 200)) {
+        context->mouseInputConsumed = true;
+    }
+
     // Draw popup background with shadow effect
     // Shadow
     canvas_draw_rect(context->cnvs, context->popupMenu.x + 2, context->popupMenu.y + 2,
@@ -1008,9 +1035,15 @@ bool ImGuiMenuItem(ImGui* context, const char* itemName) {
     u32 itemW = context->popupMenu.width;
     u32 itemH = context->popupMenu.itemHeight;
 
-    // Check hover state
-    bool isHovered = IsMouseInRect(context, itemX, itemY, itemW, itemH) &&
+    // Check hover state (only if input hasn't been consumed)
+    bool isHovered = !context->mouseInputConsumed &&
+                    IsMouseInRect(context, itemX, itemY, itemW, itemH) &&
                     context->disabledDepth == 0;
+
+    // Mark input as consumed if menu item is handling it
+    if (IsMouseInRect(context, itemX, itemY, itemW, itemH)) {
+        context->mouseInputConsumed = true;
+    }
 
     // Draw hover background
     if (isHovered) {
