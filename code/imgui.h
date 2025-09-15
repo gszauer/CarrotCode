@@ -24,15 +24,15 @@ void ImGuiPushDisabled(ImGui* context);
 void ImGuiPopDisabled(ImGui* context);
 
 // Control functions
-bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text);
-bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* checked);
+bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text);
+bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* checked);
 f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged = nullptr);
 f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged = nullptr);
-bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* isOpen);
+bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* isOpen);
 
 // Tab bar functions
 void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u32 activeTab);
-bool ImGuiTab(ImGui* context, u32_string* text); // Returns true if the tab is open, false if it's closed
+bool ImGuiTab(ImGui* context, const char* text); // Returns true if the tab is open, false if it's closed
 u32 ImGuiEndTabBar(ImGui* context); // Returns the index of the active tab
 
 #endif

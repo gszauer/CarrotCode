@@ -177,7 +177,7 @@ void ImGuiPopDisabled(ImGui* context) {
     }
 }
 
-bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
+bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
     bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
@@ -226,7 +226,7 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
 
     // Draw text centered
     if (text) {
-        u32 textWidth = font_get_width(context->fnt, text, 0);
+        u32 textWidth = font_get_width_cstr(context->fnt, text);
         u32 textHeight = font_get_line_height(context->fnt);
         u32 textX = x + (w - textWidth) / 2;
         u32 textY = GetCenteredTextY(y, h, textHeight);
@@ -235,13 +235,13 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text) {
         u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
         u8 textB = isDisabled ? Colors::TEXT_DISABLED_B : Colors::TEXT_B;
 
-        canvas_draw_text(context->cnvs, context->fnt, text, textX, textY, textR, textG, textB);
+        canvas_draw_text_cstr(context->cnvs, context->fnt, text, textX, textY, textR, textG, textB);
     }
 
     return clicked;
 }
 
-bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* checked) {
+bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* checked) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
 
@@ -250,7 +250,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text,
     const u32 textPadding = 8;
 
     // Calculate total hit area (includes text if present)
-    u32 textWidth = text ? font_get_width(context->fnt, text, 0) : 0;
+    u32 textWidth = text ? font_get_width_cstr(context->fnt, text) : 0;
     u32 totalWidth = text ? (boxSize + textPadding + textWidth) : boxSize;
     u32 totalHeight = boxSize;
 
@@ -315,7 +315,7 @@ bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text,
         u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
         u8 textB = isDisabled ? Colors::TEXT_DISABLED_B : Colors::TEXT_B;
 
-        canvas_draw_text(context->cnvs, context->fnt, text, x + boxSize + textPadding, textY, textR, textG, textB);
+        canvas_draw_text_cstr(context->cnvs, context->fnt, text, x + boxSize + textPadding, textY, textR, textG, textB);
     }
 
     return clicked;
@@ -469,7 +469,7 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
     return value;
 }
 
-bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_string* text, bool* isOpen) {
+bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* isOpen) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;
     bool isHovered = IsMouseInRect(context, x, y, w, h) && !isDisabled;
@@ -547,7 +547,7 @@ bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32_stri
         u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
         u8 textB = isDisabled ? Colors::TEXT_DISABLED_B : Colors::TEXT_B;
 
-        canvas_draw_text(context->cnvs, context->fnt, text, textX, textY, textR, textG, textB);
+        canvas_draw_text_cstr(context->cnvs, context->fnt, text, textX, textY, textR, textG, textB);
     }
 
     return clicked;
@@ -629,14 +629,14 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
     }
 }
 
-bool ImGuiTab(ImGui* context, u32_string* text) {
+bool ImGuiTab(ImGui* context, const char* text) {
     if (!context->tabBar.inTabBar) return true;
 
     u32 tabIndex = context->tabBar.currentTabIndex++;
     bool isActiveTab = (tabIndex == context->tabBar.activeTab);
 
     // Calculate tab dimensions
-    u32 textWidth = text ? font_get_width(context->fnt, text, 0) : 40;
+    u32 textWidth = text ? font_get_width_cstr(context->fnt, text) : 40;
     const u32 padding = 10;
     const u32 closeButtonSize = 16;
     const u32 closeButtonPadding = 5;
@@ -711,7 +711,7 @@ bool ImGuiTab(ImGui* context, u32_string* text) {
     if (text) {
         u32 textHeight = font_get_line_height(context->fnt);
         u32 textY = GetCenteredTextY(tabY, tabH, textHeight);
-        canvas_draw_text(context->cnvs, context->fnt, text, tabX + padding, textY,
+        canvas_draw_text_cstr(context->cnvs, context->fnt, text, tabX + padding, textY,
                         Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
     }
 

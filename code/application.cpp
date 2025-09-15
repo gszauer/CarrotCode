@@ -1,5 +1,6 @@
- 
+
 #include "application.h"
+#include <cstdio>
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     UserData* user = new UserData();
@@ -14,7 +15,7 @@ UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     user->checkbox_state = false;
     user->h_scrollbar_value = 0.5f;
     user->v_scrollbar_value = 0.3f;
-    user->header_open = true;
+    user->header_open = false;
     // Initialize tab bar state
     user->active_tab = 0;
     for (int i = 0; i < 5; i++) {
@@ -49,71 +50,38 @@ canvas* Render(UserData* user) {
         canvas_draw_rect(user->cnvs, rect_x, rect_y, rect_width, rect_height, 60, 60, 80);
 
         // Draw "Drop file here to preview" text
-        u32 drop_text[] = {'D', 'r', 'o', 'p', ' ', 'f', 'i', 'l', 'e', ' ',
-                          'h', 'e', 'r', 'e', ' ', 't', 'o', ' ',
-                          'p', 'r', 'e', 'v', 'i', 'e', 'w', 0};
-        u32_string* drop_str = u32str_init(drop_text);
+        const char* drop_text = "Drop file here to preview";
 
         // Center the text
-        u32 text_width = font_get_width(user->fnt, drop_str, 0);
+        u32 text_width = font_get_width_cstr(user->fnt, drop_text);
         u32 text_x = (canvasWidth - text_width) / 2;
         u32 text_y = rect_y + (rect_height - font_get_line_height(user->fnt)) / 2;
 
-        canvas_draw_text(user->cnvs, user->fnt, drop_str, text_x, text_y, 200, 200, 220);
-        u32str_destroy(drop_str);
+        canvas_draw_text_cstr(user->cnvs, user->fnt, drop_text, text_x, text_y, 200, 200, 220);
 
         // Add ImGui quit button underneath
-        u32 quit_text[] = {'Q', 'u', 'i', 't', 0};
-        u32_string* quit_str = u32str_init(quit_text);
+        const char* quit_text = "Quit";
 
-        u32 button_width = 100;
         u32 button_height = 40;
-        u32 button_x = (canvasWidth - button_width) / 2;
-        u32 button_y = rect_y + rect_height + 20; // 20 pixels below the text rectangle
+        u32 button_x = 50;
+        u32 button_y = 50;
+        u32 current_y = 50;
 
-        if (ImGuiButton(user->imgui_context, button_x, button_y, button_width, button_height, quit_str)) {
-            //windowData.closeWindow = true;
-        }
-
-        u32str_destroy(quit_str);
-
-        // Showcase all other controls below the quit button
-        u32 current_y = button_y + button_height + 20;
-
-        // Collapsable header
-        u32 header_text[] = {'A', 'd', 'v', 'a', 'n', 'c', 'e', 'd', ' ', 'O', 'p', 't', 'i', 'o', 'n', 's', 0};
-        u32_string* header_str = u32str_init(header_text);
-        ImGuiCollapsableHeader(user->imgui_context, button_x - 50, current_y,
-                             300, 35, header_str, &user->header_open);
-        u32str_destroy(header_str);
-
-        if (user->header_open) {
-            current_y += 40;
-
-            // Tab bar demo
+        { // Tab bar demo
             u32 num_open_tabs = 0;
             for (int i = 0; i < 5; i++) {
                 if (user->tab_states[i]) num_open_tabs++;
             }
-
-            ImGuiBeginTabBar(user->imgui_context, button_x - 50, current_y, 400, 30, num_open_tabs, user->active_tab);
+            ImGuiBeginTabBar(user->imgui_context, button_x - 50, current_y, 400, 50, num_open_tabs, user->active_tab);
 
             u32 tab_index = 0;
             for (int i = 0; i < 5; i++) {
                 if (user->tab_states[i]) {
                     // Create tab text
-                    u32 tab_text[20];
-                    int len = 0;
-                    tab_text[len++] = 'T';
-                    tab_text[len++] = 'a';
-                    tab_text[len++] = 'b';
-                    tab_text[len++] = ' ';
-                    tab_text[len++] = '0' + i + 1;
-                    tab_text[len++] = 0;
+                    char tab_text[20];
+                    snprintf(tab_text, sizeof(tab_text), "Tab %d", i + 1);
 
-                    u32_string* tab_str = u32str_init(tab_text);
-                    bool is_open = ImGuiTab(user->imgui_context, tab_str);
-                    u32str_destroy(tab_str);
+                    bool is_open = ImGuiTab(user->imgui_context, tab_text);
 
                     if (!is_open) {
                         user->tab_states[i] = false;
@@ -133,24 +101,21 @@ canvas* Render(UserData* user) {
             }
 
             user->active_tab = ImGuiEndTabBar(user->imgui_context);
-            current_y += 80;
+        }
+        current_y += 80;
+
+        // Collapsable header
+        const char* header_text = "Tool Showcase";
+        ImGuiCollapsableHeader(user->imgui_context, button_x - 50, current_y, canvasWidth, 50, header_text, &user->header_open);
+
+        if (user->header_open) {
+            current_y += 60;
+
+           
+
+            
 
             // Show content based on active tab
-            u32 content_text[100];
-            int len = 0;
-            content_text[len++] = 'C';
-            content_text[len++] = 'o';
-            content_text[len++] = 'n';
-            content_text[len++] = 't';
-            content_text[len++] = 'e';
-            content_text[len++] = 'n';
-            content_text[len++] = 't';
-            content_text[len++] = ' ';
-            content_text[len++] = 'f';
-            content_text[len++] = 'o';
-            content_text[len++] = 'r';
-            content_text[len++] = ' ';
-
             // Find which actual tab number is active
             int actual_tab_num = 0;
             u32 current_tab_index = 0;
@@ -164,41 +129,28 @@ canvas* Render(UserData* user) {
                 }
             }
 
-            content_text[len++] = 'T';
-            content_text[len++] = 'a';
-            content_text[len++] = 'b';
-            content_text[len++] = ' ';
-            content_text[len++] = '0' + actual_tab_num;
-            content_text[len++] = 0;
-
-            u32_string* content_str = u32str_init(content_text);
-            canvas_draw_text(user->cnvs, user->fnt, content_str, button_x, current_y, 200, 200, 220);
-            u32str_destroy(content_str);
+            char content_text[100];
+            snprintf(content_text, sizeof(content_text), "Content for Tab %d", actual_tab_num);
+            canvas_draw_text_cstr(user->cnvs, user->fnt, content_text, button_x, current_y, 200, 200, 220);
             current_y += 40;
 
             // Checkbox
-            u32 checkbox_text[] = {'E', 'n', 'a', 'b', 'l', 'e', ' ', 'D', 'e', 'm', 'o', ' ', 'M', 'o', 'd', 'e', 0};
-            u32_string* checkbox_str = u32str_init(checkbox_text);
-            ImGuiCheckbox(user->imgui_context, button_x, current_y, 40, 40, checkbox_str, &user->checkbox_state);
-            u32str_destroy(checkbox_str);
+            const char* checkbox_text = "Enable Demo Mode";
+            ImGuiCheckbox(user->imgui_context, button_x, current_y, 40, 40, checkbox_text, &user->checkbox_state);
             current_y += 60;
 
             // Add another button inside the collapsable section
-            u32 inner_button_text[] = {'N', 'e', 's', 't', 'e', 'd', ' ', 'B', 'u', 't', 't', 'o', 'n', 0};
-            u32_string* inner_button_str = u32str_init(inner_button_text);
-            if (ImGuiButton(user->imgui_context, button_x, current_y, 250, 40, inner_button_str)) {
+            const char* inner_button_text = "Nested Button";
+            if (ImGuiButton(user->imgui_context, button_x, current_y, 250, 40, inner_button_text)) {
                 // Just for demo - toggle the checkbox when this button is clicked
                 user->checkbox_state = !user->checkbox_state;
             }
-            u32str_destroy(inner_button_str);
 
 
             current_y += 60;
             // Horizontal scrollbar
-            u32 h_scroll_label[] = {'H', 'o', 'r', 'i', 'z', 'o', 'n', 't', 'a', 'l', ':', ' ', 0};
-            u32_string* h_label_str = u32str_init(h_scroll_label);
-            canvas_draw_text(user->cnvs, user->fnt, h_label_str, button_x, current_y + 5, 180, 180, 200);
-            u32str_destroy(h_label_str);
+            const char* h_scroll_label = "Horizontal: ";
+            canvas_draw_text_cstr(user->cnvs, user->fnt, h_scroll_label, button_x, current_y + 5, 180, 180, 200);
             user->h_scrollbar_value = ImGuiHorizontalScrollBar(user->imgui_context,
                                                             button_x + 200, current_y, 200, 30,
                                                             user->h_scrollbar_value, 0.0f, 1.0f);
