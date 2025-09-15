@@ -48,9 +48,11 @@ struct ImGui {
     f32 scrollDelta;
     bool mouseLeftDown, mouseMiddleDown, mouseRightDown;
     bool mouseLeftPressed, mouseLeftReleased;
+    bool mouseMiddlePressed;
 
     // Previous frame mouse state
     bool prevMouseLeftDown;
+    bool prevMouseMiddleDown;
 
     // Keyboard state
     u32 lastChar;
@@ -153,6 +155,7 @@ void ImGuiBeginFrame(ImGui* context) {
     // Update mouse pressed/released states
     context->mouseLeftPressed = context->mouseLeftDown && !context->prevMouseLeftDown;
     context->mouseLeftReleased = !context->mouseLeftDown && context->prevMouseLeftDown;
+    context->mouseMiddlePressed = context->mouseMiddleDown && !context->prevMouseMiddleDown;
 
     // Clear the canvas
     canvas_clear(context->cnvs, Colors::BACKGROUND_R, Colors::BACKGROUND_G, Colors::BACKGROUND_B);
@@ -198,6 +201,7 @@ void ImGuiMouseInput(ImGui* context, u32 windowRelativeXPos, u32 windowRelativeY
 void ImGuiEndFrame(ImGui* context) {
     // Update previous mouse state
     context->prevMouseLeftDown = context->mouseLeftDown;
+    context->prevMouseMiddleDown = context->mouseMiddleDown;
 
     // Reset hot item if mouse is not pressed
     if (!context->mouseLeftDown) {
@@ -819,12 +823,15 @@ bool ImGuiTab(ImGui* context, const char* text) {
     // Draw the 'x' character
     canvas_draw_text_cstr(context->cnvs, context->fnt, "x", xPosX, xPosY, xR, xG, xB);
 
-    // Handle close button click
+    // Handle close button click or middle-click on tab
     bool tabClosed = false;
     if (isCloseHovered && context->mouseLeftPressed) {
         tabClosed = true;
         // Consume the click so it doesn't affect other tabs
         context->activeItem = closeId;
+    } else if (isTabHovered && context->mouseMiddlePressed) {
+        // Middle-click anywhere on the tab closes it
+        tabClosed = true;
     }
 
     // Update position for next tab
