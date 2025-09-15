@@ -62,6 +62,15 @@ canvas* Render(UserData* user) {
         // Add ImGui quit button underneath
         const char* quit_text = "Quit";
 
+
+        static i32 menuIndex = -1;
+        ImGuiBeginMenuBar(user->imgui_context, 0, 0, canvasWidth, 50, menuIndex);
+        ImGuiMenuBarItem(user->imgui_context, "FILE");
+        ImGuiMenuBarItem(user->imgui_context, "EDIT");
+        ImGuiMenuBarItem(user->imgui_context, "VIEW");
+        ImGuiMenuBarItem(user->imgui_context, "HELP");
+        menuIndex = ImGuiEndMenuBar(user->imgui_context); 
+        
         u32 button_height = 40;
         u32 button_x = 50;
         u32 button_y = 50;

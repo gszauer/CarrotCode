@@ -35,4 +35,15 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
 bool ImGuiTab(ImGui* context, const char* text); // Returns true if the tab is open, false if it's closed
 u32 ImGuiEndTabBar(ImGui* context); // Returns the index of the active tab
 
+
+// This is a file menu, IE: FILE, EDIT, CUT, etc.
+void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeItem);
+void ImGuiMenuBarItem(ImGui* context, const char* itemName);
+i32 ImGuiEndMenuBar(ImGui* context); // Returns the index of the currently open menu (or -1)
+
+// This is a popup menu. It would appear if you click on File, or if you right click
+void ImGuiBeginMenu(ImGui* context, u32 x, u32 y);
+bool ImGuiMenuItem(ImGui* context, const char* itemName); // returns true on click
+void ImGuiEndMenu(ImGui* context);
+
 #endif
