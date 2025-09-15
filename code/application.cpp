@@ -64,7 +64,7 @@ canvas* Render(UserData* user) {
 
 
         static i32 menuIndex = -1;
-        ImGuiBeginMenuBar(user->imgui_context, 0, 0, canvasWidth, 50, menuIndex);
+        ImGuiBeginMenuBar(user->imgui_context, 0, 0, 360, 50, menuIndex);
         ImGuiMenuBarItem(user->imgui_context, "FILE");
         ImGuiMenuBarItem(user->imgui_context, "EDIT");
         ImGuiMenuBarItem(user->imgui_context, "VIEW");
@@ -74,14 +74,14 @@ canvas* Render(UserData* user) {
         u32 button_height = 40;
         u32 button_x = 50;
         u32 button_y = 50;
-        u32 current_y = 50;
+        u32 current_y = 0;
 
-        { // Tab bar demo
+        if (canvasWidth > 360) { // only draw bar is possible
             u32 num_open_tabs = 0;
             for (int i = 0; i < 5; i++) {
                 if (user->tab_states[i]) num_open_tabs++;
             }
-            ImGuiBeginTabBar(user->imgui_context, 0, current_y, canvasWidth, 50, num_open_tabs, user->active_tab);
+            ImGuiBeginTabBar(user->imgui_context, 360, current_y, canvasWidth - 360, 50, num_open_tabs, user->active_tab);
 
             u32 tab_index = 0;
             for (int i = 0; i < 5; i++) {

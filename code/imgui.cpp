@@ -64,12 +64,12 @@ struct ImGui {
     // Menu bar state
     struct MenuBarState {
         u32 x, y, w, h;
-        i32 activeMenuItem;      // Index of currently active/hovered menu item (-1 = none)
         i32 openMenuItem;        // Index of currently open dropdown menu (-1 = none)
         u32 currentItemIndex;    // Current item being processed
         u32 currentItemX;        // Current X position for next menu item
         bool inMenuBar;
         u32 itemCount;
+        u32 menuBarId;           // ID to track if menu bar owns the active item
     } menuBar;
 
     // Popup menu state
@@ -714,6 +714,7 @@ bool ImGuiTab(ImGui* context, const char* text) {
     // Handle tab click
     if (isTabHovered && context->mouseLeftPressed) {
         context->tabBar.activeTab = tabIndex;
+        context->activeItem = tabId;  // Tab takes active control
     }
 
     // Draw tab background
@@ -855,12 +856,12 @@ void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeIte
     context->menuBar.y = y;
     context->menuBar.w = w;
     context->menuBar.h = h;
-    context->menuBar.activeMenuItem = activeItem;  // This is the currently open menu
-    context->menuBar.openMenuItem = activeItem;    // Start with the same as active
+    context->menuBar.openMenuItem = activeItem;    // Start with provided active item
     context->menuBar.currentItemIndex = 0;
     context->menuBar.currentItemX = x;
     context->menuBar.inMenuBar = true;
     context->menuBar.itemCount = 0;
+    context->menuBar.menuBarId = GenerateId(context);  // Generate ID for the menu bar
 
     // Draw menu bar background
     canvas_draw_rect(context->cnvs, x, y, w, h,
@@ -901,6 +902,7 @@ void ImGuiMenuBarItem(ImGui* context, const char* itemName) {
             context->menuBar.openMenuItem = -1;  // Close if already open
         } else {
             context->menuBar.openMenuItem = itemIndex;  // Open this menu
+            context->activeItem = context->menuBar.menuBarId;  // Menu bar takes active control
         }
     }
 
@@ -935,6 +937,21 @@ void ImGuiMenuBarItem(ImGui* context, const char* itemName) {
 
 i32 ImGuiEndMenuBar(ImGui* context) {
     if (!context->menuBar.inMenuBar) return -1;
+
+    // Check if another control has taken focus
+    if (context->activeItem != 0 && context->activeItem != context->menuBar.menuBarId) {
+        context->menuBar.openMenuItem = -1;
+    }
+
+    // Check if user clicked outside the menu bar (on nothing)
+    if (context->mouseLeftPressed && context->menuBar.openMenuItem >= 0) {
+        // Check if the click was outside the menu bar area
+        if (!IsMouseInRect(context, context->menuBar.x, context->menuBar.y,
+                          context->menuBar.w, context->menuBar.h)) {
+            context->menuBar.openMenuItem = -1;
+            context->activeItem = 0;  // Clear active item since nothing was clicked
+        }
+    }
 
     context->menuBar.inMenuBar = false;
     return context->menuBar.openMenuItem;
@@ -1039,6 +1056,14 @@ void ImGuiEndMenu(ImGui* context) {
                     context->popupMenu.y + totalHeight - 1,
                     context->popupMenu.width, 1,
                     Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+
+    // Check if another control has become active (user clicked on something else)
+    if (context->activeItem != 0 && context->activeItem != context->menuBar.menuBarId) {
+        // Another control took focus, close the menu
+        context->menuBar.openMenuItem = -1;
+        context->popupMenu.isOpen = false;
+        return;
+    }
 
     // Check if click is outside menu to close it
     if (context->mouseLeftPressed) {
