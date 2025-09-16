@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define _CARROT_IMGUI_MENU_WIDTH_ 220
 
 // Adobe Spectrum Dark color theme
 namespace Colors {
@@ -84,6 +83,7 @@ struct ImGui {
         bool hasOverflow;        // Whether tabs overflow the available space
         u32 desiredActiveTab;    // Tab to scroll to (for frame-delayed scrolling)
         u32 currentTabX;         // Current X position while drawing tabs
+        bool moreButtonClicked;  // Whether the "..." button was clicked this frame
     } tabBar;
 
     // Menu bar state
@@ -95,6 +95,7 @@ struct ImGui {
         bool inMenuBar;
         u32 itemCount;
         u32 menuBarId;           // ID to track if menu bar owns the active item
+        bool menuOpenedFromBar;  // Whether the current menu was opened from the menu bar
     } menuBar;
 
     // Popup menu state
@@ -657,6 +658,7 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
     context->tabBar.inTabBar = true;
     context->tabBar.hasOverflow = false;
     context->tabBar.currentTabX = 0;
+    context->tabBar.moreButtonClicked = false;
 
     // Store the desired active tab for frame-delayed scrolling
     // The actual scrolling will happen when we know the actual tab positions
@@ -924,7 +926,7 @@ u32 ImGuiEndTabBar(ImGui* context) {
 
         // Handle more button click (could open a dropdown menu in the future)
         if (isMoreHovered && context->mouseLeftPressed) {
-            // TODO: Implement dropdown menu for tab selection
+            context->tabBar.moreButtonClicked = true;
         }
     }
 
@@ -950,6 +952,10 @@ u32 ImGuiEndTabBar(ImGui* context) {
     return context->tabBar.activeTab;
 }
 
+bool ImGuiTabBarMoreButtonClicked(ImGui* context) {
+    return context->tabBar.moreButtonClicked;
+}
+
 // Menu bar implementation
 void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeItem) {
     // Initialize menu bar state
@@ -963,6 +969,10 @@ void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeIte
     context->menuBar.inMenuBar = true;
     context->menuBar.itemCount = 0;
     context->menuBar.menuBarId = GenerateId(context);  // Generate ID for the menu bar
+    // Keep the menuOpenedFromBar state unless we're closing all menus
+    if (activeItem < 0) {
+        context->menuBar.menuOpenedFromBar = false;
+    }
 
     // If mouse is in menu bar area, mark input as consumed
     if (IsMouseInRect(context, x, y, w, h)) {
@@ -1011,15 +1021,19 @@ void ImGuiMenuBarItem(ImGui* context, const char* itemName) {
         // Toggle open state
         if (context->menuBar.openMenuItem == (i32)itemIndex) {
             context->menuBar.openMenuItem = -1;  // Close if already open
+            context->menuBar.menuOpenedFromBar = false;
         } else {
             context->menuBar.openMenuItem = itemIndex;  // Open this menu
             context->activeItem = context->menuBar.menuBarId;  // Menu bar takes active control
+            context->menuBar.menuOpenedFromBar = true;  // Mark that this menu was opened from the bar
         }
     }
 
     // If a menu is already open and we hover over a different item, switch to it
+    // BUT ONLY if the menu was opened from the menu bar (not from tab menu, etc.)
     if (isHovered && context->menuBar.openMenuItem >= 0 &&
-        context->menuBar.openMenuItem != (i32)itemIndex) {
+        context->menuBar.openMenuItem != (i32)itemIndex &&
+        context->menuBar.menuOpenedFromBar) {
         context->menuBar.openMenuItem = itemIndex;
     }
 
@@ -1060,6 +1074,7 @@ i32 ImGuiEndMenuBar(ImGui* context) {
         if (!IsMouseInRect(context, context->menuBar.x, context->menuBar.y,
                           context->menuBar.w, context->menuBar.h)) {
             context->menuBar.openMenuItem = -1;
+            context->menuBar.menuOpenedFromBar = false;
             context->activeItem = 0;  // Clear active item since nothing was clicked
         }
     }
@@ -1071,10 +1086,12 @@ i32 ImGuiEndMenuBar(ImGui* context) {
 // New separated input/rendering API for popup menus
 
 // Mark the entire popup menu area as consuming input
-void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCount) {
+void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCount, u32 menuWidth) {
     // Fixed item dimensions
     const u32 itemHeight = 50;
-    const u32 menuWidth = _CARROT_IMGUI_MENU_WIDTH_;
+
+    // Store the width in context for subsequent menu calls
+    context->popupMenu.width = menuWidth;
 
     // Calculate total menu height
     u32 totalHeight = itemCount * itemHeight;
@@ -1089,7 +1106,7 @@ void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCo
 bool ImGuiProcessMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex) {
     // Fixed item dimensions
     const u32 itemHeight = 50;
-    const u32 menuWidth = _CARROT_IMGUI_MENU_WIDTH_;
+    const u32 menuWidth = context->popupMenu.width;  // Use the stored width
 
     // Calculate item position
     u32 itemY = menuY + itemIndex * itemHeight;
@@ -1111,7 +1128,7 @@ void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
     // Initialize render state for menu
     context->popupMenu.x = x;
     context->popupMenu.y = y;
-    context->popupMenu.width = _CARROT_IMGUI_MENU_WIDTH_;
+    // Width should have been set by ImGuiConsumePopupMenuInput
     context->popupMenu.currentY = y;
     context->popupMenu.itemHeight = 50;
 
@@ -1133,7 +1150,7 @@ void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
 void ImGuiRenderMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex, const char* text) {
     // Fixed item dimensions (must match ImGuiProcessMenuItem)
     const u32 itemHeight = 50;
-    const u32 menuWidth = _CARROT_IMGUI_MENU_WIDTH_;
+    const u32 menuWidth = context->popupMenu.width;  // Use the stored width
 
     // Calculate item position
     u32 itemY = menuY + itemIndex * itemHeight;

@@ -64,6 +64,37 @@ canvas* Render(UserData* user) {
 
         static i32 menuIndex = -1;
         i32 clickedItem = -1;  // Track which menu item was clicked this frame
+        i32 clickedTabItem = -1;  // Track which tab menu item was clicked
+
+        // Process tab menu first if it's open (menuIndex = 4 for tab menu)
+        u32 tabMenuW = 400;
+        u32 tabMenuX = canvasWidth - tabMenuW;  // Position to the left of the button
+        if (menuIndex == 4) {
+            // Position the menu near the "..." button
+            u32 tabMenuY = 50;  // Below the tab bar
+
+            // Count open tabs for menu size
+            u32 openTabCount = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) openTabCount++;
+            }
+
+            // Mark the menu area as consuming input
+            ImGuiConsumePopupMenuInput(user->imgui_context, tabMenuX, tabMenuY, openTabCount, tabMenuW);
+
+            // Check each tab item for clicks
+            u32 menuItemIndex = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) {
+                    if (ImGuiProcessMenuItem(user->imgui_context, tabMenuX, tabMenuY, menuItemIndex)) {
+                        clickedTabItem = menuItemIndex;
+                        user->active_tab = menuItemIndex;  // Switch to clicked tab
+                        menuIndex = -1;  // Close menu
+                    }
+                    menuItemIndex++;
+                }
+            }
+        }
 
         // Process popup menu input FIRST (before any other controls)
         u32 menuY = 50;
@@ -71,7 +102,7 @@ canvas* Render(UserData* user) {
         if (menuIndex == 0) {
             menuX = 0;
             // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, 0, menuY, 5);
+            ImGuiConsumePopupMenuInput(user->imgui_context, 0, menuY, 5, 220);
 
             // Check each item for clicks
             if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 0)) clickedItem = 0;
@@ -90,7 +121,7 @@ canvas* Render(UserData* user) {
         else if (menuIndex == 1) {
             menuX = 90;
             // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6);
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6, 220);
 
             // Check each item for clicks
             if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
@@ -110,7 +141,7 @@ canvas* Render(UserData* user) {
         else if (menuIndex == 2) {
             menuX = 175;
             // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 7);
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 7, 220);
 
             // Check each item for clicks
             if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
@@ -131,7 +162,7 @@ canvas* Render(UserData* user) {
         else if (menuIndex == 3) {
             menuX = 265;
             // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 3);
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 3, 220);
 
             // Check each item for clicks
             if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
@@ -153,8 +184,6 @@ canvas* Render(UserData* user) {
         ImGuiMenuBarItem(user->imgui_context, "VIEW");
         ImGuiMenuBarItem(user->imgui_context, "HELP");
         menuIndex = ImGuiEndMenuBar(user->imgui_context);
-
-       
         
         u32 button_height = 40;
         u32 button_x = 50;
@@ -195,6 +224,16 @@ canvas* Render(UserData* user) {
             }
 
             user->active_tab = ImGuiEndTabBar(user->imgui_context);
+
+            // Check if the "..." button was clicked
+            if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
+                // Toggle tab menu (menuIndex = 4)
+                if (menuIndex == 4) {
+                    menuIndex = -1;  // Close if already open
+                } else {
+                    menuIndex = 4;  // Open tab menu (closes any other open menu)
+                }
+            }
         }
         current_y += 80;
 
@@ -293,10 +332,35 @@ canvas* Render(UserData* user) {
         }
         else if (menuIndex == 3) {
             menuX = 265;
-            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 3); 
+            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 3);
             ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "About");
             ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Tutorial");
             ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "Github");
+            ImGuiRenderEndMenu(user->imgui_context);
+        }
+
+        // Render tab menu if it's open (menuIndex = 4)
+        else if (menuIndex == 4) {
+            u32 tabMenuY = 50;  // Below the tab bar
+
+            // Count open tabs for menu size
+            u32 openTabCount = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) openTabCount++;
+            }
+
+            ImGuiRenderBeginMenu(user->imgui_context, tabMenuX, tabMenuY, openTabCount);
+
+            u32 menuItemIndex = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) {
+                    char tab_text[20];
+                    snprintf(tab_text, sizeof(tab_text), "Tabotha hodor %d", i + 1);
+                    ImGuiRenderMenuItem(user->imgui_context, tabMenuX, tabMenuY, menuItemIndex, tab_text);
+                    menuItemIndex++;
+                }
+            }
+
             ImGuiRenderEndMenu(user->imgui_context);
         }
     }
