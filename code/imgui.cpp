@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define _CARROT_IMGUI_MENU_WIDTH_ 220
+
 // Adobe Spectrum Dark color theme
 namespace Colors {
     // Corresponds to Spectrum's "gray-75"
@@ -1072,7 +1074,7 @@ i32 ImGuiEndMenuBar(ImGui* context) {
 void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCount) {
     // Fixed item dimensions
     const u32 itemHeight = 50;
-    const u32 menuWidth = 200;
+    const u32 menuWidth = _CARROT_IMGUI_MENU_WIDTH_;
 
     // Calculate total menu height
     u32 totalHeight = itemCount * itemHeight;
@@ -1087,7 +1089,7 @@ void ImGuiConsumePopupMenuInput(ImGui* context, u32 menuX, u32 menuY, u32 itemCo
 bool ImGuiProcessMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex) {
     // Fixed item dimensions
     const u32 itemHeight = 50;
-    const u32 menuWidth = 200;
+    const u32 menuWidth = _CARROT_IMGUI_MENU_WIDTH_;
 
     // Calculate item position
     u32 itemY = menuY + itemIndex * itemHeight;
@@ -1109,7 +1111,7 @@ void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
     // Initialize render state for menu
     context->popupMenu.x = x;
     context->popupMenu.y = y;
-    context->popupMenu.width = 200;
+    context->popupMenu.width = _CARROT_IMGUI_MENU_WIDTH_;
     context->popupMenu.currentY = y;
     context->popupMenu.itemHeight = 50;
 
@@ -1131,7 +1133,7 @@ void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
 void ImGuiRenderMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex, const char* text) {
     // Fixed item dimensions (must match ImGuiProcessMenuItem)
     const u32 itemHeight = 50;
-    const u32 menuWidth = 200;
+    const u32 menuWidth = _CARROT_IMGUI_MENU_WIDTH_;
 
     // Calculate item position
     u32 itemY = menuY + itemIndex * itemHeight;

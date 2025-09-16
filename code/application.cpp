@@ -66,9 +66,10 @@ canvas* Render(UserData* user) {
         i32 clickedItem = -1;  // Track which menu item was clicked this frame
 
         // Process popup menu input FIRST (before any other controls)
+        u32 menuY = 50;
+        u32 menuX = 0;
         if (menuIndex == 0) {
-            u32 menuY = 50;
-
+            menuX = 0;
             // First, mark the entire menu area as consuming input
             ImGuiConsumePopupMenuInput(user->imgui_context, 0, menuY, 5);
 
@@ -78,6 +79,64 @@ canvas* Render(UserData* user) {
             if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 2)) clickedItem = 2;
             if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 3)) clickedItem = 3;
             if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 4)) clickedItem = 4;
+
+            // Close menu if any item was clicked
+            if (clickedItem >= 0) {
+                menuIndex = -1;
+                // Handle the clicked item here if needed
+                // For example: if (clickedItem == 4) { /* Exit */ }
+            }
+        }
+        else if (menuIndex == 1) {
+            menuX = 90;
+            // First, mark the entire menu area as consuming input
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6);
+
+            // Check each item for clicks
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
+
+            // Close menu if any item was clicked
+            if (clickedItem >= 0) {
+                menuIndex = -1;
+                // Handle the clicked item here if needed
+                // For example: if (clickedItem == 4) { /* Exit */ }
+            }
+        }
+        else if (menuIndex == 2) {
+            menuX = 175;
+            // First, mark the entire menu area as consuming input
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 7);
+
+            // Check each item for clicks
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 6)) clickedItem = 6;
+
+            // Close menu if any item was clicked
+            if (clickedItem >= 0) {
+                menuIndex = -1;
+                // Handle the clicked item here if needed
+                // For example: if (clickedItem == 4) { /* Exit */ }
+            }
+        }
+        else if (menuIndex == 3) {
+            menuX = 265;
+            // First, mark the entire menu area as consuming input
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 3);
+
+            // Check each item for clicks
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
 
             // Close menu if any item was clicked
             if (clickedItem >= 0) {
@@ -200,14 +259,44 @@ canvas* Render(UserData* user) {
 
         // Render popup menu LAST (on top of everything)
         if (menuIndex == 0) {
-            u32 menuY = 50;
-
-            ImGuiRenderBeginMenu(user->imgui_context, 0, menuY, 5);  // 5 menu items
+            menuX = 0;
+            ImGuiRenderBeginMenu(user->imgui_context, 0, menuY, 5);
             ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 0, "New");
             ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 1, "Open");
             ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 2, "Save");
             ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 3, "Close");
             ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 4, "Exit");
+            ImGuiRenderEndMenu(user->imgui_context);
+        }
+        else if (menuIndex == 1) {
+            menuX = 90;
+            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 6); 
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "Undo");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Redo");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "Cut");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 3, "Copy");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 4, "Paste");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 5, "Export");
+            ImGuiRenderEndMenu(user->imgui_context);
+        }
+        else if (menuIndex == 2) {
+            menuX = 175;
+            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 7); 
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "Zoom: 50%");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Zoom: 75%");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "> Zoom: 100%");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 3, "Zoom: 125%");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 4, "Zoom: 150%");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 5, "Syntax: On");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 6, "> Syntax: Off");
+            ImGuiRenderEndMenu(user->imgui_context);
+        }
+        else if (menuIndex == 3) {
+            menuX = 265;
+            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 3); 
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "About");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Tutorial");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "Github");
             ImGuiRenderEndMenu(user->imgui_context);
         }
     }
