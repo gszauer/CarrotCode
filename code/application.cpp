@@ -208,14 +208,40 @@ canvas* Render(UserData* user) {
 
                     if (!is_open) {
                         user->tab_states[i] = false;
-                        // If we closed the active tab, select another one
-                        if (tab_index == user->active_tab) {
-                            // Find the next open tab
-                            for (int j = 0; j < 5; j++) {
-                                if (user->tab_states[j]) {
-                                    user->active_tab = 0; // Will be recalculated
-                                    break;
+
+                        // Count remaining open tabs and adjust active tab if needed
+                        u32 remainingTabs = 0;
+                        u32 firstOpenTab = 0;
+                        bool foundFirst = false;
+
+                        for (int j = 0; j < 5; j++) {
+                            if (user->tab_states[j]) {
+                                remainingTabs++;
+                                if (!foundFirst) {
+                                    firstOpenTab = remainingTabs - 1; // Convert to 0-based index
+                                    foundFirst = true;
                                 }
+                            }
+                        }
+
+                        // If we closed the active tab or active tab is now invalid
+                        if (remainingTabs > 0) {
+                            if (tab_index == user->active_tab) {
+                                // We closed the active tab, pick a new one
+                                // Try to select the tab to the left, or the first available
+                                if (user->active_tab > 0) {
+                                    user->active_tab--;
+                                } else {
+                                    user->active_tab = 0;
+                                }
+                            } else if (tab_index < user->active_tab) {
+                                // We closed a tab before the active one, adjust index
+                                user->active_tab--;
+                            }
+
+                            // Make sure active tab is within valid range
+                            if (user->active_tab >= remainingTabs) {
+                                user->active_tab = remainingTabs - 1;
                             }
                         }
                     }
@@ -224,6 +250,15 @@ canvas* Render(UserData* user) {
             }
 
             user->active_tab = ImGuiEndTabBar(user->imgui_context);
+
+            // Validate that active tab is still within range of open tabs
+            u32 openTabCount = 0;
+            for (int i = 0; i < 5; i++) {
+                if (user->tab_states[i]) openTabCount++;
+            }
+            if (openTabCount > 0 && user->active_tab >= openTabCount) {
+                user->active_tab = openTabCount - 1;
+            }
 
             // Check if the "..." button was clicked
             if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
