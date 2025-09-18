@@ -240,6 +240,8 @@ canvas* Render(UserData* user) {
         if (user->view_count > 0) {
             ImGuiBeginTabBar(user->imgui_context, 360, 0, canvasWidth - 360, 50, user->view_count, user->active_view);
 
+            i32 tab_to_close = -1;  // Track which tab to close after the loop
+
             for (u32 i = 0; i < user->view_count; i++) {
             char tab_text[256];
             document_view* view = user->views[i];
@@ -268,33 +270,41 @@ canvas* Render(UserData* user) {
                 is_open = ImGuiTab(user->imgui_context, tab_text);
             }
 
-            // Handle tab close
-            if (!is_open) {
+            // Mark tab for closing (don't close during iteration)
+            if (!is_open && tab_to_close == -1) {
+                tab_to_close = i;
+            }
+        }
+
+            u32 selected_tab = ImGuiEndTabBar(user->imgui_context);
+
+            // Handle tab closing after the tab bar is complete
+            if (tab_to_close >= 0 && (u32)tab_to_close < user->view_count) {
                 // Destroy the document and its view
-                if (user->views[i]->target) {
-                    doc_destroy(user->views[i]->target);
+                if (user->views[tab_to_close]->target) {
+                    doc_destroy(user->views[tab_to_close]->target);
                 }
-                document_view_destroy(user->views[i]);
+                document_view_destroy(user->views[tab_to_close]);
 
                 // Shift remaining views
-                for (u32 j = i; j < user->view_count - 1; j++) {
+                for (u32 j = tab_to_close; j < user->view_count - 1; j++) {
                     user->views[j] = user->views[j + 1];
                 }
                 user->view_count--;
 
-                // Adjust active tab
+                // Adjust active tab to keep the same document selected
                 if (user->view_count > 0) {
-                    if (i == user->active_view) {
+                    if ((u32)tab_to_close == user->active_view) {
                         // We're closing the active tab
-                        if (i < user->view_count) {
+                        if ((u32)tab_to_close < user->view_count) {
                             // Select the tab that's now at this position (was next)
-                            user->active_view = i;
+                            user->active_view = tab_to_close;
                         } else {
                             // We closed the last tab, select the new last tab
                             user->active_view = user->view_count - 1;
                         }
-                    } else if (i < user->active_view) {
-                        // We closed a tab before the active one, shift active index
+                    } else if ((u32)tab_to_close < user->active_view) {
+                        // We closed a tab before the active one, shift active index to keep same doc
                         user->active_view--;
                     }
                     // If we closed a tab after the active one, no adjustment needed
@@ -302,22 +312,14 @@ canvas* Render(UserData* user) {
                     // No tabs left
                     user->active_view = 0;
                 }
-
-                // Need to break here because we modified the array we're iterating over
-                // The tab bar will be redrawn next frame with the correct tabs
-                break;
-            }
-        }
-
-            u32 selected_tab = ImGuiEndTabBar(user->imgui_context);
-
-            // Only update active_view if ImGuiEndTabBar returns a valid tab index
-            // It might return -1 or an invalid index after closing tabs
-            if (selected_tab < user->view_count) {
-                user->active_view = selected_tab;
-            } else if (user->view_count > 0 && user->active_view >= user->view_count) {
-                // Ensure we always have a valid active tab if tabs exist
-                user->active_view = user->view_count - 1;
+            } else {
+                // Only update active_view if we didn't close a tab and ImGuiEndTabBar returns a valid index
+                if (selected_tab < user->view_count) {
+                    user->active_view = selected_tab;
+                } else if (user->view_count > 0 && user->active_view >= user->view_count) {
+                    // Ensure we always have a valid active tab if tabs exist
+                    user->active_view = user->view_count - 1;
+                }
             }
 
             if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
