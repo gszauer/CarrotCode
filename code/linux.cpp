@@ -412,8 +412,18 @@ int main(int argc, char** argv) {
                         ImGuiMouseInput(user->imgui_context, mouseX, mouseY, normX, normY,
                                       scrollDir, leftDown, middleDown, rightDown);
 
+                        // Check if mouse is over tab bar area (hardcoded for now since we know the layout)
+                        bool overTabBar = false;
+                        if (user->view_count > 0 && mouseX >= 360 && mouseY <= 50) {
+                            overTabBar = true;
+                            // Don't forward scroll input if over tab bar
+                            if (scrollDir != 0) {
+                                scrollDir = 0;
+                            }
+                        }
+
                         // Forward mouse input to active document view if ImGui didn't consume it
-                        if (!ImGuiIsMouseConsumed(user->imgui_context)) {
+                        if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar) {
                             if (user->view_count > 0 && user->active_view < user->view_count) {
                                 document_view* view = user->views[user->active_view];
                                 if (view) {

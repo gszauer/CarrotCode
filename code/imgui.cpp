@@ -948,18 +948,18 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
             // Scrolling up - go to next tab (move right)
             if (activeTab < numTabs - 1) {
                 context->tabBar.activeTab = activeTab + 1;
-                //printf("Mouse wheel up: switched to tab %u\n", context->tabBar.activeTab);
             }
         } else if (context->scrollDelta < 0) {
             // Scrolling down - go to previous tab (move left)
             if (activeTab > 0) {
                 context->tabBar.activeTab = activeTab - 1;
-                //printf("Mouse wheel down: switched to tab %u\n", context->tabBar.activeTab);
             }
         }
 
-        // Consume the scroll event
+        // Always consume the scroll event when mouse is over tab bar,
+        // even if we can't scroll further
         context->scrollDelta = 0.0f;
+        context->mouseInputConsumed = true;
     }
 
     // Draw tab bar background
