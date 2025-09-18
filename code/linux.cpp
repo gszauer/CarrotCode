@@ -181,12 +181,12 @@ int main(int argc, char** argv) {
                     else if (event.xclient.message_type == XdndEnter) {
                         // DnD operation started
                         xdndSourceWindow = event.xclient.data.l[0];
-                        printf("DnD Enter received from window %lu\n", xdndSourceWindow);
+                        //printf("DnD Enter received from window %lu\n", xdndSourceWindow);
                     }
                     else if (event.xclient.message_type == XdndPosition) {
                         // Send XdndStatus
                         Window source = event.xclient.data.l[0];
-                        printf("DnD Position received from window %lu\n", source);
+                        //printf("DnD Position received from window %lu\n", source);
                         XEvent reply;
                         memset(&reply, 0, sizeof(reply));
                         reply.type = ClientMessage;
@@ -203,7 +203,7 @@ int main(int argc, char** argv) {
                     }
                     else if (event.xclient.message_type == XdndLeave) {
                         // Drag cancelled
-                        printf("DnD Leave received\n");
+                        //printf("DnD Leave received\n");
                         XDeleteProperty(windowData.display, windowData.window, XdndSelectionProperty);
                         xdndSourceWindow = None;
                     }
@@ -211,7 +211,7 @@ int main(int argc, char** argv) {
                         // Request the selection
                         xdndSourceWindow = event.xclient.data.l[0];
                         Time timestamp = (Time)event.xclient.data.l[2];
-                        printf("DnD Drop received from window %lu, timestamp %lu\n", xdndSourceWindow, timestamp);
+                        //printf("DnD Drop received from window %lu, timestamp %lu\n", xdndSourceWindow, timestamp);
                         
                         // Clear any existing property first
                         XDeleteProperty(windowData.display, windowData.window, XdndSelectionProperty);
@@ -226,9 +226,9 @@ int main(int argc, char** argv) {
                     break;
                     
                 case SelectionNotify:
-                    printf("SelectionNotify received\n");
-                    printf("Selection property: %ld, Expected: %ld\n", 
-                           event.xselection.property, XdndSelectionProperty);
+                    // printf("SelectionNotify received\n");
+                    // printf("Selection property: %ld, Expected: %ld\n",
+                    //        event.xselection.property, XdndSelectionProperty);
                     if (event.xselection.property == XdndSelectionProperty) {
                         Atom actual_type;
                         int actual_format;
@@ -240,112 +240,79 @@ int main(int argc, char** argv) {
                                              AnyPropertyType, &actual_type, &actual_format,
                                              &nitems, &bytes_after, &data) == Success) {
                             
-                            printf("Got property data, nitems=%lu, format=%d\n", nitems, actual_format);
+                            //printf("Got property data, nitems=%lu, format=%d\n", nitems, actual_format);
                             if (data && nitems > 0) {
                                 // Parse URI list (file://path format)
                                 std::string uri((char*)data, nitems);
-                                printf("Full URI data: '%s'\n", uri.c_str());
-                                // URI list may contain multiple files, take the first one
-                                size_t file_start = uri.find("file://");
-                                if (file_start != std::string::npos) {
-                                    std::string file_uri = uri.substr(file_start);
-                                    
-                                    // Find the end of this URI (newline or end of string)
-                                    size_t uri_end = file_uri.find_first_of("\r\n");
-                                    if (uri_end != std::string::npos) {
-                                        file_uri = file_uri.substr(0, uri_end);
+                                //printf("Full URI data: '%s'\n", uri.c_str());
+
+                                // Process all files in the drop (they're separated by newlines)
+                                size_t pos = 0;
+                                while (pos < uri.length()) {
+                                    // Find the next file:// URI
+                                    size_t file_start = uri.find("file://", pos);
+                                    if (file_start == std::string::npos) {
+                                        break;  // No more files
                                     }
-                                    
+
+                                    // Extract this URI up to the next newline or end of string
+                                    size_t uri_end = uri.find_first_of("\r\n", file_start);
+                                    std::string file_uri;
+                                    if (uri_end != std::string::npos) {
+                                        file_uri = uri.substr(file_start, uri_end - file_start);
+                                        pos = uri_end + 1;  // Move past this URI for next iteration
+                                    } else {
+                                        file_uri = uri.substr(file_start);
+                                        pos = uri.length();  // This was the last URI
+                                    }
+
                                     // Extract path from file:// URI
                                     if (file_uri.substr(0, 7) == "file://") {
                                         std::string filepath = file_uri.substr(7);
-                                        
+
                                         // URL decode the path (handle %20 for spaces, etc)
-                                        size_t pos = 0;
-                                        while ((pos = filepath.find('%', pos)) != std::string::npos) {
-                                            if (pos + 2 < filepath.length()) {
-                                                std::string hex = filepath.substr(pos + 1, 2);
+                                        size_t decode_pos = 0;
+                                        while ((decode_pos = filepath.find('%', decode_pos)) != std::string::npos) {
+                                            if (decode_pos + 2 < filepath.length()) {
+                                                std::string hex = filepath.substr(decode_pos + 1, 2);
                                                 char ch = (char)std::stoi(hex, nullptr, 16);
-                                                filepath.replace(pos, 3, 1, ch);
+                                                filepath.replace(decode_pos, 3, 1, ch);
                                             }
-                                            pos++;
+                                            decode_pos++;
                                         }
-                                        
-                                        printf("Decoded file path: %s\n", filepath.c_str());
-                                        
+
+                                        // printf("Processing file: %s\n", filepath.c_str());
+
                                         // Read file and create document
                                         std::ifstream file(filepath, std::ios::binary);
                                         if (file.is_open()) {
-                                        printf("File opened successfully\n");
-                                        std::string content((std::istreambuf_iterator<char>(file)),
-                                                          std::istreambuf_iterator<char>());
-                                        file.close();
-                                        printf("File size: %zu bytes\n", content.size());
-                                        
-                                        // Convert to u32_string
-                                        std::vector<u32> u32content;
-                                        for (char c : content) {
-                                            u32content.push_back((u32)(unsigned char)c);
-                                        }
-                                        u32content.push_back(0);
-                                        
-                                        u32_string* file_str = u32str_init(u32content.data());
-                                        
-                                        // Create document
-                                        if (user->doc) {
-                                            doc_destroy(user->doc);
-                                        }
-                                        user->doc = doc_from_str32(file_str, 100);
-                                        u32str_destroy(file_str);
-                                        printf("Document created with %u lines\n", doc_line_count(user->doc));
-                                        
-                                        // Check file extension to determine if syntax highlighting should be applied
-                                        bool should_highlight = false;
-                                        size_t dot_pos = filepath.rfind('.');
-                                        if (dot_pos != std::string::npos) {
-                                            std::string extension = filepath.substr(dot_pos);
-                                            // Convert to lowercase for case-insensitive comparison
-                                            for (char& c : extension) {
-                                                c = std::tolower(c);
+                                            // printf("File opened successfully\n");
+                                            std::string content((std::istreambuf_iterator<char>(file)),
+                                                              std::istreambuf_iterator<char>());
+                                            file.close();
+                                            // printf("File size: %zu bytes\n", content.size());
+
+                                            // Convert to u32_string
+                                            std::vector<u32> u32content;
+                                            for (char c : content) {
+                                                u32content.push_back((u32)(unsigned char)c);
                                             }
-                                            // Check if it's a supported extension
-                                            if (extension == ".c" || extension == ".h" || 
-                                                extension == ".cpp" || extension == ".inl" || 
-                                                extension == ".js" || extension == ".ts") {
-                                                should_highlight = true;
-                                            }
-                                        }
-                                        printf("Syntax highlighting: %s\n", should_highlight ? "enabled" : "disabled");
-                                        
-                                        // Create debug canvas
-                                        if (user->doc_canvas) {
-                                            canvas_destroy(user->doc_canvas);
-                                        }
-                                        user->doc_canvas = canvas_debug_doc(user->doc, user->fnt, should_highlight);
-                                        user->has_document = (user->doc_canvas != nullptr);
-                                        printf("Canvas created: %s\n", user->has_document ? "yes" : "no");
-                                        
-                                        // Resize window if canvas was created
-                                        if (user->doc_canvas) {
-                                            u32 canvas_width = canvas_get_width(user->doc_canvas);
-                                            u32 canvas_height = canvas_get_height(user->doc_canvas);
-                                            printf("Canvas dimensions: %ux%u\n", canvas_width, canvas_height);
-                                            
-                                            // Limit canvas size to reasonable maximum
-                                            const u32 MAX_WIDTH = 1920;
-                                            const u32 MAX_HEIGHT = 1080 * 5;
-                                            if (canvas_width > MAX_WIDTH) canvas_width = MAX_WIDTH;
-                                            if (canvas_height > MAX_HEIGHT) canvas_height = MAX_HEIGHT;
-                                            
-                                            XResizeWindow(windowData.display, windowData.window,
-                                                        canvas_width, canvas_height);
-                                            XFlush(windowData.display);
-                                        }
+                                            u32content.push_back(0);
+
+                                            u32_string* file_str = u32str_init(u32content.data());
+
+                                            // Create document and add it as a view
+                                            document* new_doc = doc_from_str32(file_str, 100);
+                                            u32str_destroy(file_str);
+                                            // printf("Document created with %u lines\n", doc_line_count(new_doc));
+
+                                            // Add document view
+                                            AddDocumentView(user, new_doc, filepath.c_str());
                                         } else {
                                             printf("Failed to open file: %s\n", filepath.c_str());
                                         }
                                     }  // end if (file_uri.substr(0, 7) == "file://")
-                                }  // end if (file_start != std::string::npos)
+                                }  // end while loop processing all files
                                 XFree(data);
                             }
                         }
@@ -363,7 +330,7 @@ int main(int argc, char** argv) {
                             reply.xclient.data.l[2] = XdndActionCopy;
                             XSendEvent(windowData.display, xdndSourceWindow, False, NoEventMask, &reply);
                             XFlush(windowData.display);
-                            printf("Sent XdndFinished to window %lu\n", xdndSourceWindow);
+                            //printf("Sent XdndFinished to window %lu\n", xdndSourceWindow);
                         }
                         
                         // Clear the property and source window

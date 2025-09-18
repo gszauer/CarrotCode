@@ -1,421 +1,449 @@
-
 #include "application.h"
+#include "strings.h"
 #include <cstdio>
+#include <cstring>
+#include <cstdlib>
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     UserData* user = new UserData();
     user->offset = 0.0f;
     user->cnvs = canvas_create(desiredWidth, desiredHeight);
-    user->fnt = font_create(nullptr, 0, 32); // Using bitmap font
-    user->doc = nullptr;
-    user->doc_canvas = nullptr;
-    user->has_document = false;
+    user->fnt = font_create(nullptr, 0, 32);
     user->imgui_context = ImGuiInit(user->cnvs, user->fnt);
-    // Initialize demo control states
-    user->checkbox_state = false;
-    user->h_scrollbar_value = 0.5f;
-    user->v_scrollbar_value = 0.3f;
-    user->header_open = false;
-    // Initialize tab bar state
-    user->active_tab = 0;
-    for (int i = 0; i < 5; i++) {
-        user->tab_states[i] = true;  // All tabs start open
+
+    // Initialize document views
+    user->view_count = 0;
+    user->active_view = 0;
+    for (int i = 0; i < MAX_DOCUMENT_VIEWS; i++) {
+        user->views[i] = nullptr;
     }
+
     return user;
 }
 
 void Update(UserData* userData, float deltaTime) {
+    // Update active document view
+    if (userData->view_count > 0 && userData->active_view < userData->view_count) {
+        document_view* view = userData->views[userData->active_view];
+        if (view) {
+            document_view_update(view, deltaTime);
+        }
+    }
+}
+
+void AddDocumentView(UserData* user, document* doc, const char* path) {
+    if (user->view_count >= MAX_DOCUMENT_VIEWS) return;
+
+    // Check if a document with this path is already open
+    if (path) {
+        for (u32 i = 0; i < user->view_count; i++) {
+            if (user->views[i] && user->views[i]->path) {
+                // Convert the stored path to char* for comparison
+                u32 stored_path_len = u32str_length(user->views[i]->path);
+                char* stored_path = (char*)malloc(stored_path_len + 1);
+                for (u32 j = 0; j < stored_path_len; j++) {
+                    stored_path[j] = (char)u32str_get(user->views[i]->path, j);
+                }
+                stored_path[stored_path_len] = '\0';
+
+                // Compare paths
+                if (strcmp(stored_path, path) == 0) {
+                    // Document already open, just switch to it
+                    // printf("File already open in tab %u, switching to it: %s (was on tab %u)\n", i, path, user->active_view);
+                    free(stored_path);
+                    user->active_view = i;
+
+
+                    // Clean up the document we were going to add since we don't need it
+                    if (doc) {
+                        doc_destroy(doc);
+                    }
+                    return;
+                }
+                free(stored_path);
+            }
+        }
+    }
+
+    // Convert path to u32_string if provided
+    u32_string* path_str = nullptr;
+    if (path) {
+        u32* path_u32 = (u32*)malloc((strlen(path) + 1) * sizeof(u32));
+        for (size_t i = 0; i <= strlen(path); i++) {
+            path_u32[i] = (u32)path[i];
+        }
+        path_str = u32str_init(path_u32);
+        free(path_u32);
+    }
+
+    // Create new document view
+    document_view* view = document_view_create(doc, path_str);
+    if (path_str) {
+        u32str_destroy(path_str);
+    }
+
+    // Set display area (will be updated in render)
+    view->displayAreaX = 0;
+    view->displayAreaY = 100; // Below menu and tabs
+    view->displayAreaW = canvas_get_width(user->cnvs);
+    view->displayAreaH = canvas_get_height(user->cnvs) - 100;
+
+    user->views[user->view_count] = view;
+    user->active_view = user->view_count;
+    user->view_count++;
+
 }
 
 canvas* Render(UserData* user) {
-    // Begin ImGui frame
     ImGuiBeginFrame(user->imgui_context);
-    canvas* result = 0;
 
-    if (user->has_document && user->doc_canvas) {
-        // Display the document canvas
-        result = user->doc_canvas;
+    canvas_clear(user->cnvs, 40, 40, 50);
+
+    u32 canvasWidth = canvas_get_width(user->cnvs);
+    u32 canvasHeight = canvas_get_height(user->cnvs);
+
+    static i32 menuIndex = -1;
+    i32 clickedItem = -1;
+    i32 clickedTabItem = -1;
+
+    // Process tab menu if open
+    u32 tabMenuW = 400;
+    u32 tabMenuX = canvasWidth - tabMenuW;
+    if (menuIndex == 4 && user->view_count > 0) {
+        u32 tabMenuY = 50;
+
+        // printf("Tab menu is open at %u,%u with %u items\n", tabMenuX, tabMenuY, user->view_count);
+        ImGuiConsumePopupMenuInput(user->imgui_context, tabMenuX, tabMenuY, user->view_count, tabMenuW);
+
+        for (u32 i = 0; i < user->view_count; i++) {
+            bool clicked = ImGuiProcessMenuItem(user->imgui_context, tabMenuX, tabMenuY, i);
+            if (clicked) {
+                // printf("Tab menu: selected tab %u (was %u)\n", i, user->active_view);
+                user->active_view = i;
+                menuIndex = -1;
+                break;
+            }
+        }
+    }
+
+    // Process main menu
+    u32 menuY = 50;
+    u32 menuX = 0;
+    if (menuIndex == 0) {
+        menuX = 0;
+        ImGuiConsumePopupMenuInput(user->imgui_context, 0, menuY, 5, 220);
+
+        if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 0)) clickedItem = 0;
+        if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 1)) clickedItem = 1;
+        if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 2)) clickedItem = 2;
+        if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 3)) {
+            // Close current tab
+            if (user->view_count > 0 && user->active_view < user->view_count) {
+                // Destroy the document and its view
+                if (user->views[user->active_view]->target) {
+                    doc_destroy(user->views[user->active_view]->target);
+                }
+                document_view_destroy(user->views[user->active_view]);
+
+                // Shift remaining views
+                for (u32 i = user->active_view; i < user->view_count - 1; i++) {
+                    user->views[i] = user->views[i + 1];
+                }
+                user->view_count--;
+
+                // Adjust active tab after closing
+                if (user->view_count > 0) {
+                    if (user->active_view >= user->view_count) {
+                        // We closed the last tab, select the new last tab
+                        user->active_view = user->view_count - 1;
+                    }
+                    // Otherwise keep the same index (which now points to the next tab)
+                } else {
+                    // No tabs left
+                    user->active_view = 0;
+                }
+            }
+            menuIndex = -1;
+        }
+        if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 4)) clickedItem = 4;
+
+        if (clickedItem >= 0) {
+            menuIndex = -1;
+        }
+    }
+    else if (menuIndex == 1) {
+        menuX = 90;
+        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6, 220);
+
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
+
+        if (clickedItem >= 0) {
+            menuIndex = -1;
+        }
+    }
+    else if (menuIndex == 2) {
+        menuX = 175;
+        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 7, 220);
+
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 6)) clickedItem = 6;
+
+        if (clickedItem >= 0) {
+            menuIndex = -1;
+        }
+    }
+    else if (menuIndex == 3) {
+        menuX = 265;
+        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 3, 220);
+
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
+
+        if (clickedItem >= 0) {
+            menuIndex = -1;
+        }
+    }
+
+    // Render menu bar
+    ImGuiBeginMenuBar(user->imgui_context, 0, 0, 360, 50, menuIndex);
+    ImGuiMenuBarItem(user->imgui_context, "FILE");
+    ImGuiMenuBarItem(user->imgui_context, "EDIT");
+    ImGuiMenuBarItem(user->imgui_context, "VIEW");
+    ImGuiMenuBarItem(user->imgui_context, "HELP");
+    menuIndex = ImGuiEndMenuBar(user->imgui_context);
+
+    // Render tab bar if we have documents
+    if (user->view_count > 0 && canvasWidth > 360) {
+        ImGuiBeginTabBar(user->imgui_context, 360, 0, canvasWidth - 360, 50, user->view_count, user->active_view);
+
+        for (u32 i = 0; i < user->view_count; i++) {
+            char tab_text[256];
+            document_view* view = user->views[i];
+
+            bool is_open = true;
+
+            if (view && view->path && u32str_length(view->path) > 0) {
+                // Convert path to char* for display
+                u32 path_len = u32str_length(view->path);
+                for (u32 j = 0; j < path_len && j < 255; j++) {
+                    tab_text[j] = (char)u32str_get(view->path, j);
+                }
+                tab_text[path_len < 255 ? path_len : 255] = '\0';
+
+                // Get just filename
+                char* filename = strrchr(tab_text, '/');
+                if (filename) {
+                    filename++;
+                } else {
+                    filename = tab_text;
+                }
+
+                is_open = ImGuiTab(user->imgui_context, filename);
+            } else {
+                snprintf(tab_text, sizeof(tab_text), "Untitled %d", i + 1);
+                is_open = ImGuiTab(user->imgui_context, tab_text);
+            }
+
+            // Handle tab close
+            if (!is_open) {
+                // Destroy the document and its view
+                if (user->views[i]->target) {
+                    doc_destroy(user->views[i]->target);
+                }
+                document_view_destroy(user->views[i]);
+
+                // Shift remaining views
+                for (u32 j = i; j < user->view_count - 1; j++) {
+                    user->views[j] = user->views[j + 1];
+                }
+                user->view_count--;
+
+                // Adjust active tab
+                if (user->view_count > 0) {
+                    if (i == user->active_view) {
+                        // We're closing the active tab
+                        if (i < user->view_count) {
+                            // Select the tab that's now at this position (was next)
+                            user->active_view = i;
+                        } else {
+                            // We closed the last tab, select the new last tab
+                            user->active_view = user->view_count - 1;
+                        }
+                    } else if (i < user->active_view) {
+                        // We closed a tab before the active one, shift active index
+                        user->active_view--;
+                    }
+                    // If we closed a tab after the active one, no adjustment needed
+                } else {
+                    // No tabs left
+                    user->active_view = 0;
+                }
+
+                // Need to break here because we modified the array we're iterating over
+                // The tab bar will be redrawn next frame with the correct tabs
+                break;
+            }
+        }
+
+        u32 selected_tab = ImGuiEndTabBar(user->imgui_context);
+
+        // Only update active_view if ImGuiEndTabBar returns a valid tab index
+        // It might return -1 or an invalid index after closing tabs
+        if (selected_tab < user->view_count) {
+            user->active_view = selected_tab;
+        } else if (user->view_count > 0 && user->active_view >= user->view_count) {
+            // Ensure we always have a valid active tab if tabs exist
+            user->active_view = user->view_count - 1;
+        }
+
+        if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
+            if (menuIndex == 4) {
+                menuIndex = -1;
+            } else {
+                menuIndex = 4;
+            }
+        }
+    }
+
+    // Render document view or drop zone
+    if (user->view_count > 0 && user->active_view < user->view_count) {
+        document_view* view = user->views[user->active_view];
+        if (view) {
+            // Update display area
+            view->displayAreaX = 0;
+            view->displayAreaY = 60;
+            view->displayAreaW = canvasWidth;
+            view->displayAreaH = canvasHeight - 60;
+
+            // Render the document view
+            document_view_render(view, user->cnvs, user->fnt, true);
+        }
     } else {
-        // Clear canvas to dark gray
-        canvas_clear(user->cnvs, 40, 40, 50);
-
-        u32 canvasWidth = canvas_get_width(user->cnvs);
-        u32 canvasHeight = canvas_get_height(user->cnvs);
-
-        // Draw a rectangle behind the text
+        // Show drop zone
         u32 rect_width = 400;
         u32 rect_height = 60;
         u32 rect_x = (canvasWidth - rect_width) / 2;
         u32 rect_y = (canvasHeight - rect_height) / 2;
         canvas_draw_rect(user->cnvs, rect_x, rect_y, rect_width, rect_height, 60, 60, 80);
 
-        // Draw "Drop file here to preview" text
-        const char* drop_text = "Drop file here to preview";
-
-        // Center the text
+        const char* drop_text = "Drop file here to open";
         u32 text_width = font_get_width_cstr(user->fnt, drop_text);
         u32 text_x = (canvasWidth - text_width) / 2;
         u32 text_y = rect_y + (rect_height - font_get_line_height(user->fnt)) / 2;
 
         canvas_draw_text_cstr(user->cnvs, user->fnt, drop_text, text_x, text_y, 200, 200, 220);
+    }
 
-        // Add ImGui quit button underneath
-        const char* quit_text = "Quit";
+    // Render popup menus on top
+    if (menuIndex == 0) {
+        ImGuiRenderBeginMenu(user->imgui_context, 0, menuY, 5);
+        ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 0, "New");
+        ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 1, "Open");
+        ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 2, "Save");
+        ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 3, "Close");
+        ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 4, "Exit");
+        ImGuiRenderEndMenu(user->imgui_context);
+    }
+    else if (menuIndex == 1) {
+        ImGuiRenderBeginMenu(user->imgui_context, 90, menuY, 6);
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 0, "Undo");
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 1, "Redo");
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 2, "Cut");
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 3, "Copy");
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 4, "Paste");
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 5, "Export");
+        ImGuiRenderEndMenu(user->imgui_context);
+    }
+    else if (menuIndex == 2) {
+        ImGuiRenderBeginMenu(user->imgui_context, 175, menuY, 7);
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 0, "Zoom: 50%");
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 1, "Zoom: 75%");
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 2, "> Zoom: 100%");
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 3, "Zoom: 125%");
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 4, "Zoom: 150%");
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "Syntax: On");
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "> Syntax: Off");
+        ImGuiRenderEndMenu(user->imgui_context);
+    }
+    else if (menuIndex == 3) {
+        ImGuiRenderBeginMenu(user->imgui_context, 265, menuY, 3);
+        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 0, "About");
+        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 1, "Tutorial");
+        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 2, "Github");
+        ImGuiRenderEndMenu(user->imgui_context);
+    }
+    else if (menuIndex == 4 && user->view_count > 0) {
+        u32 tabMenuY = 50;
 
-        static i32 menuIndex = -1;
-        i32 clickedItem = -1;  // Track which menu item was clicked this frame
-        i32 clickedTabItem = -1;  // Track which tab menu item was clicked
+        ImGuiRenderBeginMenu(user->imgui_context, tabMenuX, tabMenuY, user->view_count);
 
-        // Process tab menu first if it's open (menuIndex = 4 for tab menu)
-        u32 tabMenuW = 400;
-        u32 tabMenuX = canvasWidth - tabMenuW;  // Position to the left of the button
-        if (menuIndex == 4) {
-            // Position the menu near the "..." button
-            u32 tabMenuY = 50;  // Below the tab bar
+        for (u32 i = 0; i < user->view_count; i++) {
+            char tab_text[256];
+            document_view* view = user->views[i];
 
-            // Count open tabs for menu size
-            u32 openTabCount = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) openTabCount++;
-            }
-
-            // Mark the menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, tabMenuX, tabMenuY, openTabCount, tabMenuW);
-
-            // Check each tab item for clicks
-            u32 menuItemIndex = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) {
-                    if (ImGuiProcessMenuItem(user->imgui_context, tabMenuX, tabMenuY, menuItemIndex)) {
-                        clickedTabItem = menuItemIndex;
-                        user->active_tab = menuItemIndex;  // Switch to clicked tab
-                        menuIndex = -1;  // Close menu
-                    }
-                    menuItemIndex++;
+            if (view && view->path && u32str_length(view->path) > 0) {
+                u32 path_len = u32str_length(view->path);
+                for (u32 j = 0; j < path_len && j < 255; j++) {
+                    tab_text[j] = (char)u32str_get(view->path, j);
                 }
-            }
-        }
+                tab_text[path_len < 255 ? path_len : 255] = '\0';
 
-        // Process popup menu input FIRST (before any other controls)
-        u32 menuY = 50;
-        u32 menuX = 0;
-        if (menuIndex == 0) {
-            menuX = 0;
-            // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, 0, menuY, 5, 220);
-
-            // Check each item for clicks
-            if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 0)) clickedItem = 0;
-            if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 1)) clickedItem = 1;
-            if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 2)) clickedItem = 2;
-            if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 3)) clickedItem = 3;
-            if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 4)) clickedItem = 4;
-
-            // Close menu if any item was clicked
-            if (clickedItem >= 0) {
-                menuIndex = -1;
-                // Handle the clicked item here if needed
-                // For example: if (clickedItem == 4) { /* Exit */ }
-            }
-        }
-        else if (menuIndex == 1) {
-            menuX = 90;
-            // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6, 220);
-
-            // Check each item for clicks
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
-
-            // Close menu if any item was clicked
-            if (clickedItem >= 0) {
-                menuIndex = -1;
-                // Handle the clicked item here if needed
-                // For example: if (clickedItem == 4) { /* Exit */ }
-            }
-        }
-        else if (menuIndex == 2) {
-            menuX = 175;
-            // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 7, 220);
-
-            // Check each item for clicks
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 6)) clickedItem = 6;
-
-            // Close menu if any item was clicked
-            if (clickedItem >= 0) {
-                menuIndex = -1;
-                // Handle the clicked item here if needed
-                // For example: if (clickedItem == 4) { /* Exit */ }
-            }
-        }
-        else if (menuIndex == 3) {
-            menuX = 265;
-            // First, mark the entire menu area as consuming input
-            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 3, 220);
-
-            // Check each item for clicks
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
-            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
-
-            // Close menu if any item was clicked
-            if (clickedItem >= 0) {
-                menuIndex = -1;
-                // Handle the clicked item here if needed
-                // For example: if (clickedItem == 4) { /* Exit */ }
-            }
-        }
-
-        // Now render menu bar and other controls
-        ImGuiBeginMenuBar(user->imgui_context, 0, 0, 360, 50, menuIndex);
-        ImGuiMenuBarItem(user->imgui_context, "FILE");
-        ImGuiMenuBarItem(user->imgui_context, "EDIT");
-        ImGuiMenuBarItem(user->imgui_context, "VIEW");
-        ImGuiMenuBarItem(user->imgui_context, "HELP");
-        menuIndex = ImGuiEndMenuBar(user->imgui_context);
-        
-        u32 button_height = 40;
-        u32 button_x = 50;
-        u32 button_y = 50;
-        u32 current_y = 0;
-
-        if (canvasWidth > 360) { // only draw bar is possible
-            u32 num_open_tabs = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) num_open_tabs++;
-            }
-            ImGuiBeginTabBar(user->imgui_context, 360, current_y, canvasWidth - 360, 50, num_open_tabs, user->active_tab);
-
-            u32 tab_index = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) {
-                    // Create tab text
-                    char tab_text[20];
-                    snprintf(tab_text, sizeof(tab_text), "Tabotha hodor %d", i + 1);
-
-                    bool is_open = ImGuiTab(user->imgui_context, tab_text);
-
-                    if (!is_open) {
-                        user->tab_states[i] = false;
-
-                        // Count remaining open tabs and adjust active tab if needed
-                        u32 remainingTabs = 0;
-                        u32 firstOpenTab = 0;
-                        bool foundFirst = false;
-
-                        for (int j = 0; j < 5; j++) {
-                            if (user->tab_states[j]) {
-                                remainingTabs++;
-                                if (!foundFirst) {
-                                    firstOpenTab = remainingTabs - 1; // Convert to 0-based index
-                                    foundFirst = true;
-                                }
-                            }
-                        }
-
-                        // If we closed the active tab or active tab is now invalid
-                        if (remainingTabs > 0) {
-                            if (tab_index == user->active_tab) {
-                                // We closed the active tab, pick a new one
-                                // Try to select the tab to the left, or the first available
-                                if (user->active_tab > 0) {
-                                    user->active_tab--;
-                                } else {
-                                    user->active_tab = 0;
-                                }
-                            } else if (tab_index < user->active_tab) {
-                                // We closed a tab before the active one, adjust index
-                                user->active_tab--;
-                            }
-
-                            // Make sure active tab is within valid range
-                            if (user->active_tab >= remainingTabs) {
-                                user->active_tab = remainingTabs - 1;
-                            }
-                        }
-                    }
-                    tab_index++;
-                }
-            }
-
-            user->active_tab = ImGuiEndTabBar(user->imgui_context);
-
-            // Validate that active tab is still within range of open tabs
-            u32 openTabCount = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) openTabCount++;
-            }
-            if (openTabCount > 0 && user->active_tab >= openTabCount) {
-                user->active_tab = openTabCount - 1;
-            }
-
-            // Check if the "..." button was clicked
-            if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
-                // Toggle tab menu (menuIndex = 4)
-                if (menuIndex == 4) {
-                    menuIndex = -1;  // Close if already open
+                char* filename = strrchr(tab_text, '/');
+                if (filename) {
+                    filename++;
                 } else {
-                    menuIndex = 4;  // Open tab menu (closes any other open menu)
+                    filename = tab_text;
                 }
+                ImGuiRenderMenuItem(user->imgui_context, tabMenuX, tabMenuY, i, filename);
+            } else {
+                snprintf(tab_text, sizeof(tab_text), "Untitled %d", i + 1);
+                ImGuiRenderMenuItem(user->imgui_context, tabMenuX, tabMenuY, i, tab_text);
             }
         }
-        current_y += 80;
 
-        // Collapsable header
-        const char* header_text = "Tool Showcase";
-        ImGuiCollapsableHeader(user->imgui_context, button_x - 50, current_y, canvasWidth, 50, header_text, &user->header_open);
+        ImGuiRenderEndMenu(user->imgui_context);
+    }
 
-        if (user->header_open) {
-            current_y += 60;
+    ImGuiEndFrame(user->imgui_context);
 
-            // Show content based on active tab
-            // Find which actual tab number is active
-            int actual_tab_num = 0;
-            u32 current_tab_index = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) {
-                    if (current_tab_index == user->active_tab) {
-                        actual_tab_num = i + 1;
-                        break;
-                    }
-                    current_tab_index++;
-                }
-            }
-
-            char content_text[100];
-            snprintf(content_text, sizeof(content_text), "Content for Tab %d", actual_tab_num);
-            canvas_draw_text_cstr(user->cnvs, user->fnt, content_text, button_x, current_y, 200, 200, 220);
-            current_y += 40;
-
-            // Checkbox
-            const char* checkbox_text = "Enable Demo Mode";
-            ImGuiCheckbox(user->imgui_context, button_x, current_y, 40, 40, checkbox_text, &user->checkbox_state);
-            current_y += 60;
-
-            // Add another button inside the collapsable section
-            const char* inner_button_text = "Nested Button";
-            if (ImGuiButton(user->imgui_context, button_x, current_y, 250, 40, inner_button_text)) {
-                // Just for demo - toggle the checkbox when this button is clicked
-                user->checkbox_state = !user->checkbox_state;
-            }
-
-
-            current_y += 60;
-            // Horizontal scrollbar
-            const char* h_scroll_label = "Horizontal: ";
-            canvas_draw_text_cstr(user->cnvs, user->fnt, h_scroll_label, button_x, current_y + 5, 180, 180, 200);
-            user->h_scrollbar_value = ImGuiHorizontalScrollBar(user->imgui_context,
-                                                            button_x + 200, current_y, 200, 30,
-                                                            user->h_scrollbar_value, 0.0f, 1.0f);
-
-            // Vertical scrollbar (positioned to the right)
-            user->v_scrollbar_value = ImGuiVerticalScrollBar(user->imgui_context,
-                                                        button_x + 400, current_y + 30 - 150 - 30, 30, 150,
-                                                        user->v_scrollbar_value, 0.0f, 1.0f);
-            current_y += 40;
-        }
-
-        // Copy canvas pixels to window buffer
-        //u32* canvas_pixels = canvas_get_raw_pixels(user->cnvs);
-        //memcpy(windowData.pixels, canvas_pixels, windowData.width * windowData.height * sizeof(u32));
-        result = user->cnvs;
-
-        // Render popup menu LAST (on top of everything)
-        if (menuIndex == 0) {
-            menuX = 0;
-            ImGuiRenderBeginMenu(user->imgui_context, 0, menuY, 5);
-            ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 0, "New");
-            ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 1, "Open");
-            ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 2, "Save");
-            ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 3, "Close");
-            ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 4, "Exit");
-            ImGuiRenderEndMenu(user->imgui_context);
-        }
-        else if (menuIndex == 1) {
-            menuX = 90;
-            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 6); 
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "Undo");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Redo");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "Cut");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 3, "Copy");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 4, "Paste");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 5, "Export");
-            ImGuiRenderEndMenu(user->imgui_context);
-        }
-        else if (menuIndex == 2) {
-            menuX = 175;
-            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 7); 
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "Zoom: 50%");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Zoom: 75%");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "> Zoom: 100%");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 3, "Zoom: 125%");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 4, "Zoom: 150%");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 5, "Syntax: On");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 6, "> Syntax: Off");
-            ImGuiRenderEndMenu(user->imgui_context);
-        }
-        else if (menuIndex == 3) {
-            menuX = 265;
-            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, 3);
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "About");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Tutorial");
-            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "Github");
-            ImGuiRenderEndMenu(user->imgui_context);
-        }
-
-        // Render tab menu if it's open (menuIndex = 4)
-        else if (menuIndex == 4) {
-            u32 tabMenuY = 50;  // Below the tab bar
-
-            // Count open tabs for menu size
-            u32 openTabCount = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) openTabCount++;
-            }
-
-            ImGuiRenderBeginMenu(user->imgui_context, tabMenuX, tabMenuY, openTabCount);
-
-            u32 menuItemIndex = 0;
-            for (int i = 0; i < 5; i++) {
-                if (user->tab_states[i]) {
-                    char tab_text[20];
-                    snprintf(tab_text, sizeof(tab_text), "Tabotha hodor %d", i + 1);
-                    ImGuiRenderMenuItem(user->imgui_context, tabMenuX, tabMenuY, menuItemIndex, tab_text);
-                    menuItemIndex++;
-                }
-            }
-
-            ImGuiRenderEndMenu(user->imgui_context);
+    // Handle keyboard input for active document view
+    if (user->view_count > 0 && user->active_view < user->view_count) {
+        document_view* view = user->views[user->active_view];
+        if (view) {
+            // Forward keyboard input to the document view
+            // This would be connected to actual keyboard events from the platform layer
         }
     }
 
-    // End ImGui frame
-    ImGuiEndFrame(user->imgui_context);
-
-    return result;
+    return user->cnvs;
 }
 
 void Shutdown(void* userData) {
     UserData* user = (UserData*)userData;
+
+    // Clean up document views and their documents
+    for (u32 i = 0; i < user->view_count; i++) {
+        if (user->views[i]) {
+            if (user->views[i]->target) {
+                doc_destroy(user->views[i]->target);
+            }
+            document_view_destroy(user->views[i]);
+        }
+    }
+
     ImGuiShutdown(user->imgui_context);
     canvas_destroy(user->cnvs);
-    if (user->doc_canvas) {
-        canvas_destroy(user->doc_canvas);
-    }
-    if (user->doc) {
-        doc_destroy(user->doc);
-    }
     font_destroy(user->fnt);
     delete user;
 }

@@ -5,28 +5,26 @@
 #include "strings.h"
 #include "document.h"
 #include "imgui.h"
+#include "view.h"
+
+#define MAX_DOCUMENT_VIEWS 10
 
 struct UserData {
     float offset;
     canvas* cnvs;
     font* fnt;
-    document* doc;
-    canvas* doc_canvas;
-    bool has_document;
     ImGui* imgui_context;
-    // Demo control states
-    bool checkbox_state;
-    f32 h_scrollbar_value;
-    f32 v_scrollbar_value;
-    bool header_open;
-    // Tab bar demo state
-    u32 active_tab;
-    bool tab_states[5];  // Track which tabs are open
+
+    // Document views
+    document_view* views[MAX_DOCUMENT_VIEWS];
+    u32 view_count;
+    u32 active_view;
 };
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight);
 void Update(UserData* userData, float deltaTime);
 canvas* Render(UserData* userData); // Returns canvas to blit
 void Shutdown(void* userData);
+void AddDocumentView(UserData* user, document* doc, const char* path);
 
 #endif

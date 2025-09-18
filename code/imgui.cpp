@@ -3,6 +3,7 @@
 #include "strings.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 
 // Adobe Spectrum Dark color theme
@@ -81,9 +82,10 @@ struct ImGui {
         bool inTabBar;
         u32 scrollOffset;
         bool hasOverflow;        // Whether tabs overflow the available space
-        u32 desiredActiveTab;    // Tab to scroll to (for frame-delayed scrolling)
+        u32 desiredActiveTab;    // Tab to scroll to
         u32 currentTabX;         // Current X position while drawing tabs
         bool moreButtonClicked;  // Whether the "..." button was clicked this frame
+        u32 previousActiveTab;   // Track previous frame's active tab
     } tabBar;
 
     // Menu bar state
@@ -660,9 +662,31 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
     context->tabBar.currentTabX = 0;
     context->tabBar.moreButtonClicked = false;
 
-    // Store the desired active tab for frame-delayed scrolling
-    // The actual scrolling will happen when we know the actual tab positions
+    // Store the desired active tab for scrolling
     context->tabBar.desiredActiveTab = activeTab;
+
+    // Handle mouse wheel to change active tab
+    if (context->scrollDelta != 0.0f &&
+        context->mouseX >= x && context->mouseX <= x + w &&
+        context->mouseY >= y && context->mouseY <= y + h) {
+
+        if (context->scrollDelta > 0) {
+            // Scrolling up - go to next tab (move right)
+            if (activeTab < numTabs - 1) {
+                context->tabBar.activeTab = activeTab + 1;
+                //printf("Mouse wheel up: switched to tab %u\n", context->tabBar.activeTab);
+            }
+        } else if (context->scrollDelta < 0) {
+            // Scrolling down - go to previous tab (move left)
+            if (activeTab > 0) {
+                context->tabBar.activeTab = activeTab - 1;
+                //printf("Mouse wheel down: switched to tab %u\n", context->tabBar.activeTab);
+            }
+        }
+
+        // Consume the scroll event
+        context->scrollDelta = 0.0f;
+    }
 
     // Draw tab bar background
     canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
@@ -725,26 +749,44 @@ bool ImGuiTab(ImGui* context, const char* text) {
     // (tabEndX <= context->tabBar.x means the entire tab is to the left of visible area)
     bool skipRendering = (actualTabX >= (i32)visibleEndX) || (tabEndX <= (i32)context->tabBar.x);
 
+    // ALWAYS handle scrolling for the active tab, even if it's off-screen
+    if (isActiveTab && context->tabBar.desiredActiveTab == tabIndex) {
+        // currentTabX is the cumulative position of THIS tab (without scroll)
+        u32 tabStartPosition = context->tabBar.currentTabX;
+        u32 tabEndPosition = tabStartPosition + tabWidth;
+
+        // Determine the actual visible width for tabs
+        u32 visibleWidth = context->tabBar.w;
+
+        // If we have overflow, account for the more button
+        if (context->tabBar.hasOverflow || tabEndPosition > visibleWidth) {
+            visibleWidth = context->tabBar.w - context->tabBar.h;  // Reserve space for more button
+        }
+
+        // Check if the active tab is fully visible with the current scroll
+        i32 actualStart = (i32)tabStartPosition - (i32)context->tabBar.scrollOffset;
+        i32 actualEnd = actualStart + (i32)tabWidth;
+
+        // printf("Active tab %u: position %u-%u, visible area 0-%u, actual display %d-%d\n",
+        //        tabIndex, tabStartPosition, tabEndPosition, visibleWidth, actualStart, actualEnd);
+
+        // Adjust scroll to make the active tab fully visible
+        if (actualStart < 0) {
+            // Tab is off or partially off the left edge - scroll to show it at the left
+            context->tabBar.scrollOffset = tabStartPosition;
+            //printf("Tab %u is off left, scrolling to offset: %u\n", tabIndex, context->tabBar.scrollOffset);
+        } else if (actualEnd > (i32)visibleWidth) {
+            // Tab is off or partially off the right edge - scroll to show it fully
+            context->tabBar.scrollOffset = tabEndPosition - visibleWidth;
+            //printf("Tab %u is off right, scrolling to offset: %u\n", tabIndex, context->tabBar.scrollOffset);
+        }
+    }
+
+    // NOW check if we should skip rendering (after handling active tab scrolling)
     if (skipRendering) {
         // Update position for next tab even if not rendered
         context->tabBar.currentTabX += tabWidth;
         return true;
-    }
-
-    // Handle scrolling to active tab (frame-delayed)
-    if (isActiveTab && context->tabBar.desiredActiveTab == tabIndex) {
-        u32 visibleWidth = context->tabBar.w;
-        if (context->tabBar.hasOverflow) {
-            visibleWidth -= context->tabBar.h;  // Account for more button
-        }
-
-        // If active tab is not fully visible, adjust scroll offset for next frame
-        if (actualTabX < (i32)context->tabBar.x) {
-            context->tabBar.scrollOffset -= (context->tabBar.x - actualTabX);
-            if ((i32)context->tabBar.scrollOffset < 0) context->tabBar.scrollOffset = 0;
-        } else if (tabEndX > (i32)(context->tabBar.x + visibleWidth)) {
-            context->tabBar.scrollOffset += (tabEndX - (context->tabBar.x + visibleWidth));
-        }
     }
 
     // Generate unique IDs for tab and close button
@@ -885,6 +927,9 @@ bool ImGuiTab(ImGui* context, const char* text) {
 u32 ImGuiEndTabBar(ImGui* context) {
     if (!context->tabBar.inTabBar) return 0;
 
+    // Update previous active tab for next frame
+    context->tabBar.previousActiveTab = context->tabBar.activeTab;
+
     // Reset clip rectangle before drawing more button
     canvas_set_clip(context->cnvs, 0, 0, 0, 0);
 
@@ -930,19 +975,32 @@ u32 ImGuiEndTabBar(ImGui* context) {
         }
     }
 
-    // Handle scroll wheel to change active tab
-    if (IsMouseInRect(context, context->tabBar.x, context->tabBar.y,
-                      context->tabBar.w, context->tabBar.h)) {
-        if (context->scrollDelta > 0) {
-            // Scrolling up - decrease tab index (move left)
-            if (context->tabBar.activeTab > 0) {
-                context->tabBar.activeTab--;
+    // Calculate and clamp maximum scroll offset
+    if (context->tabBar.currentTabX > context->tabBar.w) {
+        u32 visibleWidth = context->tabBar.w;
+        if (context->tabBar.hasOverflow) {
+            visibleWidth -= context->tabBar.h;  // Account for more button
+        }
+
+        // Maximum scroll is total tab width minus visible area
+        if (context->tabBar.currentTabX > visibleWidth) {
+            u32 maxScroll = context->tabBar.currentTabX - visibleWidth;
+            if (context->tabBar.scrollOffset > maxScroll) {
+                //printf("Clamping scroll offset from %u to maximum: %u\n", context->tabBar.scrollOffset, maxScroll);
+                context->tabBar.scrollOffset = maxScroll;
             }
-        } else if (context->scrollDelta < 0) {
-            // Scrolling down - increase tab index (move right)
-            if (context->tabBar.activeTab < context->tabBar.numTabs - 1) {
-                context->tabBar.activeTab++;
+        } else {
+            // All tabs fit, no scrolling needed
+            if (context->tabBar.scrollOffset > 0) {
+                //printf("All tabs fit, resetting scroll offset from %u to 0\n", context->tabBar.scrollOffset);
+                context->tabBar.scrollOffset = 0;
             }
+        }
+    } else {
+        // All tabs fit in the bar width, no scrolling needed
+        if (context->tabBar.scrollOffset > 0) {
+            //printf("No overflow, resetting scroll offset from %u to 0\n", context->tabBar.scrollOffset);
+            context->tabBar.scrollOffset = 0;
         }
     }
 
@@ -955,6 +1013,7 @@ u32 ImGuiEndTabBar(ImGui* context) {
 bool ImGuiTabBarMoreButtonClicked(ImGui* context) {
     return context->tabBar.moreButtonClicked;
 }
+
 
 // Menu bar implementation
 void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeItem) {
@@ -1112,11 +1171,12 @@ bool ImGuiProcessMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex) {
     u32 itemY = menuY + itemIndex * itemHeight;
 
     // Check if mouse is over this item
-    bool isHovered = IsMouseInRect(context, menuX, itemY, menuWidth, itemHeight) &&
-                    context->disabledDepth == 0;
+    bool isHovered = IsMouseInRect(context, menuX, itemY, menuWidth, itemHeight);
+                    // Temporarily removed: && context->disabledDepth == 0;
 
-    // Check for click
-    if (isHovered && context->mouseLeftReleased) {
+    // Check for click - using pressed instead of released for now
+    if (isHovered && context->mouseLeftPressed) {
+        //printf("MenuItem %u clicked with mouseLeftPressed!\n", itemIndex);
         return true;  // Item was clicked
     }
 
