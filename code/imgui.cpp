@@ -1478,10 +1478,10 @@ void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
                     context->popupMenu.width, totalHeight,
                     Colors::SHADOW_R, Colors::SHADOW_G, Colors::SHADOW_B);
 
-    // Draw background
+    // Draw background - use lighter color (SPECTRUM_DARKEST_GRAY_200) to stand out from document
     canvas_draw_rect(context->cnvs, x, y,
                     context->popupMenu.width, totalHeight,
-                    Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
+                    0x39, 0x39, 0x39);  // SPECTRUM_DARKEST_GRAY_200 - lighter than document
 }
 
 // Render a single menu item

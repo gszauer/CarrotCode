@@ -200,6 +200,15 @@ canvas* Render(UserData* user) {
 
         if (clickedItem >= 0) {
             menuIndex = -1;
+
+            // Handle syntax highlighting toggle
+            if ((clickedItem == 5 || clickedItem == 6) && user->view_count > 0 && user->active_view < user->view_count) {
+                document_view* view = user->views[user->active_view];
+                if (view) {
+                    bool syntaxEnabled = (clickedItem == 5);  // 5 = "Syntax: On", 6 = "Syntax: Off"
+                    document_view_set_highlight_syntax(view, syntaxEnabled);
+                }
+            }
         }
     }
     else if (menuIndex == 3) {
@@ -377,8 +386,27 @@ canvas* Render(UserData* user) {
         ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 2, "> Zoom: 100%");
         ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 3, "Zoom: 125%");
         ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 4, "Zoom: 150%");
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "Syntax: On");
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "> Syntax: Off");
+
+        // Show syntax highlighting state based on current document
+        bool syntaxEnabled = false;
+        if (user->view_count > 0 && user->active_view < user->view_count) {
+            document_view* view = user->views[user->active_view];
+            if (view) {
+                syntaxEnabled = document_view_get_highlight_syntax(view);
+            }
+            // Show with > indicator based on current state
+            if (syntaxEnabled) {
+                ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "> Syntax: On");
+                ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "Syntax: Off");
+            } else {
+                ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "Syntax: On");
+                ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "> Syntax: Off");
+            }
+        } else {
+            // No document open - show without > indicator
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "Syntax: On");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "Syntax: Off");
+        }
         ImGuiRenderEndMenu(user->imgui_context);
     }
     else if (menuIndex == 3) {

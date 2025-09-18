@@ -616,6 +616,10 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                         marginSplit, view->displayAreaH,
                         0x27, 0x27, 0x27);  // Document background color (now darker)
 
+        // Set clip rect for line numbers to prevent overlap with menu bar
+        canvas_set_clip(cnvs, view->displayAreaX, view->displayAreaY,
+                       view->lineNumberWidth, view->displayAreaH);
+
         // Draw line numbers
         for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
             f32 yPos = view->displayAreaY + (lineIdx * lineHeight) - view->scrollY;
@@ -623,6 +627,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
             sprintf(lineNumStr, "%5u ", lineIdx + 1);  // 5 digits + space
             canvas_draw_text_cstr(cnvs, fnt, lineNumStr, view->displayAreaX + 5, (u32)yPos, 0x75, 0x75, 0x75);  // SPECTRUM_DARKEST_GRAY_500
         }
+
+        // Reset clip rect to full canvas before setting document content clip
+        canvas_set_clip(cnvs, 0, 0, canvas_get_width(cnvs), canvas_get_height(cnvs));
     }
 
     // Now set clip rect for content area only
