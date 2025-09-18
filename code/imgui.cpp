@@ -67,6 +67,10 @@ struct ImGui {
     u32 activeItem;
     u32 disabledDepth;
 
+    // Scrollbar drag offset tracking
+    i32 scrollbarMouseOffsetX;
+    i32 scrollbarMouseOffsetY;
+
     // ID generation
     u32 nextId;
 
@@ -579,12 +583,30 @@ f32 ImGuiHorizontalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 s
     // Calculate max scroll position
     f32 maxScroll = contentSize > viewSize ? contentSize - viewSize : 0;
 
+    // Calculate thumb size and position
+    u32 thumbWidth = (u32)((viewSize / contentSize) * w);
+    if (thumbWidth < 20) thumbWidth = 20;
+    if (thumbWidth > w) thumbWidth = w;
+    f32 t = maxScroll > 0 ? scrollPos / maxScroll : 0;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    u32 thumbX = x + (u32)(t * (w - thumbWidth));
+
     // Handle mouse interaction
     if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
             context->mouseInputConsumed = true;
+
+            // Check if clicking on thumb or track
+            if (context->mouseX >= thumbX && context->mouseX < thumbX + thumbWidth) {
+                // Clicked on thumb - store offset
+                context->scrollbarMouseOffsetX = (i32)context->mouseX - (i32)thumbX;
+            } else {
+                // Clicked on track - center thumb on mouse
+                context->scrollbarMouseOffsetX = thumbWidth / 2;
+            }
         }
     }
 
@@ -592,15 +614,15 @@ f32 ImGuiHorizontalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 s
     if (isActive && context->mouseLeftDown) {
         context->mouseInputConsumed = true;  // Consume mouse while dragging
         f32 oldValue = scrollPos;
-        // Calculate thumb size and position
+        // Calculate thumb size
         f32 thumbSize = (viewSize / contentSize) * w;
         if (thumbSize < 20) thumbSize = 20;  // Minimum thumb size
 
         // Calculate the available track space
         f32 trackSpace = w - thumbSize;
 
-        // Get mouse position relative to the track start
-        i32 relativeX = (i32)context->mouseX - (i32)x - (i32)(thumbSize / 2);
+        // Get mouse position relative to the track start, using stored offset
+        i32 relativeX = (i32)context->mouseX - (i32)x - context->scrollbarMouseOffsetX;
 
         // Calculate new scroll position
         if (trackSpace > 0) {
@@ -694,12 +716,30 @@ f32 ImGuiVerticalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scr
     // Calculate max scroll position
     f32 maxScroll = contentSize > viewSize ? contentSize - viewSize : 0;
 
+    // Calculate thumb size and position
+    u32 thumbHeight = (u32)((viewSize / contentSize) * h);
+    if (thumbHeight < 20) thumbHeight = 20;
+    if (thumbHeight > h) thumbHeight = h;
+    f32 t = maxScroll > 0 ? scrollPos / maxScroll : 0;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    u32 thumbY = y + (u32)(t * (h - thumbHeight));
+
     // Handle mouse interaction
     if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
         context->hotItem = id;
         if (context->mouseLeftPressed) {
             context->activeItem = id;
             context->mouseInputConsumed = true;
+
+            // Check if clicking on thumb or track
+            if (context->mouseY >= thumbY && context->mouseY < thumbY + thumbHeight) {
+                // Clicked on thumb - store offset
+                context->scrollbarMouseOffsetY = (i32)context->mouseY - (i32)thumbY;
+            } else {
+                // Clicked on track - center thumb on mouse
+                context->scrollbarMouseOffsetY = thumbHeight / 2;
+            }
         }
     }
 
@@ -707,15 +747,15 @@ f32 ImGuiVerticalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scr
     if (isActive && context->mouseLeftDown) {
         context->mouseInputConsumed = true;  // Consume mouse while dragging
         f32 oldValue = scrollPos;
-        // Calculate thumb size and position
+        // Calculate thumb size
         f32 thumbSize = (viewSize / contentSize) * h;
         if (thumbSize < 20) thumbSize = 20;  // Minimum thumb size
 
         // Calculate the available track space
         f32 trackSpace = h - thumbSize;
 
-        // Get mouse position relative to the track start
-        i32 relativeY = (i32)context->mouseY - (i32)y - (i32)(thumbSize / 2);
+        // Get mouse position relative to the track start, using stored offset
+        i32 relativeY = (i32)context->mouseY - (i32)y - context->scrollbarMouseOffsetY;
 
         // Calculate new scroll position
         if (trackSpace > 0) {
