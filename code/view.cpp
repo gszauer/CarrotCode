@@ -567,6 +567,11 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 
     view->showLineNumbers = showLineNumbers;
 
+    // Draw document background - SPECTRUM_DARKEST_GRAY_100 (one step lighter than menu/tab bars)
+    canvas_draw_rect(cnvs, view->displayAreaX, view->displayAreaY,
+                     view->displayAreaW, view->displayAreaH,
+                     0x2F, 0x2F, 0x2F);
+
     f32 viewWidth = view->displayAreaW;
     f32 viewHeight = view->displayAreaH;
     f32 contentStartX = view->displayAreaX;
@@ -594,13 +599,29 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         normalize_selection(view, &selStart, &selEnd);
     }
 
-    // Draw line numbers first (before setting clip rect)
+    // Draw line numbers area with different background (before setting clip rect)
     if (view->showLineNumbers) {
+        // Calculate the split point for the margin (half of one character width)
+        u32 charWidth = font_get_char_width(fnt, '0');
+        u32 marginSplit = charWidth / 2;
+
+        // Draw line number background - SPECTRUM_DARKEST_GRAY_75 (darker than document)
+        // Reduce width slightly to give some margin pixels to the document area
+        canvas_draw_rect(cnvs, view->displayAreaX, view->displayAreaY,
+                        view->lineNumberWidth - marginSplit, view->displayAreaH,
+                        0x27, 0x27, 0x27);  // Same as menu/tab bar for consistency
+
+        // Draw a thin strip of document background color in the margin area
+        canvas_draw_rect(cnvs, view->displayAreaX + view->lineNumberWidth - marginSplit, view->displayAreaY,
+                        marginSplit, view->displayAreaH,
+                        0x2F, 0x2F, 0x2F);  // Document background color
+
+        // Draw line numbers
         for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
             f32 yPos = view->displayAreaY + (lineIdx * lineHeight) - view->scrollY;
             char lineNumStr[16];
             sprintf(lineNumStr, "%5u ", lineIdx + 1);  // 5 digits + space
-            canvas_draw_text_cstr(cnvs, fnt, lineNumStr, view->displayAreaX + 5, (u32)yPos, 128, 128, 128);
+            canvas_draw_text_cstr(cnvs, fnt, lineNumStr, view->displayAreaX + 5, (u32)yPos, 0x75, 0x75, 0x75);  // SPECTRUM_DARKEST_GRAY_500
         }
     }
 
@@ -608,13 +629,13 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     canvas_set_clip(cnvs, (u32)contentStartX, view->displayAreaY,
                     (u32)viewWidth, (u32)viewHeight);
 
-    // Define colors for different token types (matching debug_renderer colors)
-    const u8 color_default[3] = {200, 200, 200};      // Light gray for default text
-    const u8 color_keyword[3] = {86, 156, 214};       // Blue for keywords
-    const u8 color_comment[3] = {87, 166, 74};        // Green for comments
-    const u8 color_preprocessor[3] = {155, 155, 155}; // Gray for preprocessor
-    const u8 color_whitespace[3] = {200, 200, 200};   // Same as default
-    const u8 color_literal[3] = {206, 145, 120};      // Light orange for literals
+    // Define colors for different token types using Adobe Spectrum Darkest Theme
+    const u8 color_default[3] = {0xDC, 0xDC, 0xDC};       // SPECTRUM_DARKEST_GRAY_800 - default text
+    const u8 color_keyword[3] = {0x37, 0x8E, 0xF0};       // SPECTRUM_DARKEST_BLUE_500 - keywords
+    const u8 color_comment[3] = {0x33, 0xAB, 0x84};       // SPECTRUM_DARKEST_GREEN_500 - comments
+    const u8 color_preprocessor[3] = {0xEC, 0x44, 0x91};  // SPECTRUM_DARKEST_MAGENTA_500 - preprocessor
+    const u8 color_whitespace[3] = {0xDC, 0xDC, 0xDC};    // Same as default
+    const u8 color_literal[3] = {0xF2, 0x94, 0x23};       // SPECTRUM_DARKEST_ORANGE_500 - literals
 
     for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
         f32 yPos = view->displayAreaY + (lineIdx * lineHeight) - view->scrollY;
@@ -652,7 +673,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                 if (selX2 > contentStartX + viewWidth) selX2 = contentStartX + (u32)viewWidth;
 
                 if (selX2 > selX1) {
-                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 64, 64, 128);
+                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 0x26, 0x80, 0xEB);  // SPECTRUM_DARKEST_BLUE_400 with low opacity effect
                 }
             }
         }
@@ -803,7 +824,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         if (view->cursor.row == lineIdx) {
             u32 cursorVisualCol = get_visual_column(line, view->cursor.column, view->tabWidth);
             u32 cursorX = (u32)(contentStartX + (cursorVisualCol * charWidth) - view->scrollX);
-            canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 255, 255, 255);
+            canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 0xFF, 0xFF, 0xFF);  // SPECTRUM_DARKEST_GRAY_900 - bright cursor
         }
     }
 

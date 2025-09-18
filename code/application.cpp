@@ -84,9 +84,9 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
 
     // Set display area (will be updated in render)
     view->displayAreaX = 0;
-    view->displayAreaY = 100; // Below menu and tabs
+    view->displayAreaY = 50; // Below menu and tabs (no gap)
     view->displayAreaW = canvas_get_width(user->cnvs);
-    view->displayAreaH = canvas_get_height(user->cnvs) - 100;
+    view->displayAreaH = canvas_get_height(user->cnvs) - 50;
 
     user->views[user->view_count] = view;
     user->active_view = user->view_count;
@@ -97,7 +97,7 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
 canvas* Render(UserData* user) {
     ImGuiBeginFrame(user->imgui_context);
 
-    canvas_clear(user->cnvs, 40, 40, 50);
+    canvas_clear(user->cnvs, 0x1E, 0x1E, 0x1E);  // SPECTRUM_DARKEST_GRAY_50 - Application background
 
     u32 canvasWidth = canvas_get_width(user->cnvs);
     u32 canvasHeight = canvas_get_height(user->cnvs);
@@ -223,11 +223,15 @@ canvas* Render(UserData* user) {
     ImGuiMenuBarItem(user->imgui_context, "HELP");
     menuIndex = ImGuiEndMenuBar(user->imgui_context);
 
-    // Render tab bar if we have documents
-    if (user->view_count > 0 && canvasWidth > 360) {
-        ImGuiBeginTabBar(user->imgui_context, 360, 0, canvasWidth - 360, 50, user->view_count, user->active_view);
+    // Always render tab bar area as part of the header (even with no tabs)
+    if (canvasWidth > 360) {
+        // Draw tab bar background to match menu bar
+        canvas_draw_rect(user->cnvs, 360, 0, canvasWidth - 360, 50, 0x27, 0x27, 0x27);  // SPECTRUM_DARKEST_GRAY_75
 
-        for (u32 i = 0; i < user->view_count; i++) {
+        if (user->view_count > 0) {
+            ImGuiBeginTabBar(user->imgui_context, 360, 0, canvasWidth - 360, 50, user->view_count, user->active_view);
+
+            for (u32 i = 0; i < user->view_count; i++) {
             char tab_text[256];
             document_view* view = user->views[i];
 
@@ -296,25 +300,26 @@ canvas* Render(UserData* user) {
             }
         }
 
-        u32 selected_tab = ImGuiEndTabBar(user->imgui_context);
+            u32 selected_tab = ImGuiEndTabBar(user->imgui_context);
 
-        // Only update active_view if ImGuiEndTabBar returns a valid tab index
-        // It might return -1 or an invalid index after closing tabs
-        if (selected_tab < user->view_count) {
-            user->active_view = selected_tab;
-        } else if (user->view_count > 0 && user->active_view >= user->view_count) {
-            // Ensure we always have a valid active tab if tabs exist
-            user->active_view = user->view_count - 1;
-        }
-
-        if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
-            if (menuIndex == 4) {
-                menuIndex = -1;
-            } else {
-                menuIndex = 4;
+            // Only update active_view if ImGuiEndTabBar returns a valid tab index
+            // It might return -1 or an invalid index after closing tabs
+            if (selected_tab < user->view_count) {
+                user->active_view = selected_tab;
+            } else if (user->view_count > 0 && user->active_view >= user->view_count) {
+                // Ensure we always have a valid active tab if tabs exist
+                user->active_view = user->view_count - 1;
             }
-        }
-    }
+
+            if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
+                if (menuIndex == 4) {
+                    menuIndex = -1;
+                } else {
+                    menuIndex = 4;
+                }
+            }
+        }  // End of if (user->view_count > 0)
+    }  // End of if (canvasWidth > 360)
 
     // Render document view or drop zone
     if (user->view_count > 0 && user->active_view < user->view_count) {
@@ -322,9 +327,9 @@ canvas* Render(UserData* user) {
         if (view) {
             // Update display area
             view->displayAreaX = 0;
-            view->displayAreaY = 60;
+            view->displayAreaY = 50;  // Directly below menu/tab bar (50px), no gap
             view->displayAreaW = canvasWidth;
-            view->displayAreaH = canvasHeight - 60;
+            view->displayAreaH = canvasHeight - 50;
 
             // Render the document view
             document_view_render(view, user->imgui_context, user->cnvs, user->fnt, true);

@@ -6,38 +6,42 @@
 #include <stdio.h>
 
 
-// Adobe Spectrum Dark color theme
+// Adobe Spectrum Darkest Theme Colors
 namespace Colors {
-    // Corresponds to Spectrum's "gray-75"
-    const u8 BACKGROUND_R = 31, BACKGROUND_G = 31, BACKGROUND_B = 31;
+    // Gray scale - using proper Spectrum Darkest values
+    // Application background (darkest)
+    const u8 BACKGROUND_R = 0x1E, BACKGROUND_G = 0x1E, BACKGROUND_B = 0x1E;  // SPECTRUM_DARKEST_GRAY_50
 
-    // Corresponds to Spectrum's "gray-100"
-    const u8 SURFACE_R = 39, SURFACE_G = 39, SURFACE_B = 39;
+    // Menu bar / Tab bar (one step lighter)
+    const u8 SURFACE_R = 0x27, SURFACE_G = 0x27, SURFACE_B = 0x27;  // SPECTRUM_DARKEST_GRAY_75
 
-    // Based on Spectrum's gray tones for component backgrounds/borders
-    const u8 CONTROL_R = 80, CONTROL_G = 80, CONTROL_B = 80;
-    const u8 CONTROL_HOVER_R = 92, CONTROL_HOVER_G = 92, CONTROL_HOVER_B = 92;
-    const u8 CONTROL_ACTIVE_R = 69, CONTROL_ACTIVE_G = 69, CONTROL_ACTIVE_B = 69;
+    // Document/Editor background (another step lighter)
+    const u8 DOCUMENT_R = 0x2F, DOCUMENT_G = 0x2F, DOCUMENT_B = 0x2F;  // SPECTRUM_DARKEST_GRAY_100
 
-    // Corresponds to Spectrum's primary Call To Action (CTA) blue
-    const u8 PRIMARY_R = 38, PRIMARY_G = 128, PRIMARY_B = 235;
-    const u8 PRIMARY_HOVER_R = 20, PRIMARY_HOVER_G = 115, PRIMARY_HOVER_B = 230;
-    const u8 PRIMARY_ACTIVE_R = 13, PRIMARY_ACTIVE_G = 102, PRIMARY_ACTIVE_B = 208;
+    // UI element colors
+    const u8 CONTROL_R = 0x39, CONTROL_G = 0x39, CONTROL_B = 0x39;  // SPECTRUM_DARKEST_GRAY_200
+    const u8 CONTROL_HOVER_R = 0x46, CONTROL_HOVER_G = 0x46, CONTROL_HOVER_B = 0x46;  // SPECTRUM_DARKEST_GRAY_300
+    const u8 CONTROL_ACTIVE_R = 0x5C, CONTROL_ACTIVE_G = 0x5C, CONTROL_ACTIVE_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
 
-    // Corresponds to Spectrum's "gray-900"
-    const u8 TEXT_R = 226, TEXT_G = 226, TEXT_B = 226;
+    // Primary blue for CTAs and selections
+    const u8 PRIMARY_R = 0x26, PRIMARY_G = 0x80, PRIMARY_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400
+    const u8 PRIMARY_HOVER_R = 0x37, PRIMARY_HOVER_G = 0x8E, PRIMARY_HOVER_B = 0xF0;  // SPECTRUM_DARKEST_BLUE_500
+    const u8 PRIMARY_ACTIVE_R = 0x4B, PRIMARY_ACTIVE_G = 0x9C, PRIMARY_ACTIVE_B = 0xF5;  // SPECTRUM_DARKEST_BLUE_600
 
-    // Corresponds to Spectrum's "gray-700"
-    const u8 TEXT_DISABLED_R = 155, TEXT_DISABLED_G = 155, TEXT_DISABLED_B = 155;
+    // Text colors
+    const u8 TEXT_R = 0xDC, TEXT_G = 0xDC, TEXT_B = 0xDC;  // SPECTRUM_DARKEST_GRAY_800
+    const u8 TEXT_BRIGHT_R = 0xFF, TEXT_BRIGHT_G = 0xFF, TEXT_BRIGHT_B = 0xFF;  // SPECTRUM_DARKEST_GRAY_900
+    const u8 TEXT_DISABLED_R = 0x75, TEXT_DISABLED_G = 0x75, TEXT_DISABLED_B = 0x75;  // SPECTRUM_DARKEST_GRAY_500
 
-    // Corresponds to Spectrum's "gray-400"
-    const u8 BORDER_R = 80, BORDER_G = 80, BORDER_B = 80;
+    // Border colors
+    const u8 BORDER_R = 0x5C, BORDER_G = 0x5C, BORDER_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
 
-    // The primary blue, used for checkmarks and other selected states
-    const u8 CHECK_R = 38, CHECK_G = 128, CHECK_B = 235;
+    // Selection and highlights
+    const u8 CHECK_R = 0x26, CHECK_G = 0x80, CHECK_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400
+    const u8 SELECTION_R = 0x26, SELECTION_G = 0x80, SELECTION_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400 with alpha
 
     // Shadow color for popup menus (darker than background)
-    const u8 SHADOW_R = 20, SHADOW_G = 20, SHADOW_B = 20;
+    const u8 SHADOW_R = 0x00, SHADOW_G = 0x00, SHADOW_B = 0x00;  // Pure black for shadows
 }
 
 struct ImGui {
