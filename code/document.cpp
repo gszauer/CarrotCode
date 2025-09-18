@@ -175,6 +175,7 @@ u32 doc_line_count(document* doc) {
 u32 doc_get_line_length(document* doc, u32 line_index) {
     if (!doc || line_index >= vec_docline_size(doc->lines)) return 0;
     document_line* line = vec_docline_get(doc->lines, line_index);
+    if (!line || !line->text) return 0;
     return u32str_length(line->text);
 }
 
@@ -456,11 +457,27 @@ void doc_append_line_str32(document* doc, u32_string* content) {
 }
 
 void doc_delete_line(document* doc, u32 line_index) {
-    if (!doc || line_index >= vec_docline_size(doc->lines)) return;
-    
+    printf("[doc_delete_line] Called with line_index=%u\n", line_index);
+    if (!doc || line_index >= vec_docline_size(doc->lines)) {
+        printf("[doc_delete_line] Early return: doc=%p, line_index=%u, vec_size=%u\n",
+               doc, line_index, doc ? vec_docline_size(doc->lines) : 0);
+        return;
+    }
+
+    printf("[doc_delete_line] Getting line at index %u\n", line_index);
     document_line* deleted_line = vec_docline_get(doc->lines, line_index);
+    if (!deleted_line || !deleted_line->text) {
+        // If line is invalid, just remove it from the vector
+        printf("[doc_delete_line] Line is invalid (deleted_line=%p, text=%p), removing from vector\n",
+               deleted_line, deleted_line ? deleted_line->text : nullptr);
+        vec_docline_remove(doc->lines, line_index);
+        return;
+    }
+
+    printf("[doc_delete_line] Creating copy of line text (length=%u)\n", u32str_length(deleted_line->text));
     u32_string* line_copy = u32str_substr(deleted_line->text, 0, u32str_length(deleted_line->text));
-    
+
+    printf("[doc_delete_line] Removing line from vector\n");
     vec_docline_remove(doc->lines, line_index);
     
     edit_action action;
@@ -471,7 +488,10 @@ void doc_delete_line(document* doc, u32 line_index) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = line_copy;
+
+    printf("[doc_delete_line] Adding undo action\n");
     add_undo_action(doc, action);
+    printf("[doc_delete_line] Complete. Document now has %u lines\n", vec_docline_size(doc->lines));
 }
 
 void doc_split_line(document* doc, u32 line, u32 col) {

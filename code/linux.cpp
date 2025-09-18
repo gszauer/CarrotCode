@@ -1,9 +1,18 @@
 #include "linux.h"
 #include "application.h"
+#include "platform.h"
+#include "strings.h"
 
 #define WINDOW_WIDTH 1600
 #define WINDOW_HEIGHT 1200
 #define WINDOW_TITLE "Code Viewer - Drop File to Preview"
+
+// External clipboard callback functions from application.cpp
+extern void clipboard_copy_callback(void* userData);
+extern void clipboard_paste_callback(u32_string* content, void* userData);
+
+// Global window data for platform_exit
+static WindowData* g_windowData = nullptr;
 
 long long GetTimeInMilliseconds() {
     struct timeval tv;
@@ -13,7 +22,8 @@ long long GetTimeInMilliseconds() {
 
 int main(int argc, char** argv) {
     WindowData windowData = {};
-    
+    g_windowData = &windowData;  // Set global pointer for platform_exit
+
     // Open connection to X server
     windowData.display = XOpenDisplay(NULL);
     if (windowData.display == NULL) {
@@ -368,15 +378,131 @@ int main(int argc, char** argv) {
                         bool ctrlDown = (event.xkey.state & ControlMask) != 0;
                         bool shiftDown = (event.xkey.state & ShiftMask) != 0;
 
-                        ImGuiKeyboardInput(user->imgui_context, characterCode, virtualKeyCode,
-                                         isKeyDown, altDown, ctrlDown, shiftDown);
+                        // Check for clipboard shortcuts before passing to ImGui/document
+                        bool handled = false;
+                        if (isKeyDown && ctrlDown && !user->waiting_for_clipboard) {
+                            if (!user->views.empty() && user->active_view < user->views.size()) {
+                                document_view* view = user->views[user->active_view];
+                                if (view) {
+                                    if (keysym == XK_x || keysym == XK_X) {  // Ctrl+X (Cut)
+                                        // Get selected text or whole line
+                                        u32_string* text_to_cut = document_view_get_selection(view);
+                                        bool has_selection = (text_to_cut && u32str_length(text_to_cut) > 0);
 
-                        // Also forward keyboard input to the active document view
-                        if (user->view_count > 0 && user->active_view < user->view_count) {
-                            document_view* view = user->views[user->active_view];
-                            if (view) {
-                                document_view_keyboard_input(view, characterCode, virtualKeyCode,
-                                                            isKeyDown, altDown, ctrlDown, shiftDown);
+                                        if (!has_selection && text_to_cut) {
+                                            u32str_destroy(text_to_cut);
+                                            text_to_cut = nullptr;
+                                        }
+
+                                        // If no selection, get the current line
+                                        if (!has_selection) {
+                                            document* doc = view->target;
+                                            u32 line_row = view->cursor.row;
+                                            // Make sure the line exists
+                                            if (line_row < doc_line_count(doc)) {
+                                                u32_string* line = doc_get_line(doc, line_row);
+                                                if (line) {
+                                                // Create a copy with newline appended
+                                                u32 line_len = u32str_length(line);
+                                                u32* line_data = (u32*)malloc((line_len + 2) * sizeof(u32));
+                                                for (u32 i = 0; i < line_len; i++) {
+                                                    line_data[i] = u32str_get(line, i);
+                                                }
+                                                line_data[line_len] = '\n';
+                                                line_data[line_len + 1] = 0;
+                                                text_to_cut = u32str_init(line_data);
+                                                free(line_data);
+                                                // DO NOT destroy line - it's owned by the document!
+                                                }
+                                            }
+                                        }
+
+                                        if (text_to_cut) {
+                                            // Copy to clipboard
+                                            user->waiting_for_clipboard = true;
+                                            platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
+
+                                            if (has_selection) {
+                                                // Delete the selected text
+                                                document_view_delete_selection(view);
+                                            } else {
+                                                // Defer the whole line deletion until after rendering
+                                                u32 current_line = view->cursor.row;
+
+                                                printf("[CTRL+X] Deferring deletion of line %u\n", current_line);
+
+                                                // Mark for deferred deletion
+                                                user->has_deferred_line_delete = true;
+                                                user->deferred_delete_view = user->active_view;
+                                                user->deferred_delete_line = current_line;
+                                            }
+
+                                            u32str_destroy(text_to_cut);
+                                        }
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_c || keysym == XK_C) {  // Ctrl+C (Copy)
+                                        // Get selected text or whole line
+                                        u32_string* text_to_copy = document_view_get_selection(view);
+                                        bool has_selection = (text_to_copy && u32str_length(text_to_copy) > 0);
+
+                                        if (!has_selection && text_to_copy) {
+                                            u32str_destroy(text_to_copy);
+                                            text_to_copy = nullptr;
+                                        }
+
+                                        // If no selection, get the current line
+                                        if (!has_selection) {
+                                            document* doc = view->target;
+                                            u32 line_row = view->cursor.row;
+                                            // Make sure the line exists
+                                            if (line_row < doc_line_count(doc)) {
+                                                u32_string* line = doc_get_line(doc, line_row);
+                                                if (line) {
+                                                // Create a copy with newline appended
+                                                u32 line_len = u32str_length(line);
+                                                u32* line_data = (u32*)malloc((line_len + 2) * sizeof(u32));
+                                                for (u32 i = 0; i < line_len; i++) {
+                                                    line_data[i] = u32str_get(line, i);
+                                                }
+                                                line_data[line_len] = '\n';
+                                                line_data[line_len + 1] = 0;
+                                                text_to_copy = u32str_init(line_data);
+                                                free(line_data);
+                                                // DO NOT destroy line - it's owned by the document!
+                                                }
+                                            }
+                                        }
+
+                                        if (text_to_copy) {
+                                            // Copy to clipboard
+                                            user->waiting_for_clipboard = true;
+                                            platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
+                                            u32str_destroy(text_to_copy);
+                                        }
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_v || keysym == XK_V) {  // Ctrl+V (Paste)
+                                        user->waiting_for_clipboard = true;
+                                        platform_clipboard_paste_text(clipboard_paste_callback, user);
+                                        handled = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Only forward input if not handled
+                        if (!handled) {
+                            ImGuiKeyboardInput(user->imgui_context, characterCode, virtualKeyCode,
+                                             isKeyDown, altDown, ctrlDown, shiftDown);
+
+                            // Also forward keyboard input to the active document view
+                            if (!user->views.empty() && user->active_view < user->views.size()) {
+                                document_view* view = user->views[user->active_view];
+                                if (view) {
+                                    document_view_keyboard_input(view, characterCode, virtualKeyCode,
+                                                                isKeyDown, altDown, ctrlDown, shiftDown);
+                                }
                             }
                         }
                     }
@@ -419,7 +545,7 @@ int main(int argc, char** argv) {
 
                         // Check if mouse is over tab bar area (hardcoded for now since we know the layout)
                         bool overTabBar = false;
-                        if (user->view_count > 0 && mouseX >= 360 && mouseY <= 50) {
+                        if (!user->views.empty() && mouseX >= 360 && mouseY <= 50) {
                             overTabBar = true;
                             // Don't forward scroll input if over tab bar
                             if (scrollDir != 0) {
@@ -429,7 +555,7 @@ int main(int argc, char** argv) {
 
                         // Forward mouse input to active document view if ImGui didn't consume it
                         if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar) {
-                            if (user->view_count > 0 && user->active_view < user->view_count) {
+                            if (!user->views.empty() && user->active_view < user->views.size()) {
                                 document_view* view = user->views[user->active_view];
                                 if (view) {
                                     if (event.type == ButtonPress || event.type == ButtonRelease) {
@@ -518,3 +644,147 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+// Platform clipboard implementation for Linux/X11
+// These are simplified synchronous implementations for now
+// A full async implementation would require handling X11 events in the main loop
+
+void platform_clipboard_copy_text(u32_string* content, platform_clipboard_copy_text_callback callback, void* userData) {
+    // For now, we'll implement a simplified version that works synchronously
+    // A proper async implementation would need to integrate with the X11 event loop
+
+    Display* display = XOpenDisplay(NULL);
+    if (!display) {
+        if (callback) callback(userData);
+        return;
+    }
+
+    Window window = DefaultRootWindow(display);
+    Atom clipboard = XInternAtom(display, "CLIPBOARD", False);
+    Atom utf8 = XInternAtom(display, "UTF8_STRING", False);
+    Atom targets = XInternAtom(display, "TARGETS", False);
+
+    if (content && u32str_length(content) > 0) {
+        // Convert u32_string to UTF-8
+        u32 len = u32str_length(content);
+        // Allocate buffer for UTF-8 (worst case is 4 bytes per character)
+        char* utf8_text = (char*)malloc(len * 4 + 1);
+        u32 utf8_len = 0;
+
+        for (u32 i = 0; i < len; i++) {
+            u32 ch = u32str_get(content, i);
+            if (ch < 0x80) {
+                utf8_text[utf8_len++] = (char)ch;
+            } else if (ch < 0x800) {
+                utf8_text[utf8_len++] = (char)(0xC0 | (ch >> 6));
+                utf8_text[utf8_len++] = (char)(0x80 | (ch & 0x3F));
+            } else if (ch < 0x10000) {
+                utf8_text[utf8_len++] = (char)(0xE0 | (ch >> 12));
+                utf8_text[utf8_len++] = (char)(0x80 | ((ch >> 6) & 0x3F));
+                utf8_text[utf8_len++] = (char)(0x80 | (ch & 0x3F));
+            } else {
+                utf8_text[utf8_len++] = (char)(0xF0 | (ch >> 18));
+                utf8_text[utf8_len++] = (char)(0x80 | ((ch >> 12) & 0x3F));
+                utf8_text[utf8_len++] = (char)(0x80 | ((ch >> 6) & 0x3F));
+                utf8_text[utf8_len++] = (char)(0x80 | (ch & 0x3F));
+            }
+        }
+        utf8_text[utf8_len] = '\0';
+
+        // Store in a property (simplified - proper implementation would handle selection requests)
+        XStoreBytes(display, utf8_text, utf8_len);
+
+        // Also try to set the clipboard selection
+        XSetSelectionOwner(display, clipboard, window, CurrentTime);
+        XSetSelectionOwner(display, XA_PRIMARY, window, CurrentTime);
+
+        free(utf8_text);
+    }
+
+    XCloseDisplay(display);
+
+    if (callback) callback(userData);
+}
+
+void platform_clipboard_paste_text(platform_clipboard_paste_text_callback callback, void* userData) {
+    Display* display = XOpenDisplay(NULL);
+    if (!display) {
+        if (callback) callback(nullptr, userData);
+        return;
+    }
+
+    // Try to get clipboard contents
+    int nbytes = 0;
+    char* data = XFetchBytes(display, &nbytes);
+
+    u32_string* result = nullptr;
+
+    if (data && nbytes > 0) {
+        // Convert UTF-8 to u32_string
+        // Count characters first
+        u32 char_count = 0;
+        for (int i = 0; i < nbytes; ) {
+            unsigned char c = data[i];
+            if (c < 0x80) {
+                char_count++;
+                i++;
+            } else if ((c & 0xE0) == 0xC0) {
+                char_count++;
+                i += 2;
+            } else if ((c & 0xF0) == 0xE0) {
+                char_count++;
+                i += 3;
+            } else if ((c & 0xF8) == 0xF0) {
+                char_count++;
+                i += 4;
+            } else {
+                i++; // Skip invalid byte
+            }
+        }
+
+        // Allocate u32 buffer
+        u32* buffer = (u32*)malloc((char_count + 1) * sizeof(u32));
+        u32 idx = 0;
+
+        // Convert UTF-8 to u32
+        for (int i = 0; i < nbytes && idx < char_count; ) {
+            unsigned char c = data[i];
+            if (c < 0x80) {
+                buffer[idx++] = c;
+                i++;
+            } else if ((c & 0xE0) == 0xC0 && i + 1 < nbytes) {
+                buffer[idx++] = ((c & 0x1F) << 6) | (data[i + 1] & 0x3F);
+                i += 2;
+            } else if ((c & 0xF0) == 0xE0 && i + 2 < nbytes) {
+                buffer[idx++] = ((c & 0x0F) << 12) | ((data[i + 1] & 0x3F) << 6) | (data[i + 2] & 0x3F);
+                i += 3;
+            } else if ((c & 0xF8) == 0xF0 && i + 3 < nbytes) {
+                buffer[idx++] = ((c & 0x07) << 18) | ((data[i + 1] & 0x3F) << 12) |
+                               ((data[i + 2] & 0x3F) << 6) | (data[i + 3] & 0x3F);
+                i += 4;
+            } else {
+                i++; // Skip invalid byte
+            }
+        }
+        buffer[idx] = 0;
+
+        result = u32str_init(buffer);
+        free(buffer);
+        XFree(data);
+    }
+
+    XCloseDisplay(display);
+
+    if (callback) callback(result, userData);
+
+    // Clean up the u32_string if it was created
+    if (result) {
+        u32str_destroy(result);
+    }
+}
+
+
+void platform_exit() {
+    if (g_windowData) {
+        g_windowData->closeWindow = true;
+    }
+}

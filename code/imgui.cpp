@@ -23,6 +23,11 @@ namespace Colors {
     const u8 CONTROL_HOVER_R = 0x46, CONTROL_HOVER_G = 0x46, CONTROL_HOVER_B = 0x46;  // SPECTRUM_DARKEST_GRAY_300
     const u8 CONTROL_ACTIVE_R = 0x5C, CONTROL_ACTIVE_G = 0x5C, CONTROL_ACTIVE_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
 
+    // Scrollbar handle colors - one shade lighter than CONTROL
+    const u8 SCROLLBAR_HANDLE_R = 0x46, SCROLLBAR_HANDLE_G = 0x46, SCROLLBAR_HANDLE_B = 0x46;  // SPECTRUM_DARKEST_GRAY_300
+    const u8 SCROLLBAR_HANDLE_HOVER_R = 0x5C, SCROLLBAR_HANDLE_HOVER_G = 0x5C, SCROLLBAR_HANDLE_HOVER_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
+    const u8 SCROLLBAR_HANDLE_ACTIVE_R = 0x75, SCROLLBAR_HANDLE_ACTIVE_G = 0x75, SCROLLBAR_HANDLE_ACTIVE_B = 0x75;  // SPECTRUM_DARKEST_GRAY_500
+
     // Primary blue for CTAs and selections
     const u8 PRIMARY_R = 0x26, PRIMARY_G = 0x80, PRIMARY_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400
     const u8 PRIMARY_HOVER_R = 0x37, PRIMARY_HOVER_G = 0x8E, PRIMARY_HOVER_B = 0xF0;  // SPECTRUM_DARKEST_BLUE_500
@@ -685,21 +690,21 @@ f32 ImGuiHorizontalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 s
         // Draw thumb
         u8 thumbR, thumbG, thumbB;
         if (isDisabled) {
-            thumbR = Colors::CONTROL_R;
-            thumbG = Colors::CONTROL_G;
-            thumbB = Colors::CONTROL_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_B;
         } else if (isActive) {
-            thumbR = Colors::PRIMARY_R;
-            thumbG = Colors::PRIMARY_G;
-            thumbB = Colors::PRIMARY_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_ACTIVE_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_ACTIVE_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_ACTIVE_B;
         } else if (isHovered) {
-            thumbR = Colors::CONTROL_HOVER_R;
-            thumbG = Colors::CONTROL_HOVER_G;
-            thumbB = Colors::CONTROL_HOVER_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_HOVER_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_HOVER_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_HOVER_B;
         } else {
-            thumbR = Colors::CONTROL_R;
-            thumbG = Colors::CONTROL_G;
-            thumbB = Colors::CONTROL_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_B;
         }
 
         canvas_draw_rect(context->cnvs, thumbX, y + 2, thumbWidth, h - 4, thumbR, thumbG, thumbB);
@@ -818,21 +823,21 @@ f32 ImGuiVerticalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scr
         // Draw thumb
         u8 thumbR, thumbG, thumbB;
         if (isDisabled) {
-            thumbR = Colors::CONTROL_R;
-            thumbG = Colors::CONTROL_G;
-            thumbB = Colors::CONTROL_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_B;
         } else if (isActive) {
-            thumbR = Colors::PRIMARY_R;
-            thumbG = Colors::PRIMARY_G;
-            thumbB = Colors::PRIMARY_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_ACTIVE_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_ACTIVE_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_ACTIVE_B;
         } else if (isHovered) {
-            thumbR = Colors::CONTROL_HOVER_R;
-            thumbG = Colors::CONTROL_HOVER_G;
-            thumbB = Colors::CONTROL_HOVER_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_HOVER_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_HOVER_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_HOVER_B;
         } else {
-            thumbR = Colors::CONTROL_R;
-            thumbG = Colors::CONTROL_G;
-            thumbB = Colors::CONTROL_B;
+            thumbR = Colors::SCROLLBAR_HANDLE_R;
+            thumbG = Colors::SCROLLBAR_HANDLE_G;
+            thumbB = Colors::SCROLLBAR_HANDLE_B;
         }
 
         canvas_draw_rect(context->cnvs, x + 2, thumbY, w - 4, thumbHeight, thumbR, thumbG, thumbB);
@@ -1509,9 +1514,19 @@ void ImGuiRenderMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex, co
         u32 textHeight = font_get_line_height(context->fnt);
         u32 textY = GetCenteredTextY(itemY, itemHeight, textHeight);
 
+        // Use dimmed color for disabled items (SPECTRUM_DARKEST_GRAY_500)
+        u8 textR = Colors::TEXT_R;
+        u8 textG = Colors::TEXT_G;
+        u8 textB = Colors::TEXT_B;
+        if (context->disabledDepth > 0) {
+            textR = 0x75;  // SPECTRUM_DARKEST_GRAY_500
+            textG = 0x75;
+            textB = 0x75;
+        }
+
         canvas_draw_text_cstr(context->cnvs, context->fnt, text,
                             menuX + padding, textY,
-                            Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
+                            textR, textG, textB);
     }
 
     // Track the bottom of the last item for border drawing

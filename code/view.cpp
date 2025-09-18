@@ -191,15 +191,30 @@ static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
 }
 
 static void clamp_cursor(document_view* view) {
+    printf("[clamp_cursor] Called with cursor at row=%u, column=%u\n",
+           view->cursor.row, view->cursor.column);
+
     u32 lineCount = doc_line_count(view->target);
+    printf("[clamp_cursor] Document has %u lines\n", lineCount);
+
     if (view->cursor.row >= lineCount) {
+        u32 old_row = view->cursor.row;
         view->cursor.row = lineCount > 0 ? lineCount - 1 : 0;
+        printf("[clamp_cursor] Clamped row from %u to %u\n", old_row, view->cursor.row);
     }
 
+    printf("[clamp_cursor] Getting line length for row %u\n", view->cursor.row);
     u32 lineLength = doc_get_line_length(view->target, view->cursor.row);
+    printf("[clamp_cursor] Line %u has length %u\n", view->cursor.row, lineLength);
+
     if (view->cursor.column > lineLength) {
+        u32 old_column = view->cursor.column;
         view->cursor.column = lineLength;
+        printf("[clamp_cursor] Clamped column from %u to %u\n", old_column, view->cursor.column);
     }
+
+    printf("[clamp_cursor] Complete. Cursor at row=%u, column=%u\n",
+           view->cursor.row, view->cursor.column);
 }
 
 static void normalize_selection(document_view* view, document_cursor* start, document_cursor* end) {
@@ -532,7 +547,7 @@ void document_view_update(document_view* view, f32 deltaTime) {
 
     for (u32 i = 0; i < lineCount; i++) {
         u32_string* line = doc_get_line(view->target, i);
-        if (line) {
+        if (line && u32str_length(line) > 0) {
             // Calculate visual width accounting for tabs
             u32 visualWidth = get_visual_column(line, u32str_length(line), view->tabWidth);
             f32 lineWidth = visualWidth * charWidth;
@@ -874,9 +889,13 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 }
 
 void document_view_set_cursor(document_view* view, u32 row, u32 column) {
+    printf("[document_view_set_cursor] Setting cursor to row=%u, column=%u\n", row, column);
     view->cursor.row = row;
     view->cursor.column = column;
+    printf("[document_view_set_cursor] Before clamp_cursor\n");
     clamp_cursor(view);
+    printf("[document_view_set_cursor] After clamp_cursor, cursor is now row=%u, column=%u\n",
+           view->cursor.row, view->cursor.column);
     view->hasSelection = false;
 }
 

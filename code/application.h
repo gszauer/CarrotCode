@@ -6,8 +6,7 @@
 #include "document.h"
 #include "imgui.h"
 #include "view.h"
-
-#define MAX_DOCUMENT_VIEWS 10
+#include <vector>
 
 struct UserData {
     float offset;
@@ -15,10 +14,17 @@ struct UserData {
     font* fnt;
     ImGui* imgui_context;
 
-    // Document views
-    document_view* views[MAX_DOCUMENT_VIEWS];
-    u32 view_count;
+    // Document views - dynamic allocation
+    std::vector<document_view*> views;
     u32 active_view;
+
+    // Clipboard operation state
+    bool waiting_for_clipboard;
+
+    // Deferred operations
+    bool has_deferred_line_delete;
+    u32 deferred_delete_view;
+    u32 deferred_delete_line;
 };
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight);
