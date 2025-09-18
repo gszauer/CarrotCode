@@ -343,7 +343,11 @@ int main(int argc, char** argv) {
                 case KeyRelease:
                     {
                         bool isKeyDown = (event.type == KeyPress);
-                        KeySym keysym = XLookupKeysym(&event.xkey, 0);
+
+                        // Use XLookupString to get the properly shifted character
+                        char buffer[32];
+                        KeySym keysym;
+                        int len = XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
 
                         // Exit on Escape key
                         if (isKeyDown && keysym == XK_Escape) {
@@ -354,9 +358,10 @@ int main(int argc, char** argv) {
                         u32 virtualKeyCode = (u32)keysym;
                         u32 characterCode = 0;
 
-                        // Convert some common keys to character codes
-                        if (isKeyDown && keysym >= 0x20 && keysym <= 0x7E) {
-                            characterCode = keysym;
+                        // Get the actual character with shift/caps lock applied
+                        if (isKeyDown && len > 0) {
+                            // XLookupString returns the properly shifted character
+                            characterCode = (unsigned char)buffer[0];
                         }
 
                         bool altDown = (event.xkey.state & Mod1Mask) != 0;

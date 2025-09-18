@@ -3,6 +3,8 @@
 #include "strings.h"
 #include "renderer.h"
 #include "imgui.h"
+#define CARROT_INCLUDE_SYNTAX_DEFS
+#include "syntax.h"
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -36,6 +38,68 @@ static const u32 TRIPLE_CLICK_TIME = 500;
 // Font metrics are now queried dynamically from the font object
 static const f32 SCROLLBAR_WIDTH = 30.0f;
 
+// Helper function to check if file path has a code file extension
+static bool has_code_extension(u32_string* path) {
+    if (!path) return false;
+
+    u32 len = u32str_length(path);
+    if (len < 3) return false;  // Too short to have an extension
+
+    // Find the last dot
+    u32 dot_pos = len;
+    for (u32 i = len; i > 0; i--) {
+        if (u32str_get(path, i - 1) == '.') {
+            dot_pos = i - 1;
+            break;
+        }
+        // Stop at path separator to avoid matching dots in directory names
+        if (u32str_get(path, i - 1) == '/' || u32str_get(path, i - 1) == '\\') {
+            break;
+        }
+    }
+
+    if (dot_pos >= len - 1) return false;  // No extension found
+
+    // Get the extension (everything after the last dot)
+    u32 ext_len = len - dot_pos - 1;
+
+    // Helper to convert to lowercase for comparison
+    auto to_lower = [](u32 ch) -> u32 {
+        if (ch >= 'A' && ch <= 'Z') return ch + ('a' - 'A');
+        return ch;
+    };
+
+    // Check for known code file extensions (case-insensitive)
+    // .c or .C
+    if (ext_len == 1 && to_lower(u32str_get(path, dot_pos + 1)) == 'c') return true;
+
+    // .h or .H
+    if (ext_len == 1 && to_lower(u32str_get(path, dot_pos + 1)) == 'h') return true;
+
+    // .cpp or .CPP or .Cpp etc.
+    if (ext_len == 3 &&
+        to_lower(u32str_get(path, dot_pos + 1)) == 'c' &&
+        to_lower(u32str_get(path, dot_pos + 2)) == 'p' &&
+        to_lower(u32str_get(path, dot_pos + 3)) == 'p') return true;
+
+    // .cc or .CC or .Cc etc.
+    if (ext_len == 2 &&
+        to_lower(u32str_get(path, dot_pos + 1)) == 'c' &&
+        to_lower(u32str_get(path, dot_pos + 2)) == 'c') return true;
+
+    // .js or .JS or .Js etc.
+    if (ext_len == 2 &&
+        to_lower(u32str_get(path, dot_pos + 1)) == 'j' &&
+        to_lower(u32str_get(path, dot_pos + 2)) == 's') return true;
+
+    // .cs or .CS or .Cs etc.
+    if (ext_len == 2 &&
+        to_lower(u32str_get(path, dot_pos + 1)) == 'c' &&
+        to_lower(u32str_get(path, dot_pos + 2)) == 's') return true;
+
+    return false;
+}
+
 document_view* document_view_create(document* doc, font* fnt, u32_string* path) {
     document_view* view = (document_view*)allocate_memory(sizeof(document_view));
 
@@ -60,7 +124,7 @@ document_view* document_view_create(document* doc, font* fnt, u32_string* path) 
     view->hasSelection = false;
 
     view->showLineNumbers = true;
-    view->highlightSyntax = false;  // Default to no syntax highlighting
+    view->highlightSyntax = has_code_extension(path);  // Enable for code files
     // Calculate line number width based on font metrics (space for 5 digits + padding)
     view->lineNumberWidth = font_get_char_width(fnt, '0') * 6 + 10;  // 5 digits + space + padding
     view->tabWidth = 4;
@@ -525,7 +589,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     u32 lineCount = doc_line_count(view->target);
     lastVisibleLine = std::min(lastVisibleLine, lineCount);
 
-    document_cursor selStart, selEnd;
+    document_cursor selStart = {0, 0}, selEnd = {0, 0};
     if (view->hasSelection) {
         normalize_selection(view, &selStart, &selEnd);
     }
@@ -544,6 +608,14 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     canvas_set_clip(cnvs, (u32)contentStartX, view->displayAreaY,
                     (u32)viewWidth, (u32)viewHeight);
 
+    // Define colors for different token types (matching debug_renderer colors)
+    const u8 color_default[3] = {200, 200, 200};      // Light gray for default text
+    const u8 color_keyword[3] = {86, 156, 214};       // Blue for keywords
+    const u8 color_comment[3] = {87, 166, 74};        // Green for comments
+    const u8 color_preprocessor[3] = {155, 155, 155}; // Gray for preprocessor
+    const u8 color_whitespace[3] = {200, 200, 200};   // Same as default
+    const u8 color_literal[3] = {206, 145, 120};      // Light orange for literals
+
     for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
         f32 yPos = view->displayAreaY + (lineIdx * lineHeight) - view->scrollY;
 
@@ -551,10 +623,6 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         if (!line) continue;
 
         u32 lineLength = u32str_length(line);
-
-        u32 firstVisibleChar = (u32)(view->scrollX / charWidth);
-        u32 lastVisibleChar = (u32)((view->scrollX + viewWidth) / charWidth) + 1;
-        lastVisibleChar = std::min(lastVisibleChar, lineLength);
 
         // Draw selection background
         if (view->hasSelection) {
@@ -589,34 +657,145 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
             }
         }
 
-        // Draw text - need to track visual column position for tabs
-        u32 visualCol = 0;
-        for (u32 charIdx = 0; charIdx < lineLength; charIdx++) {
-            u32 ch = u32str_get(line, charIdx);
-            u32 xPos = (u32)(contentStartX + (visualCol * charWidth) - view->scrollX);
+        // Draw text with or without syntax highlighting
+        if (!view->highlightSyntax) {
+            // Draw text without syntax highlighting - character by character for tab handling
+            u32 visualCol = 0;
+            for (u32 charIdx = 0; charIdx < lineLength; charIdx++) {
+                u32 ch = u32str_get(line, charIdx);
+                u32 xPos = (u32)(contentStartX + (visualCol * charWidth) - view->scrollX);
 
-            // Check if this character is visible
-            if (visualCol * charWidth >= view->scrollX &&
-                visualCol * charWidth < view->scrollX + viewWidth) {
-                if (ch == '\t') {
-                    // Draw spaces for tab
-                    u32 tabStop = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
-                    u32 spacesToDraw = tabStop - visualCol;
-                    char space[2] = {' ', '\0'};
-                    for (u32 i = 0; i < spacesToDraw; i++) {
-                        canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos, 255, 255, 255);
+                // Check if this character is visible
+                if (visualCol * charWidth >= view->scrollX &&
+                    visualCol * charWidth < view->scrollX + viewWidth) {
+                    if (ch == '\t') {
+                        // Draw spaces for tab
+                        u32 tabStop = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                        u32 spacesToDraw = tabStop - visualCol;
+                        char space[2] = {' ', '\0'};
+                        for (u32 i = 0; i < spacesToDraw; i++) {
+                            canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos,
+                                                color_default[0], color_default[1], color_default[2]);
+                        }
+                    } else if (ch >= 32 && ch <= 126) {
+                        char str[2] = {(char)ch, '\0'};
+                        canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos,
+                                            color_default[0], color_default[1], color_default[2]);
                     }
-                } else if (ch >= 32 && ch < 127) {
-                    char str[2] = {(char)ch, '\0'};
-                    canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos, 255, 255, 255);
+                }
+
+                // Update visual column
+                if (ch == '\t') {
+                    visualCol = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                } else {
+                    visualCol++;
                 }
             }
+        } else {
+            // Draw text with syntax highlighting
+            // Tokenize the line if needed
+            doc_tokenize_line(view->target, lineIdx);
 
-            // Update visual column
-            if (ch == '\t') {
-                visualCol = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+            // Get tokens for this line
+            token_span* tokens = doc_get_line_tokens(view->target, lineIdx);
+            u32 token_count = doc_get_line_token_count(view->target, lineIdx);
+
+            if (token_count == 0 || !tokens) {
+                // No tokens available, fall back to default color
+                u32 visualCol = 0;
+                for (u32 charIdx = 0; charIdx < lineLength; charIdx++) {
+                    u32 ch = u32str_get(line, charIdx);
+                    u32 xPos = (u32)(contentStartX + (visualCol * charWidth) - view->scrollX);
+
+                    // Check if this character is visible
+                    if (visualCol * charWidth >= view->scrollX &&
+                        visualCol * charWidth < view->scrollX + viewWidth) {
+                        if (ch == '\t') {
+                            // Draw spaces for tab
+                            u32 tabStop = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                            u32 spacesToDraw = tabStop - visualCol;
+                            char space[2] = {' ', '\0'};
+                            for (u32 i = 0; i < spacesToDraw; i++) {
+                                canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos,
+                                                    color_default[0], color_default[1], color_default[2]);
+                            }
+                        } else if (ch >= 32 && ch <= 126) {
+                            char str[2] = {(char)ch, '\0'};
+                            canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos,
+                                                color_default[0], color_default[1], color_default[2]);
+                        }
+                    }
+
+                    // Update visual column
+                    if (ch == '\t') {
+                        visualCol = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                    } else {
+                        visualCol++;
+                    }
+                }
             } else {
-                visualCol++;
+                // Render each token with its appropriate color
+                u32 visualCol = 0;
+
+                for (u32 tok_idx = 0; tok_idx < token_count; tok_idx++) {
+                    const token_span& token = tokens[tok_idx];
+
+                    // Choose color based on token type
+                    const u8* color = color_default;
+                    switch (token.type) {
+                        case TOKEN_KEYWORD:
+                            color = color_keyword;
+                            break;
+                        case TOKEN_COMMENT:
+                            color = color_comment;
+                            break;
+                        case TOKEN_PREPROCESSOR:
+                            color = color_preprocessor;
+                            break;
+                        case TOKEN_WHITESPACE:
+                            color = color_whitespace;
+                            break;
+                        case TOKEN_LITERAL:
+                            color = color_literal;
+                            break;
+                        case TOKEN_NONE:
+                        default:
+                            color = color_default;
+                            break;
+                    }
+
+                    // Draw each character in the token (handling tabs properly)
+                    for (u32 charIdx = token.start; charIdx < token.end && charIdx < lineLength; charIdx++) {
+                        u32 ch = u32str_get(line, charIdx);
+                        u32 xPos = (u32)(contentStartX + (visualCol * charWidth) - view->scrollX);
+
+                        // Check if this character is visible
+                        if (visualCol * charWidth >= view->scrollX &&
+                            visualCol * charWidth < view->scrollX + viewWidth) {
+                            if (ch == '\t') {
+                                // Draw spaces for tab
+                                u32 tabStop = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                                u32 spacesToDraw = tabStop - visualCol;
+                                char space[2] = {' ', '\0'};
+                                for (u32 i = 0; i < spacesToDraw; i++) {
+                                    canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos,
+                                                        color[0], color[1], color[2]);
+                                }
+                            } else if (ch >= 32 && ch <= 126) {
+                                char str[2] = {(char)ch, '\0'};
+                                canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos,
+                                                    color[0], color[1], color[2]);
+                            }
+                        }
+
+                        // Update visual column
+                        if (ch == '\t') {
+                            visualCol = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                        } else {
+                            visualCol++;
+                        }
+                    }
+                }
             }
         }
 
