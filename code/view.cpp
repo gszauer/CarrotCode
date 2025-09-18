@@ -2,6 +2,7 @@
 #include "document.h"
 #include "strings.h"
 #include "renderer.h"
+#include "imgui.h"
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -289,6 +290,45 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     static bool wasLeftDown = false;
     static bool wasRightDown = false;
 
+    // Check if mouse is over scrollbar areas
+    f32 viewWidth = view->displayAreaW;
+    f32 viewHeight = view->displayAreaH;
+
+    if (view->showLineNumbers) {
+        viewWidth -= view->lineNumberWidth;
+    }
+
+    bool needsHScroll = view->maxScrollX > 0;
+    bool needsVScroll = view->maxScrollY > 0;
+
+    if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
+    if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
+
+    // Check if mouse is in vertical scrollbar area
+    bool inVScrollBar = false;
+    if (needsVScroll) {
+        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
+        if (x >= scrollbarX && x < view->displayAreaX + view->displayAreaW &&
+            y >= view->displayAreaY && y < view->displayAreaY + view->displayAreaH) {
+            inVScrollBar = true;
+        }
+    }
+
+    // Check if mouse is in horizontal scrollbar area
+    bool inHScrollBar = false;
+    if (needsHScroll) {
+        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)SCROLLBAR_WIDTH;
+        if (y >= scrollbarY && y < view->displayAreaY + view->displayAreaH &&
+            x >= view->displayAreaX && x < view->displayAreaX + view->displayAreaW) {
+            inHScrollBar = true;
+        }
+    }
+
+    // If mouse is over a scrollbar, don't process document interactions
+    if (inVScrollBar || inHScrollBar) {
+        return;
+    }
+
     if (scrollDelta != 0) {
         view->scrollY -= scrollDelta * font_get_line_height(view->fnt) * 3;
         view->scrollY = std::max(0.0f, std::min(view->scrollY, view->maxScrollY));
@@ -363,6 +403,45 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
 void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown) {
     if (!leftDown) return;
 
+    // Check if mouse is over scrollbar areas
+    f32 viewWidth = view->displayAreaW;
+    f32 viewHeight = view->displayAreaH;
+
+    if (view->showLineNumbers) {
+        viewWidth -= view->lineNumberWidth;
+    }
+
+    bool needsHScroll = view->maxScrollX > 0;
+    bool needsVScroll = view->maxScrollY > 0;
+
+    if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
+    if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
+
+    // Check if mouse is in vertical scrollbar area
+    bool inVScrollBar = false;
+    if (needsVScroll) {
+        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
+        if (x >= scrollbarX && x < view->displayAreaX + view->displayAreaW &&
+            y >= view->displayAreaY && y < view->displayAreaY + view->displayAreaH) {
+            inVScrollBar = true;
+        }
+    }
+
+    // Check if mouse is in horizontal scrollbar area
+    bool inHScrollBar = false;
+    if (needsHScroll) {
+        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)SCROLLBAR_WIDTH;
+        if (y >= scrollbarY && y < view->displayAreaY + view->displayAreaH &&
+            x >= view->displayAreaX && x < view->displayAreaX + view->displayAreaW) {
+            inHScrollBar = true;
+        }
+    }
+
+    // If mouse is over a scrollbar, don't process document interactions
+    if (inVScrollBar || inHScrollBar) {
+        return;
+    }
+
     u32 effectiveX = x - view->displayAreaX;
     u32 effectiveY = y - view->displayAreaY;
 
@@ -419,8 +498,8 @@ void document_view_update(document_view* view, f32 deltaTime) {
     view->scrollY = std::max(0.0f, std::min(view->scrollY, view->maxScrollY));
 }
 
-void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool showLineNumbers) {
-    if (!cnvs || !fnt) return;
+void document_view_render(document_view* view, struct ImGui* imgui_context, canvas* cnvs, font* fnt, bool showLineNumbers) {
+    if (!cnvs || !fnt || !imgui_context) return;
 
     view->showLineNumbers = showLineNumbers;
 
@@ -552,19 +631,21 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
     // Reset clip rect
     canvas_set_clip(cnvs, 0, 0, canvas_get_width(cnvs), canvas_get_height(cnvs));
 
-    // Draw scrollbars
+    // Draw interactive scrollbars using ImGui extended functions
     if (needsVScroll) {
         u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
         u32 scrollbarHeight = (u32)(view->displayAreaH);
         if (needsHScroll) scrollbarHeight -= (u32)SCROLLBAR_WIDTH;
 
-        canvas_draw_rect(cnvs, scrollbarX, view->displayAreaY, (u32)SCROLLBAR_WIDTH, scrollbarHeight, 64, 64, 64);
-
-        u32 thumbHeight = (u32)((viewHeight / (viewHeight + view->maxScrollY)) * scrollbarHeight);
-        u32 thumbY = (u32)((view->scrollY / (view->maxScrollY + viewHeight)) * scrollbarHeight);
-
-        canvas_draw_rect(cnvs, scrollbarX + 2, view->displayAreaY + thumbY,
-                        (u32)SCROLLBAR_WIDTH - 4, thumbHeight, 128, 128, 128);
+        bool scrollChanged = false;
+        f32 newScrollY = ImGuiVerticalScrollBarEx(imgui_context,
+                                                  scrollbarX, view->displayAreaY,
+                                                  (u32)SCROLLBAR_WIDTH, scrollbarHeight,
+                                                  view->scrollY, viewHeight, viewHeight + view->maxScrollY,
+                                                  &scrollChanged);
+        if (scrollChanged) {
+            view->scrollY = newScrollY;
+        }
     }
 
     if (needsHScroll) {
@@ -572,13 +653,15 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
         u32 scrollbarWidth = view->displayAreaW;
         if (needsVScroll) scrollbarWidth -= (u32)SCROLLBAR_WIDTH;
 
-        canvas_draw_rect(cnvs, view->displayAreaX, scrollbarY, scrollbarWidth, (u32)SCROLLBAR_WIDTH, 64, 64, 64);
-
-        u32 thumbWidth = (u32)((viewWidth / (viewWidth + view->maxScrollX)) * scrollbarWidth);
-        u32 thumbX = (u32)((view->scrollX / (view->maxScrollX + viewWidth)) * scrollbarWidth);
-
-        canvas_draw_rect(cnvs, view->displayAreaX + thumbX, scrollbarY + 2,
-                        thumbWidth, (u32)SCROLLBAR_WIDTH - 4, 128, 128, 128);
+        bool scrollChanged = false;
+        f32 newScrollX = ImGuiHorizontalScrollBarEx(imgui_context,
+                                                    view->displayAreaX, scrollbarY,
+                                                    scrollbarWidth, (u32)SCROLLBAR_WIDTH,
+                                                    view->scrollX, viewWidth, viewWidth + view->maxScrollX,
+                                                    &scrollChanged);
+        if (scrollChanged) {
+            view->scrollX = newScrollX;
+        }
     }
 }
 

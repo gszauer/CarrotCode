@@ -567,6 +567,236 @@ f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value
     return value;
 }
 
+f32 ImGuiHorizontalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scrollPos, f32 viewSize, f32 contentSize, bool* valueChanged) {
+    u32 id = GenerateId(context);
+    bool isDisabled = context->disabledDepth > 0;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
+    bool isActive = context->activeItem == id;
+
+    // Initialize valueChanged to false if provided
+    if (valueChanged) *valueChanged = false;
+
+    // Calculate max scroll position
+    f32 maxScroll = contentSize > viewSize ? contentSize - viewSize : 0;
+
+    // Handle mouse interaction
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
+        context->hotItem = id;
+        if (context->mouseLeftPressed) {
+            context->activeItem = id;
+            context->mouseInputConsumed = true;
+        }
+    }
+
+    // Update value if active
+    if (isActive && context->mouseLeftDown) {
+        context->mouseInputConsumed = true;  // Consume mouse while dragging
+        f32 oldValue = scrollPos;
+        // Calculate thumb size and position
+        f32 thumbSize = (viewSize / contentSize) * w;
+        if (thumbSize < 20) thumbSize = 20;  // Minimum thumb size
+
+        // Calculate the available track space
+        f32 trackSpace = w - thumbSize;
+
+        // Get mouse position relative to the track start
+        i32 relativeX = (i32)context->mouseX - (i32)x - (i32)(thumbSize / 2);
+
+        // Calculate new scroll position
+        if (trackSpace > 0) {
+            f32 t = (f32)relativeX / trackSpace;
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            scrollPos = t * maxScroll;
+        }
+
+        // Check if value changed and report it
+        if (valueChanged && scrollPos != oldValue) {
+            *valueChanged = true;
+        }
+    }
+
+    // Handle scroll wheel when hovering over scrollbar
+    if (isHovered && context->scrollDelta != 0) {
+        context->mouseInputConsumed = true;  // Consume scroll wheel input
+        f32 oldValue = scrollPos;
+        // Scroll by 10% of view size per tick
+        f32 scrollStep = viewSize * 0.1f;
+        scrollPos += context->scrollDelta * scrollStep;
+
+        // Clamp to range
+        if (scrollPos < 0) scrollPos = 0;
+        if (scrollPos > maxScroll) scrollPos = maxScroll;
+
+        // Check if value changed and report it
+        if (valueChanged && scrollPos != oldValue) {
+            *valueChanged = true;
+        }
+    }
+
+    // Draw track
+    canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
+
+    // Draw border
+    canvas_draw_rect(context->cnvs, x, y, w, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, x, y + h - 1, w, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, x, y, 1, h, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, x + w - 1, y, 1, h, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+
+    // Only draw thumb if there's scrollable content
+    if (maxScroll > 0) {
+        // Calculate thumb size based on view/content ratio
+        u32 thumbWidth = (u32)((viewSize / contentSize) * w);
+        if (thumbWidth < 20) thumbWidth = 20;  // Minimum thumb size
+        if (thumbWidth > w) thumbWidth = w;
+
+        // Calculate thumb position
+        f32 t = scrollPos / maxScroll;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+        u32 thumbX = x + (u32)(t * (w - thumbWidth));
+
+        // Draw thumb
+        u8 thumbR, thumbG, thumbB;
+        if (isDisabled) {
+            thumbR = Colors::CONTROL_R;
+            thumbG = Colors::CONTROL_G;
+            thumbB = Colors::CONTROL_B;
+        } else if (isActive) {
+            thumbR = Colors::PRIMARY_R;
+            thumbG = Colors::PRIMARY_G;
+            thumbB = Colors::PRIMARY_B;
+        } else if (isHovered) {
+            thumbR = Colors::CONTROL_HOVER_R;
+            thumbG = Colors::CONTROL_HOVER_G;
+            thumbB = Colors::CONTROL_HOVER_B;
+        } else {
+            thumbR = Colors::CONTROL_R;
+            thumbG = Colors::CONTROL_G;
+            thumbB = Colors::CONTROL_B;
+        }
+
+        canvas_draw_rect(context->cnvs, thumbX, y + 2, thumbWidth, h - 4, thumbR, thumbG, thumbB);
+    }
+
+    return scrollPos;
+}
+
+f32 ImGuiVerticalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scrollPos, f32 viewSize, f32 contentSize, bool* valueChanged) {
+    u32 id = GenerateId(context);
+    bool isDisabled = context->disabledDepth > 0;
+    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
+    bool isActive = context->activeItem == id;
+
+    // Initialize valueChanged to false if provided
+    if (valueChanged) *valueChanged = false;
+
+    // Calculate max scroll position
+    f32 maxScroll = contentSize > viewSize ? contentSize - viewSize : 0;
+
+    // Handle mouse interaction
+    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
+        context->hotItem = id;
+        if (context->mouseLeftPressed) {
+            context->activeItem = id;
+            context->mouseInputConsumed = true;
+        }
+    }
+
+    // Update value if active
+    if (isActive && context->mouseLeftDown) {
+        context->mouseInputConsumed = true;  // Consume mouse while dragging
+        f32 oldValue = scrollPos;
+        // Calculate thumb size and position
+        f32 thumbSize = (viewSize / contentSize) * h;
+        if (thumbSize < 20) thumbSize = 20;  // Minimum thumb size
+
+        // Calculate the available track space
+        f32 trackSpace = h - thumbSize;
+
+        // Get mouse position relative to the track start
+        i32 relativeY = (i32)context->mouseY - (i32)y - (i32)(thumbSize / 2);
+
+        // Calculate new scroll position
+        if (trackSpace > 0) {
+            f32 t = (f32)relativeY / trackSpace;
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            scrollPos = t * maxScroll;
+        }
+
+        // Check if value changed and report it
+        if (valueChanged && scrollPos != oldValue) {
+            *valueChanged = true;
+        }
+    }
+
+    // Handle scroll wheel when hovering over scrollbar
+    if (isHovered && context->scrollDelta != 0) {
+        f32 oldValue = scrollPos;
+        // Scroll by 10% of view size per tick
+        f32 scrollStep = viewSize * 0.1f;
+        // For vertical scrollbar, negative delta scrolls down (increases scrollPos)
+        scrollPos -= context->scrollDelta * scrollStep;
+
+        // Clamp to range
+        if (scrollPos < 0) scrollPos = 0;
+        if (scrollPos > maxScroll) scrollPos = maxScroll;
+
+        // Check if value changed and report it
+        if (valueChanged && scrollPos != oldValue) {
+            *valueChanged = true;
+        }
+    }
+
+    // Draw track
+    canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
+
+    // Draw border
+    canvas_draw_rect(context->cnvs, x, y, w, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, x, y + h - 1, w, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, x, y, 1, h, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+    canvas_draw_rect(context->cnvs, x + w - 1, y, 1, h, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
+
+    // Only draw thumb if there's scrollable content
+    if (maxScroll > 0) {
+        // Calculate thumb size based on view/content ratio
+        u32 thumbHeight = (u32)((viewSize / contentSize) * h);
+        if (thumbHeight < 20) thumbHeight = 20;  // Minimum thumb size
+        if (thumbHeight > h) thumbHeight = h;
+
+        // Calculate thumb position
+        f32 t = scrollPos / maxScroll;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+        u32 thumbY = y + (u32)(t * (h - thumbHeight));
+
+        // Draw thumb
+        u8 thumbR, thumbG, thumbB;
+        if (isDisabled) {
+            thumbR = Colors::CONTROL_R;
+            thumbG = Colors::CONTROL_G;
+            thumbB = Colors::CONTROL_B;
+        } else if (isActive) {
+            thumbR = Colors::PRIMARY_R;
+            thumbG = Colors::PRIMARY_G;
+            thumbB = Colors::PRIMARY_B;
+        } else if (isHovered) {
+            thumbR = Colors::CONTROL_HOVER_R;
+            thumbG = Colors::CONTROL_HOVER_G;
+            thumbB = Colors::CONTROL_HOVER_B;
+        } else {
+            thumbR = Colors::CONTROL_R;
+            thumbG = Colors::CONTROL_G;
+            thumbB = Colors::CONTROL_B;
+        }
+
+        canvas_draw_rect(context->cnvs, x + 2, thumbY, w - 4, thumbHeight, thumbR, thumbG, thumbB);
+    }
+
+    return scrollPos;
+}
+
 bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* isOpen) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;

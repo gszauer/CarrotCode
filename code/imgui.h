@@ -29,6 +29,9 @@ bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text);
 bool ImGuiCheckbox(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* checked);
 f32 ImGuiHorizontalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged = nullptr);
 f32 ImGuiVerticalScrollBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 value, f32 minValue, f32 maxValue, bool* valueChanged = nullptr);
+// Extended scrollbar functions with pixel coordinates and view/content size for proper thumb sizing
+f32 ImGuiHorizontalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scrollPos, f32 viewSize, f32 contentSize, bool* valueChanged = nullptr);
+f32 ImGuiVerticalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scrollPos, f32 viewSize, f32 contentSize, bool* valueChanged = nullptr);
 bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* isOpen);
 
 // Tab bar functions

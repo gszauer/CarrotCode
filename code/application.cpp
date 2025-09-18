@@ -327,7 +327,7 @@ canvas* Render(UserData* user) {
             view->displayAreaH = canvasHeight - 60;
 
             // Render the document view
-            document_view_render(view, user->cnvs, user->fnt, true);
+            document_view_render(view, user->imgui_context, user->cnvs, user->fnt, true);
         }
     } else {
         // Show drop zone
