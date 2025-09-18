@@ -632,10 +632,10 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     canvas_set_clip(cnvs, 0, 0, canvas_get_width(cnvs), canvas_get_height(cnvs));
 
     // Draw interactive scrollbars using ImGui extended functions
+    // Vertical scrollbar goes all the way to the bottom
     if (needsVScroll) {
         u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
-        u32 scrollbarHeight = (u32)(view->displayAreaH);
-        if (needsHScroll) scrollbarHeight -= (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarHeight = view->displayAreaH;  // Full height, no reduction
 
         bool scrollChanged = false;
         f32 newScrollY = ImGuiVerticalScrollBarEx(imgui_context,
@@ -648,10 +648,11 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         }
     }
 
+    // Horizontal scrollbar is shortened to avoid overlap with vertical scrollbar
     if (needsHScroll) {
         u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)SCROLLBAR_WIDTH;
         u32 scrollbarWidth = view->displayAreaW;
-        if (needsVScroll) scrollbarWidth -= (u32)SCROLLBAR_WIDTH;
+        if (needsVScroll) scrollbarWidth -= (u32)SCROLLBAR_WIDTH;  // Shorten to avoid overlap
 
         bool scrollChanged = false;
         f32 newScrollX = ImGuiHorizontalScrollBarEx(imgui_context,
