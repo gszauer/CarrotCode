@@ -31,14 +31,14 @@ inline void free_memory(void* ptr) {
 
 static const u32 DOUBLE_CLICK_TIME = 500;
 static const u32 TRIPLE_CLICK_TIME = 500;
-static const f32 CHAR_WIDTH = 8.0f;
-static const f32 LINE_HEIGHT = 16.0f;
-static const f32 SCROLLBAR_WIDTH = 15.0f;
+// Font metrics are now queried dynamically from the font object
+static const f32 SCROLLBAR_WIDTH = 30.0f;
 
-document_view* document_view_create(document* doc, u32_string* path) {
+document_view* document_view_create(document* doc, font* fnt, u32_string* path) {
     document_view* view = (document_view*)allocate_memory(sizeof(document_view));
 
     view->target = doc;
+    view->fnt = fnt;
     view->path = path ? u32str_substr(path, 0, u32str_length(path)) : nullptr;
 
     view->scrollX = 0;
@@ -58,7 +58,8 @@ document_view* document_view_create(document* doc, u32_string* path) {
     view->hasSelection = false;
 
     view->showLineNumbers = true;
-    view->lineNumberWidth = 50;
+    // Calculate line number width based on font metrics (space for 5 digits + padding)
+    view->lineNumberWidth = font_get_char_width(fnt, '0') * 6 + 10;  // 5 digits + space + padding
     view->tabWidth = 4;
 
     view->lastClickTime = 0;
@@ -78,6 +79,12 @@ void document_view_destroy(document_view* view) {
 
     // Don't destroy the document - it's owned externally
     free_memory(view);
+}
+
+void document_view_update_font(document_view* view, font* fnt) {
+    view->fnt = fnt;
+    // Recalculate line number width for new font
+    view->lineNumberWidth = font_get_char_width(fnt, '0') * 6 + 10;  // 5 digits + space + padding
 }
 
 static void clamp_cursor(document_view* view) {
@@ -245,7 +252,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     static bool wasRightDown = false;
 
     if (scrollDelta != 0) {
-        view->scrollY -= scrollDelta * LINE_HEIGHT * 3;
+        view->scrollY -= scrollDelta * font_get_line_height(view->fnt) * 3;
         view->scrollY = std::max(0.0f, std::min(view->scrollY, view->maxScrollY));
     }
 
@@ -337,12 +344,14 @@ void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown)
 
 void document_view_update(document_view* view, f32 deltaTime) {
     u32 lineCount = doc_line_count(view->target);
-    f32 contentHeight = lineCount * LINE_HEIGHT;
+    f32 lineHeight = font_get_line_height(view->fnt);
+    f32 charWidth = font_get_char_width(view->fnt, 'x');  // Use average char width
+    f32 contentHeight = lineCount * lineHeight;
     f32 contentWidth = 0;
 
     for (u32 i = 0; i < lineCount; i++) {
         u32 lineLength = doc_get_line_length(view->target, i);
-        f32 lineWidth = lineLength * CHAR_WIDTH;
+        f32 lineWidth = lineLength * charWidth;
         if (lineWidth > contentWidth) {
             contentWidth = lineWidth;
         }
@@ -388,12 +397,10 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
     if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
     if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
 
-    // Set clip rect for content area
-    canvas_set_clip(cnvs, (u32)contentStartX, view->displayAreaY,
-                    (u32)viewWidth, (u32)viewHeight);
-
-    u32 firstVisibleLine = (u32)(view->scrollY / LINE_HEIGHT);
-    u32 lastVisibleLine = (u32)((view->scrollY + viewHeight) / LINE_HEIGHT) + 1;
+    u32 lineHeight = font_get_line_height(fnt);
+    u32 charWidth = font_get_char_width(fnt, 'x');  // Use average char width
+    u32 firstVisibleLine = (u32)(view->scrollY / lineHeight);
+    u32 lastVisibleLine = (u32)((view->scrollY + viewHeight) / lineHeight) + 1;
     u32 lineCount = doc_line_count(view->target);
     lastVisibleLine = std::min(lastVisibleLine, lineCount);
 
@@ -402,22 +409,30 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
         normalize_selection(view, &selStart, &selEnd);
     }
 
-    for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
-        f32 yPos = view->displayAreaY + (lineIdx * LINE_HEIGHT) - view->scrollY;
-
-        if (view->showLineNumbers) {
+    // Draw line numbers first (before setting clip rect)
+    if (view->showLineNumbers) {
+        for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
+            f32 yPos = view->displayAreaY + (lineIdx * lineHeight) - view->scrollY;
             char lineNumStr[16];
-            sprintf(lineNumStr, "%4u", lineIdx + 1);
-            canvas_draw_text_cstr(cnvs, fnt, lineNumStr, view->displayAreaX, (u32)yPos, 128, 128, 128);
+            sprintf(lineNumStr, "%5u ", lineIdx + 1);  // 5 digits + space
+            canvas_draw_text_cstr(cnvs, fnt, lineNumStr, view->displayAreaX + 5, (u32)yPos, 128, 128, 128);
         }
+    }
+
+    // Now set clip rect for content area only
+    canvas_set_clip(cnvs, (u32)contentStartX, view->displayAreaY,
+                    (u32)viewWidth, (u32)viewHeight);
+
+    for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
+        f32 yPos = view->displayAreaY + (lineIdx * lineHeight) - view->scrollY;
 
         u32_string* line = doc_get_line(view->target, lineIdx);
         if (!line) continue;
 
         u32 lineLength = u32str_length(line);
 
-        u32 firstVisibleChar = (u32)(view->scrollX / CHAR_WIDTH);
-        u32 lastVisibleChar = (u32)((view->scrollX + viewWidth) / CHAR_WIDTH) + 1;
+        u32 firstVisibleChar = (u32)(view->scrollX / charWidth);
+        u32 lastVisibleChar = (u32)((view->scrollX + viewWidth) / charWidth) + 1;
         lastVisibleChar = std::min(lastVisibleChar, lineLength);
 
         // Draw selection background
@@ -436,22 +451,22 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
             }
 
             if (selEndCol > selStartCol && selStartCol < lastVisibleChar && selEndCol > firstVisibleChar) {
-                u32 selX1 = (u32)(contentStartX + (std::max(selStartCol, firstVisibleChar) * CHAR_WIDTH) - view->scrollX);
-                u32 selX2 = (u32)(contentStartX + (std::min(selEndCol, lastVisibleChar) * CHAR_WIDTH) - view->scrollX);
-                canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, (u32)LINE_HEIGHT, 64, 64, 128);
+                u32 selX1 = (u32)(contentStartX + (std::max(selStartCol, firstVisibleChar) * charWidth) - view->scrollX);
+                u32 selX2 = (u32)(contentStartX + (std::min(selEndCol, lastVisibleChar) * charWidth) - view->scrollX);
+                canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 64, 64, 128);
             }
         }
 
         // Draw text
         for (u32 charIdx = firstVisibleChar; charIdx < lastVisibleChar && charIdx < lineLength; charIdx++) {
-            u32 xPos = (u32)(contentStartX + (charIdx * CHAR_WIDTH) - view->scrollX);
+            u32 xPos = (u32)(contentStartX + (charIdx * charWidth) - view->scrollX);
             u32 ch = u32str_get(line, charIdx);
 
             if (ch == '\t') {
                 // Draw spaces for tab
                 char space[2] = {' ', '\0'};
                 for (u32 i = 0; i < view->tabWidth; i++) {
-                    canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * (u32)CHAR_WIDTH, (u32)yPos, 255, 255, 255);
+                    canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos, 255, 255, 255);
                 }
             } else if (ch >= 32 && ch < 127) {
                 char str[2] = {(char)ch, '\0'};
@@ -461,8 +476,8 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
 
         // Draw cursor
         if (view->cursor.row == lineIdx) {
-            u32 cursorX = (u32)(contentStartX + (view->cursor.column * CHAR_WIDTH) - view->scrollX);
-            canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, (u32)LINE_HEIGHT, 255, 255, 255);
+            u32 cursorX = (u32)(contentStartX + (view->cursor.column * charWidth) - view->scrollX);
+            canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 255, 255, 255);
         }
     }
 
@@ -835,8 +850,10 @@ void document_view_move_to_line_end(document_view* view, bool extend_selection) 
 }
 
 void document_view_ensure_cursor_visible(document_view* view) {
-    f32 cursorX = view->cursor.column * CHAR_WIDTH;
-    f32 cursorY = view->cursor.row * LINE_HEIGHT;
+    f32 charWidth = font_get_char_width(view->fnt, 'x');
+    f32 lineHeight = font_get_line_height(view->fnt);
+    f32 cursorX = view->cursor.column * charWidth;
+    f32 cursorY = view->cursor.row * lineHeight;
 
     f32 viewWidth = view->displayAreaW;
     f32 viewHeight = view->displayAreaH;
@@ -850,14 +867,14 @@ void document_view_ensure_cursor_visible(document_view* view) {
 
     if (cursorX < view->scrollX) {
         view->scrollX = cursorX;
-    } else if (cursorX + CHAR_WIDTH > view->scrollX + viewWidth) {
-        view->scrollX = cursorX + CHAR_WIDTH - viewWidth;
+    } else if (cursorX + charWidth > view->scrollX + viewWidth) {
+        view->scrollX = cursorX + charWidth - viewWidth;
     }
 
     if (cursorY < view->scrollY) {
         view->scrollY = cursorY;
-    } else if (cursorY + LINE_HEIGHT > view->scrollY + viewHeight) {
-        view->scrollY = cursorY + LINE_HEIGHT - viewHeight;
+    } else if (cursorY + lineHeight > view->scrollY + viewHeight) {
+        view->scrollY = cursorY + lineHeight - viewHeight;
     }
 
     view->scrollX = std::max(0.0f, std::min(view->scrollX, view->maxScrollX));
@@ -870,7 +887,8 @@ void document_view_scroll_to(document_view* view, f32 x, f32 y) {
 }
 
 void document_view_center_cursor(document_view* view) {
-    f32 cursorY = view->cursor.row * LINE_HEIGHT;
+    f32 lineHeight = font_get_line_height(view->fnt);
+    f32 cursorY = view->cursor.row * lineHeight;
     f32 viewHeight = view->displayAreaH;
 
     if (view->maxScrollY > 0) viewHeight -= SCROLLBAR_WIDTH;
@@ -975,9 +993,11 @@ void document_view_redo(document_view* view) {
 
 document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y) {
     document_cursor result;
+    f32 lineHeight = font_get_line_height(view->fnt);
+    f32 charWidth = font_get_char_width(view->fnt, 'x');
 
-    result.row = (u32)((y + view->scrollY) / LINE_HEIGHT);
-    result.column = (u32)((x + view->scrollX) / CHAR_WIDTH);
+    result.row = (u32)((y + view->scrollY) / lineHeight);
+    result.column = (u32)((x + view->scrollX) / charWidth);
 
     u32 lineCount = doc_line_count(view->target);
     if (result.row >= lineCount) {
@@ -993,8 +1013,10 @@ document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y)
 }
 
 void document_view_get_cursor_pixel_position(document_view* view, document_cursor cursor, u32* x, u32* y) {
-    *x = (u32)(cursor.column * CHAR_WIDTH - view->scrollX);
-    *y = (u32)(cursor.row * LINE_HEIGHT - view->scrollY);
+    f32 charWidth = font_get_char_width(view->fnt, 'x');
+    f32 lineHeight = font_get_line_height(view->fnt);
+    *x = (u32)(cursor.column * charWidth - view->scrollX);
+    *y = (u32)(cursor.row * lineHeight - view->scrollY);
 
     if (view->showLineNumbers) {
         *x += view->lineNumberWidth;

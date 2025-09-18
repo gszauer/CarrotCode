@@ -77,7 +77,7 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
     }
 
     // Create new document view
-    document_view* view = document_view_create(doc, path_str);
+    document_view* view = document_view_create(doc, user->fnt, path_str);
     if (path_str) {
         u32str_destroy(path_str);
     }

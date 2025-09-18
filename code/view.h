@@ -12,6 +12,7 @@ struct document_cursor {
 
 struct document_view {
     document* target;
+    font* fnt;
     u32_string* path;
 
     f32 scrollX;
@@ -37,7 +38,8 @@ struct document_view {
     document_cursor lastClickPosition;
 };
 
-document_view* document_view_create(document* doc, u32_string* path);
+document_view* document_view_create(document* doc, font* fnt, u32_string* path);
+void document_view_update_font(document_view* view, font* fnt);
 void document_view_destroy(document_view* view);
 
 void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualKey,
