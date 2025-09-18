@@ -55,6 +55,7 @@ void u32str_reserve(u32_string* target, u32 minSize);
 
 void u32str_remove(u32_string* target, u32 startIndex, u32 length);
 void u32str_insert(u32_string* target, const u32_string* source, u32 targetStart, u32 sourceStart, u32 length);
+void u32str_insert_char(u32_string* target, u32 index, u32 character);
 u32_string* u32str_substr(u32_string* target, u32 startIndex, u32 length);
 i32 u32str_compare(u32_string* a, u32_string* b); // like strcmp
 i32 u32str_indexOf(u32_string* target, u32 character);
@@ -79,6 +80,7 @@ void u16str_grow(u16_string* target, u32 minSize);
 
 void u16str_remove(u16_string* target, u32 startIndex, u32 length);
 void u16str_insert(u16_string* target, const u16_string* source, u32 targetStart, u32 sourceStart, u32 length);
+void u16str_insert_char(u16_string* target, u32 index, u16 character);
 u16_string* u16str_substr(u16_string* target, u32 startIndex, u32 length);
 i32 u16str_compare(u16_string* a, u16_string* b);
 i32 u16str_indexOf(u16_string* target, u16 character);
@@ -103,6 +105,7 @@ void u8str_grow(u8_string* target, u32 minSize);
 
 void u8str_remove(u8_string* target, u32 startIndex, u32 length);
 void u8str_insert(u8_string* target, const u8_string* source, u32 targetStart, u32 sourceStart, u32 length);
+void u8str_insert_char(u8_string* target, u32 index, u8 character);
 u8_string* u8str_substr(u8_string* target, u32 startIndex, u32 length);
 i32 u8str_compare(u8_string* a, u8_string* b);
 i32 u8str_indexOf(u8_string* target, u8 character);

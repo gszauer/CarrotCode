@@ -30,6 +30,7 @@ struct document_view {
     bool hasSelection;
 
     bool showLineNumbers;
+    bool highlightSyntax;
     u32 lineNumberWidth;
     u32 tabWidth;
 
@@ -52,6 +53,8 @@ void document_view_update(document_view* view, f32 deltaTime);
 void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool showLineNumbers);
 
 void document_view_set_cursor(document_view* view, u32 row, u32 column);
+void document_view_set_highlight_syntax(document_view* view, bool highlight);
+bool document_view_get_highlight_syntax(document_view* view);
 void document_view_select_all(document_view* view);
 void document_view_clear_selection(document_view* view);
 bool document_view_has_selection(document_view* view);

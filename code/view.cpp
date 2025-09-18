@@ -18,16 +18,17 @@ inline void free_memory(void* ptr) {
 }
 
 
-#define VK_BACK 0x08
-#define VK_TAB 0x09
-#define VK_RETURN 0x0D
-#define VK_DELETE 0x2E
-#define VK_LEFT 0x25
-#define VK_UP 0x26
-#define VK_RIGHT 0x27
-#define VK_DOWN 0x28
-#define VK_HOME 0x24
-#define VK_END 0x23
+// Use X11 keysym values instead of Windows VK codes
+#define VK_BACK 0xff08     // XK_BackSpace
+#define VK_TAB 0xff09      // XK_Tab
+#define VK_RETURN 0xff0d   // XK_Return
+#define VK_DELETE 0xffff   // XK_Delete
+#define VK_LEFT 0xff51     // XK_Left
+#define VK_UP 0xff52       // XK_Up
+#define VK_RIGHT 0xff53    // XK_Right
+#define VK_DOWN 0xff54     // XK_Down
+#define VK_HOME 0xff50     // XK_Home
+#define VK_END 0xff57      // XK_End
 
 static const u32 DOUBLE_CLICK_TIME = 500;
 static const u32 TRIPLE_CLICK_TIME = 500;
@@ -58,6 +59,7 @@ document_view* document_view_create(document* doc, font* fnt, u32_string* path) 
     view->hasSelection = false;
 
     view->showLineNumbers = true;
+    view->highlightSyntax = false;  // Default to no syntax highlighting
     // Calculate line number width based on font metrics (space for 5 digits + padding)
     view->lineNumberWidth = font_get_char_width(fnt, '0') * 6 + 10;  // 5 digits + space + padding
     view->tabWidth = 4;
@@ -85,6 +87,42 @@ void document_view_update_font(document_view* view, font* fnt) {
     view->fnt = fnt;
     // Recalculate line number width for new font
     view->lineNumberWidth = font_get_char_width(fnt, '0') * 6 + 10;  // 5 digits + space + padding
+}
+
+// Helper function to calculate visual column position accounting for tabs
+static u32 get_visual_column(u32_string* line, u32 charIndex, u32 tabWidth) {
+    u32 visualCol = 0;
+    for (u32 i = 0; i < charIndex && i < u32str_length(line); i++) {
+        u32 ch = u32str_get(line, i);
+        if (ch == '\t') {
+            // Tab advances to next tab stop
+            visualCol = ((visualCol / tabWidth) + 1) * tabWidth;
+        } else {
+            visualCol++;
+        }
+    }
+    return visualCol;
+}
+
+// Helper function to convert visual column to character index
+static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
+    u32 currentVisualCol = 0;
+    u32 lineLength = u32str_length(line);
+
+    for (u32 i = 0; i < lineLength; i++) {
+        if (currentVisualCol >= visualCol) {
+            return i;
+        }
+
+        u32 ch = u32str_get(line, i);
+        if (ch == '\t') {
+            currentVisualCol = ((currentVisualCol / tabWidth) + 1) * tabWidth;
+        } else {
+            currentVisualCol++;
+        }
+    }
+
+    return lineLength;
 }
 
 static void clamp_cursor(document_view* view) {
@@ -315,7 +353,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
             clamp_cursor(view);
         }
 
-        printf("Right click menu placeholder\n");
+        // TODO: Show context menu
     }
 
     wasLeftDown = leftDown;
@@ -350,10 +388,14 @@ void document_view_update(document_view* view, f32 deltaTime) {
     f32 contentWidth = 0;
 
     for (u32 i = 0; i < lineCount; i++) {
-        u32 lineLength = doc_get_line_length(view->target, i);
-        f32 lineWidth = lineLength * charWidth;
-        if (lineWidth > contentWidth) {
-            contentWidth = lineWidth;
+        u32_string* line = doc_get_line(view->target, i);
+        if (line) {
+            // Calculate visual width accounting for tabs
+            u32 visualWidth = get_visual_column(line, u32str_length(line), view->tabWidth);
+            f32 lineWidth = visualWidth * charWidth;
+            if (lineWidth > contentWidth) {
+                contentWidth = lineWidth;
+            }
         }
     }
 
@@ -450,33 +492,59 @@ void document_view_render(document_view* view, canvas* cnvs, font* fnt, bool sho
                 selStartCol = selEndCol = 0;
             }
 
-            if (selEndCol > selStartCol && selStartCol < lastVisibleChar && selEndCol > firstVisibleChar) {
-                u32 selX1 = (u32)(contentStartX + (std::max(selStartCol, firstVisibleChar) * charWidth) - view->scrollX);
-                u32 selX2 = (u32)(contentStartX + (std::min(selEndCol, lastVisibleChar) * charWidth) - view->scrollX);
-                canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 64, 64, 128);
+            if (selEndCol > selStartCol) {
+                // Calculate visual columns for selection
+                u32 selStartVisualCol = get_visual_column(line, selStartCol, view->tabWidth);
+                u32 selEndVisualCol = get_visual_column(line, selEndCol, view->tabWidth);
+
+                u32 selX1 = (u32)(contentStartX + (selStartVisualCol * charWidth) - view->scrollX);
+                u32 selX2 = (u32)(contentStartX + (selEndVisualCol * charWidth) - view->scrollX);
+
+                // Clip to visible area
+                if (selX1 < contentStartX) selX1 = contentStartX;
+                if (selX2 > contentStartX + viewWidth) selX2 = contentStartX + (u32)viewWidth;
+
+                if (selX2 > selX1) {
+                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 64, 64, 128);
+                }
             }
         }
 
-        // Draw text
-        for (u32 charIdx = firstVisibleChar; charIdx < lastVisibleChar && charIdx < lineLength; charIdx++) {
-            u32 xPos = (u32)(contentStartX + (charIdx * charWidth) - view->scrollX);
+        // Draw text - need to track visual column position for tabs
+        u32 visualCol = 0;
+        for (u32 charIdx = 0; charIdx < lineLength; charIdx++) {
             u32 ch = u32str_get(line, charIdx);
+            u32 xPos = (u32)(contentStartX + (visualCol * charWidth) - view->scrollX);
 
-            if (ch == '\t') {
-                // Draw spaces for tab
-                char space[2] = {' ', '\0'};
-                for (u32 i = 0; i < view->tabWidth; i++) {
-                    canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos, 255, 255, 255);
+            // Check if this character is visible
+            if (visualCol * charWidth >= view->scrollX &&
+                visualCol * charWidth < view->scrollX + viewWidth) {
+                if (ch == '\t') {
+                    // Draw spaces for tab
+                    u32 tabStop = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+                    u32 spacesToDraw = tabStop - visualCol;
+                    char space[2] = {' ', '\0'};
+                    for (u32 i = 0; i < spacesToDraw; i++) {
+                        canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos, 255, 255, 255);
+                    }
+                } else if (ch >= 32 && ch < 127) {
+                    char str[2] = {(char)ch, '\0'};
+                    canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos, 255, 255, 255);
                 }
-            } else if (ch >= 32 && ch < 127) {
-                char str[2] = {(char)ch, '\0'};
-                canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos, 255, 255, 255);
+            }
+
+            // Update visual column
+            if (ch == '\t') {
+                visualCol = ((visualCol / view->tabWidth) + 1) * view->tabWidth;
+            } else {
+                visualCol++;
             }
         }
 
         // Draw cursor
         if (view->cursor.row == lineIdx) {
-            u32 cursorX = (u32)(contentStartX + (view->cursor.column * charWidth) - view->scrollX);
+            u32 cursorVisualCol = get_visual_column(line, view->cursor.column, view->tabWidth);
+            u32 cursorX = (u32)(contentStartX + (cursorVisualCol * charWidth) - view->scrollX);
             canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 255, 255, 255);
         }
     }
@@ -519,6 +587,14 @@ void document_view_set_cursor(document_view* view, u32 row, u32 column) {
     view->cursor.column = column;
     clamp_cursor(view);
     view->hasSelection = false;
+}
+
+void document_view_set_highlight_syntax(document_view* view, bool highlight) {
+    view->highlightSyntax = highlight;
+}
+
+bool document_view_get_highlight_syntax(document_view* view) {
+    return view->highlightSyntax;
 }
 
 void document_view_select_all(document_view* view) {
@@ -852,7 +928,15 @@ void document_view_move_to_line_end(document_view* view, bool extend_selection) 
 void document_view_ensure_cursor_visible(document_view* view) {
     f32 charWidth = font_get_char_width(view->fnt, 'x');
     f32 lineHeight = font_get_line_height(view->fnt);
-    f32 cursorX = view->cursor.column * charWidth;
+
+    // Get visual column position for cursor
+    u32_string* line = doc_get_line(view->target, view->cursor.row);
+    u32 visualCol = 0;
+    if (line) {
+        visualCol = get_visual_column(line, view->cursor.column, view->tabWidth);
+    }
+
+    f32 cursorX = visualCol * charWidth;
     f32 cursorY = view->cursor.row * lineHeight;
 
     f32 viewWidth = view->displayAreaW;
@@ -997,11 +1081,19 @@ document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y)
     f32 charWidth = font_get_char_width(view->fnt, 'x');
 
     result.row = (u32)((y + view->scrollY) / lineHeight);
-    result.column = (u32)((x + view->scrollX) / charWidth);
 
     u32 lineCount = doc_line_count(view->target);
     if (result.row >= lineCount) {
         result.row = lineCount > 0 ? lineCount - 1 : 0;
+    }
+
+    // Convert pixel X position to visual column, then to character index
+    u32 visualCol = (u32)((x + view->scrollX) / charWidth);
+    u32_string* line = doc_get_line(view->target, result.row);
+    if (line) {
+        result.column = visual_to_char_index(line, visualCol, view->tabWidth);
+    } else {
+        result.column = 0;
     }
 
     u32 lineLength = doc_get_line_length(view->target, result.row);
@@ -1015,7 +1107,15 @@ document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y)
 void document_view_get_cursor_pixel_position(document_view* view, document_cursor cursor, u32* x, u32* y) {
     f32 charWidth = font_get_char_width(view->fnt, 'x');
     f32 lineHeight = font_get_line_height(view->fnt);
-    *x = (u32)(cursor.column * charWidth - view->scrollX);
+
+    // Get visual column position accounting for tabs
+    u32_string* line = doc_get_line(view->target, cursor.row);
+    u32 visualCol = 0;
+    if (line) {
+        visualCol = get_visual_column(line, cursor.column, view->tabWidth);
+    }
+
+    *x = (u32)(visualCol * charWidth - view->scrollX);
     *y = (u32)(cursor.row * lineHeight - view->scrollY);
 
     if (view->showLineNumbers) {

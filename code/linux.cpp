@@ -365,6 +365,15 @@ int main(int argc, char** argv) {
 
                         ImGuiKeyboardInput(user->imgui_context, characterCode, virtualKeyCode,
                                          isKeyDown, altDown, ctrlDown, shiftDown);
+
+                        // Also forward keyboard input to the active document view
+                        if (user->view_count > 0 && user->active_view < user->view_count) {
+                            document_view* view = user->views[user->active_view];
+                            if (view) {
+                                document_view_keyboard_input(view, characterCode, virtualKeyCode,
+                                                            isKeyDown, altDown, ctrlDown, shiftDown);
+                            }
+                        }
                     }
                     break;
 
@@ -402,6 +411,22 @@ int main(int argc, char** argv) {
 
                         ImGuiMouseInput(user->imgui_context, mouseX, mouseY, normX, normY,
                                       scrollDir, leftDown, middleDown, rightDown);
+
+                        // Forward mouse input to active document view if ImGui didn't consume it
+                        if (!ImGuiIsMouseConsumed(user->imgui_context)) {
+                            if (user->view_count > 0 && user->active_view < user->view_count) {
+                                document_view* view = user->views[user->active_view];
+                                if (view) {
+                                    if (event.type == ButtonPress || event.type == ButtonRelease) {
+                                        document_view_mouse_input(view, mouseX, mouseY, scrollDir,
+                                                                leftDown, middleDown, rightDown);
+                                    } else if (event.type == MotionNotify && leftDown) {
+                                        // Only send mouse move if left button is down (for selection)
+                                        document_view_mouse_moved(view, mouseX, mouseY, leftDown);
+                                    }
+                                }
+                            }
+                        }
                     }
                     break;
             }

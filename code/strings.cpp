@@ -306,6 +306,29 @@ void u32str_insert(u32_string* target, const u32_string* source, u32 targetStart
     target->buffer[target->lengthChars] = 0;
 }
 
+void u32str_insert_char(u32_string* target, u32 index, u32 character) {
+    if (!target) return;
+
+    if (index > target->lengthChars) {
+        index = target->lengthChars;
+    }
+
+    // Reserve space for one more character
+    u32str_reserve(target, target->lengthChars + 1);
+
+    // Move existing characters to make room
+    if (index < target->lengthChars) {
+        memmove(&target->buffer[index + 1], &target->buffer[index],
+                (target->lengthChars - index) * sizeof(u32));
+    }
+
+    // Insert the character
+    target->buffer[index] = character;
+    target->lengthChars++;
+    target->sizeBytes = target->lengthChars * sizeof(u32);
+    target->buffer[target->lengthChars] = 0;
+}
+
 u32_string* u32str_substr(u32_string* target, u32 startIndex, u32 length) {
     if (!target) return nullptr;
     
@@ -557,6 +580,44 @@ void u16str_insert(u16_string* target, const u16_string* source, u32 targetStart
     target->lengthChars += length;
     target->sizeBytes += copy_units * sizeof(u16);
     target->buffer[target->sizeBytes / 2] = 0;
+}
+
+void u16str_insert_char(u16_string* target, u32 index, u16 character) {
+    if (!target) return;
+
+    if (index > target->lengthChars) {
+        index = target->lengthChars;
+    }
+
+    // Find the byte position for the character index
+    u32 byte_pos = 0;
+    for (u32 i = 0; i < index && i < target->lengthChars; i++) {
+        u32 units_read;
+        utf16_decode_char(&target->buffer[byte_pos], &units_read);
+        byte_pos += units_read;
+    }
+
+    // Check if this is a high surrogate that needs a pair
+    u32 units_to_insert = 1;
+    u16 char_buffer[2] = { character, 0 };
+
+    // Reserve space
+    u16str_reserve(target, target->sizeBytes / sizeof(u16) + units_to_insert);
+
+    // Move existing characters to make room
+    u32 remaining_units = target->sizeBytes / sizeof(u16) - byte_pos;
+    if (remaining_units > 0) {
+        memmove(&target->buffer[byte_pos + units_to_insert],
+                &target->buffer[byte_pos],
+                remaining_units * sizeof(u16));
+    }
+
+    // Insert the character(s)
+    memcpy(&target->buffer[byte_pos], char_buffer, units_to_insert * sizeof(u16));
+
+    target->lengthChars++;
+    target->sizeBytes += units_to_insert * sizeof(u16);
+    target->buffer[target->sizeBytes / sizeof(u16)] = 0;
 }
 
 u16_string* u16str_substr(u16_string* target, u32 startIndex, u32 length) {
@@ -838,6 +899,43 @@ void u8str_insert(u8_string* target, const u8_string* source, u32 targetStart, u
     
     target->lengthChars += length;
     target->sizeBytes += copy_bytes;
+    target->buffer[target->sizeBytes] = 0;
+}
+
+void u8str_insert_char(u8_string* target, u32 index, u8 character) {
+    if (!target) return;
+
+    if (index > target->lengthChars) {
+        index = target->lengthChars;
+    }
+
+    // Find the byte position for the character index
+    u32 byte_pos = 0;
+    for (u32 i = 0; i < index && i < target->lengthChars; i++) {
+        u32 bytes_read;
+        utf8_decode_char(&target->buffer[byte_pos], &bytes_read);
+        byte_pos += bytes_read;
+    }
+
+    // For u8 strings, ASCII characters are single byte
+    // For simplicity, we'll assume single-byte character
+    u32 bytes_to_insert = 1;
+
+    // Reserve space
+    u8str_reserve(target, target->sizeBytes + bytes_to_insert);
+
+    // Move existing characters to make room
+    if (byte_pos < target->sizeBytes) {
+        memmove(&target->buffer[byte_pos + bytes_to_insert],
+                &target->buffer[byte_pos],
+                target->sizeBytes - byte_pos);
+    }
+
+    // Insert the character
+    target->buffer[byte_pos] = character;
+
+    target->lengthChars++;
+    target->sizeBytes += bytes_to_insert;
     target->buffer[target->sizeBytes] = 0;
 }
 

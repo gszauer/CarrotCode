@@ -6,6 +6,7 @@
 #undef CARROT_INCLUDE_SYNTAX_DEFS
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 
 struct edit_action {
     enum action_type {
@@ -246,18 +247,17 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
 }
 
 void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
-    if (!doc || line >= vec_docline_size(doc->lines)) return;
-    
+    if (!doc || line >= vec_docline_size(doc->lines)) {
+        return;
+    }
+
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > u32str_length(doc_line->text)) {
         col = u32str_length(doc_line->text);
     }
-    
-    u32_string* char_str = u32str_create();
-    u32str_reserve(char_str, 4);
-    u32str_set(char_str, 0, codepoint);
-    u32str_insert(doc_line->text, char_str, col, 0, 1);
-    u32str_destroy(char_str);
+
+    // Use the new efficient single-character insert
+    u32str_insert_char(doc_line->text, col, codepoint);
     docline_mark_dirty(doc_line);
     
     edit_action action;

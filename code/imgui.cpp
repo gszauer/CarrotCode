@@ -233,6 +233,10 @@ void ImGuiPopDisabled(ImGui* context) {
     }
 }
 
+bool ImGuiIsMouseConsumed(ImGui* context) {
+    return context->mouseInputConsumed;
+}
+
 bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text) {
     u32 id = GenerateId(context);
     bool isDisabled = context->disabledDepth > 0;

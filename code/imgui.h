@@ -22,6 +22,7 @@ font* ImGuiGetFont(ImGui* context);
 // State management
 void ImGuiPushDisabled(ImGui* context);
 void ImGuiPopDisabled(ImGui* context);
+bool ImGuiIsMouseConsumed(ImGui* context);
 
 // Control functions
 bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text);
