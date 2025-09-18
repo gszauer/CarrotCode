@@ -567,10 +567,10 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 
     view->showLineNumbers = showLineNumbers;
 
-    // Draw document background - SPECTRUM_DARKEST_GRAY_100 (one step lighter than menu/tab bars)
+    // Draw document background - SPECTRUM_DARKEST_GRAY_75 (swapped with line number gutter)
     canvas_draw_rect(cnvs, view->displayAreaX, view->displayAreaY,
                      view->displayAreaW, view->displayAreaH,
-                     0x2F, 0x2F, 0x2F);
+                     0x27, 0x27, 0x27);
 
     f32 viewWidth = view->displayAreaW;
     f32 viewHeight = view->displayAreaH;
@@ -605,16 +605,16 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         u32 charWidth = font_get_char_width(fnt, '0');
         u32 marginSplit = charWidth / 2;
 
-        // Draw line number background - SPECTRUM_DARKEST_GRAY_75 (darker than document)
+        // Draw line number background - SPECTRUM_DARKEST_GRAY_100 (swapped - now lighter)
         // Reduce width slightly to give some margin pixels to the document area
         canvas_draw_rect(cnvs, view->displayAreaX, view->displayAreaY,
                         view->lineNumberWidth - marginSplit, view->displayAreaH,
-                        0x27, 0x27, 0x27);  // Same as menu/tab bar for consistency
+                        0x2F, 0x2F, 0x2F);  // Now using the lighter gray
 
         // Draw a thin strip of document background color in the margin area
         canvas_draw_rect(cnvs, view->displayAreaX + view->lineNumberWidth - marginSplit, view->displayAreaY,
                         marginSplit, view->displayAreaH,
-                        0x2F, 0x2F, 0x2F);  // Document background color
+                        0x27, 0x27, 0x27);  // Document background color (now darker)
 
         // Draw line numbers
         for (u32 lineIdx = firstVisibleLine; lineIdx < lastVisibleLine; lineIdx++) {
