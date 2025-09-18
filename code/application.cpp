@@ -177,6 +177,13 @@ canvas* Render(UserData* user) {
 
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 0)) clickedItem = 0;
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 1)) clickedItem = 1;
+
+        // Disable Save and Close if no document is open
+        bool hasDocument = !user->views.empty();
+        if (!hasDocument) {
+            ImGuiPushDisabled(user->imgui_context);
+        }
+
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 2)) clickedItem = 2;
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 3)) {
             // Close current tab
@@ -204,13 +211,29 @@ canvas* Render(UserData* user) {
             }
             menuIndex = -1;
         }
+
+        if (!hasDocument) {
+            ImGuiPopDisabled(user->imgui_context);
+        }
+
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 4)) clickedItem = 4;
 
         if (clickedItem >= 0) {
             menuIndex = -1;
 
-            // Handle Exit menu item
-            if (clickedItem == 4) {
+            // Handle File menu items
+            if (clickedItem == 0) {  // New
+                // Create a new empty document with 100 undo levels
+                document* doc = doc_create(100);
+                // Add an initial empty line
+                u32 empty_data[] = {0};
+                u32_string* empty_line = u32str_init(empty_data);
+                doc_append_line_str32(doc, empty_line);
+                u32str_destroy(empty_line);
+                // Add the document view with no path (nullptr)
+                AddDocumentView(user, doc, nullptr);
+            }
+            else if (clickedItem == 4) {  // Exit
                 platform_exit();
             }
         }
@@ -385,14 +408,18 @@ canvas* Render(UserData* user) {
     }
     else if (menuIndex == 3) {
         menuX = 265;
-        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 3, 220);
+        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 2, 220);
 
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
 
         if (clickedItem >= 0) {
             menuIndex = -1;
+
+            // Handle Help menu items
+            if (clickedItem == 1) {  // Github
+                platform_launch_browser("https://github.com/gszauer/CarrotCode");
+            }
         }
     }
 
@@ -438,7 +465,7 @@ canvas* Render(UserData* user) {
 
                 is_open = ImGuiTab(user->imgui_context, filename);
             } else {
-                snprintf(tab_text, sizeof(tab_text), "Untitled %zu", i + 1);
+                strcpy(tab_text, "Unsaved");
                 is_open = ImGuiTab(user->imgui_context, tab_text);
             }
 
@@ -537,8 +564,20 @@ canvas* Render(UserData* user) {
         ImGuiRenderBeginMenu(user->imgui_context, 0, menuY, 5);
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 0, "New");
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 1, "Open");
+
+        // Disable Save and Close if no document is open
+        bool hasDocument = !user->views.empty();
+        if (!hasDocument) {
+            ImGuiPushDisabled(user->imgui_context);
+        }
+
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 2, "Save");
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 3, "Close");
+
+        if (!hasDocument) {
+            ImGuiPopDisabled(user->imgui_context);
+        }
+
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 4, "Exit");
         ImGuiRenderEndMenu(user->imgui_context);
     }
@@ -607,10 +646,9 @@ canvas* Render(UserData* user) {
         ImGuiRenderEndMenu(user->imgui_context);
     }
     else if (menuIndex == 3) {
-        ImGuiRenderBeginMenu(user->imgui_context, 265, menuY, 3);
+        ImGuiRenderBeginMenu(user->imgui_context, 265, menuY, 2);
         ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 0, "About");
-        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 1, "Tutorial");
-        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 2, "Github");
+        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 1, "Github");
         ImGuiRenderEndMenu(user->imgui_context);
     }
     else if (menuIndex == 4 && !user->views.empty()) {
@@ -637,7 +675,7 @@ canvas* Render(UserData* user) {
                 }
                 ImGuiRenderMenuItem(user->imgui_context, tabMenuX, tabMenuY, i, filename);
             } else {
-                snprintf(tab_text, sizeof(tab_text), "Untitled %zu", i + 1);
+                strcpy(tab_text, "Unsaved");
                 ImGuiRenderMenuItem(user->imgui_context, tabMenuX, tabMenuY, i, tab_text);
             }
         }

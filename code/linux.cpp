@@ -788,3 +788,16 @@ void platform_exit() {
         g_windowData->closeWindow = true;
     }
 }
+
+void platform_launch_browser(const char* url) {
+    if (!url) return;
+
+    // Use xdg-open on Linux, which is the standard way to open URLs
+    // It will use the user's default browser
+    char command[2048];
+    snprintf(command, sizeof(command), "xdg-open '%s' 2>/dev/null &", url);
+
+    // Use system() to execute the command
+    // The & at the end runs it in background so we don't block
+    system(command);
+}

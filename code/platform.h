@@ -11,5 +11,6 @@ typedef void (*platform_clipboard_paste_text_callback)(u32_string* content, void
 void platform_clipboard_paste_text(platform_clipboard_paste_text_callback callback, void* userData);
 
 void platform_exit();
+void platform_launch_browser(const char* url);
 
 #endif
