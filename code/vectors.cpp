@@ -2,9 +2,7 @@
 #define CARROT_INCLUDE_STRING_DEFS
 #include "strings.h"
 #undef CARROT_INCLUDE_STRING_DEFS
-#define CARROT_INCLUDE_SYNTAX_DEFS
-#include "syntax.h"
-#undef CARROT_INCLUDE_SYNTAX_DEFS
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -28,11 +26,7 @@ struct vector_str32 {
     unsigned int capacity;
 };
 
-struct vector_docline {
-    document_line** data;
-    u32 size;
-    u32 capacity;
-};
+
 
 // vector_str8 implementations
 vector_str8* vec_str8_create() {
@@ -381,140 +375,6 @@ vector_str32* vec_str32_clone(vector_str32* vec) {
         clone->data[i] = vec->data[i];
     }
     clone->size = vec->size;
-    
-    return clone;
-}
-
-// vector_docline implementations
-vector_docline* vec_docline_create() {
-    vector_docline* vec = (vector_docline*)malloc(sizeof(vector_docline));
-    vec->data = nullptr;
-    vec->size = 0;
-    vec->capacity = 0;
-    return vec;
-}
-
-void vec_docline_destroy(vector_docline* vec) {
-    if (!vec) return;
-    
-    for (u32 i = 0; i < vec->size; i++) {
-        docline_destroy(vec->data[i]);
-    }
-    
-    if (vec->data) {
-        free(vec->data);
-    }
-    free(vec);
-}
-
-void vec_docline_clear(vector_docline* vec) {
-    if (!vec) return;
-    
-    for (u32 i = 0; i < vec->size; i++) {
-        docline_destroy(vec->data[i]);
-    }
-    vec->size = 0;
-}
-
-void vec_docline_reserve(vector_docline* vec, u32 count) {
-    if (!vec || count <= vec->capacity) return;
-    
-    document_line** new_data = (document_line**)realloc(vec->data, count * sizeof(document_line*));
-    if (new_data) {
-        vec->data = new_data;
-        vec->capacity = count;
-    }
-}
-
-void vec_docline_resize(vector_docline* vec, u32 size) {
-    if (!vec) return;
-    
-    if (size > vec->capacity) {
-        vec_docline_reserve(vec, size);
-    }
-    
-    if (size > vec->size) {
-        for (u32 i = vec->size; i < size; i++) {
-            vec->data[i] = docline_create();
-        }
-    } else if (size < vec->size) {
-        for (u32 i = size; i < vec->size; i++) {
-            docline_destroy(vec->data[i]);
-        }
-    }
-    
-    vec->size = size;
-}
-
-void vec_docline_push(vector_docline* vec, document_line* line) {
-    if (!vec || !line) return;
-    
-    if (vec->size >= vec->capacity) {
-        u32 new_capacity = vec->capacity == 0 ? 16 : vec->capacity * 2;
-        vec_docline_reserve(vec, new_capacity);
-    }
-    
-    vec->data[vec->size] = line;
-    vec->size++;
-}
-
-u32 vec_docline_size(vector_docline* vec) {
-    return vec ? vec->size : 0;
-}
-
-document_line* vec_docline_get(vector_docline* vec, u32 index) {
-    if (!vec || index >= vec->size) return nullptr;
-    return vec->data[index];
-}
-
-void vec_docline_insert(vector_docline* vec, u32 index, document_line* line) {
-    if (!vec || !line || index > vec->size) return;
-    
-    if (vec->size >= vec->capacity) {
-        u32 new_capacity = vec->capacity == 0 ? 16 : vec->capacity * 2;
-        vec_docline_reserve(vec, new_capacity);
-    }
-    
-    for (u32 i = vec->size; i > index; i--) {
-        vec->data[i] = vec->data[i - 1];
-    }
-    
-    vec->data[index] = line;
-    vec->size++;
-}
-
-void vec_docline_remove(vector_docline* vec, u32 index) {
-    if (!vec || index >= vec->size) return;
-    
-    docline_destroy(vec->data[index]);
-    
-    for (u32 i = index; i < vec->size - 1; i++) {
-        vec->data[i] = vec->data[i + 1];
-    }
-    
-    vec->size--;
-}
-
-vector_docline* vec_docline_clone(vector_docline* vec) {
-    if (!vec) return nullptr;
-    
-    vector_docline* clone = vec_docline_create();
-    vec_docline_reserve(clone, vec->capacity);
-    
-    for (u32 i = 0; i < vec->size; i++) {
-        document_line* original = vec->data[i];
-        document_line* line_clone = docline_create_with_text(original->text);
-        line_clone->dirty = original->dirty;
-        
-        if (original->token_count > 0) {
-            line_clone->tokens = (token_span*)malloc(original->token_capacity * sizeof(token_span));
-            memcpy(line_clone->tokens, original->tokens, original->token_count * sizeof(token_span));
-            line_clone->token_count = original->token_count;
-            line_clone->token_capacity = original->token_capacity;
-        }
-        
-        vec_docline_push(clone, line_clone);
-    }
     
     return clone;
 }

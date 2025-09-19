@@ -6,6 +6,79 @@
 #include <cstring>
 #include <cctype>
 
+struct document_line {
+    u32_string* text;
+    bool dirty;
+    token_span* tokens;
+    u32 token_count;
+    u32 token_capacity;
+};
+
+struct vector_docline {
+    document_line** data;
+    u32 size;
+    u32 capacity;
+};
+
+token_span* docline_access_tokens(document_line* line) {
+    if (line) {
+        return line->tokens;
+    }
+    return 0;
+}
+
+u32 docline_get_token_count(document_line* line) {
+    if (line) {
+        return line->token_count;
+    }
+    return 0;
+}
+
+u32_string* docline_access_text(document_line* lineNum) {
+    if (lineNum) {
+        return lineNum->text;
+    }
+    return 0;
+}
+
+u32 docline_get_text_length(document_line* lineNum) {
+    if (lineNum) {
+        return u32str_length(lineNum->text);
+    }
+    return 0;
+}
+
+bool docline_is_dirty(document_line* line) {
+    if (line) {
+        return line->dirty;
+    }
+    return false;
+}
+
+void docline_text_remove(document_line* line, u32 startIndex, u32 length) {
+    if (line) {
+        u32str_remove(line->text, startIndex, length);
+    }
+}
+
+u32_string* docline_text_substr(document_line* line, u32 startIndex, u32 length) {
+    if (line) {
+        u32str_substr(line->text, startIndex, length);
+    }
+    return 0;
+}
+
+void docline_text_insert(document_line* line, const u32_string* source, u32 targetStart, u32 sourceStart, u32 length) {
+    if (line) {
+        u32str_insert(line->text, source, targetStart, sourceStart, length);
+    }
+}
+
+void docline_text_insert_char(document_line* line, u32 index, u32 character) {
+    if (line) {
+        u32str_insert_char(line->text, index, character);
+    }
+}
 
 document_line* docline_create() {
     document_line* line = (document_line*)malloc(sizeof(document_line));
@@ -247,4 +320,141 @@ void docline_tokenize(document_line* line) {
     }
     
     line->dirty = false;
+}
+
+
+
+
+// vector_docline implementations
+vector_docline* vec_docline_create() {
+    vector_docline* vec = (vector_docline*)malloc(sizeof(vector_docline));
+    vec->data = nullptr;
+    vec->size = 0;
+    vec->capacity = 0;
+    return vec;
+}
+
+void vec_docline_destroy(vector_docline* vec) {
+    if (!vec) return;
+    
+    for (u32 i = 0; i < vec->size; i++) {
+        docline_destroy(vec->data[i]);
+    }
+    
+    if (vec->data) {
+        free(vec->data);
+    }
+    free(vec);
+}
+
+void vec_docline_clear(vector_docline* vec) {
+    if (!vec) return;
+    
+    for (u32 i = 0; i < vec->size; i++) {
+        docline_destroy(vec->data[i]);
+    }
+    vec->size = 0;
+}
+
+void vec_docline_reserve(vector_docline* vec, u32 count) {
+    if (!vec || count <= vec->capacity) return;
+    
+    document_line** new_data = (document_line**)realloc(vec->data, count * sizeof(document_line*));
+    if (new_data) {
+        vec->data = new_data;
+        vec->capacity = count;
+    }
+}
+
+void vec_docline_resize(vector_docline* vec, u32 size) {
+    if (!vec) return;
+    
+    if (size > vec->capacity) {
+        vec_docline_reserve(vec, size);
+    }
+    
+    if (size > vec->size) {
+        for (u32 i = vec->size; i < size; i++) {
+            vec->data[i] = docline_create();
+        }
+    } else if (size < vec->size) {
+        for (u32 i = size; i < vec->size; i++) {
+            docline_destroy(vec->data[i]);
+        }
+    }
+    
+    vec->size = size;
+}
+
+void vec_docline_push(vector_docline* vec, document_line* line) {
+    if (!vec || !line) return;
+    
+    if (vec->size >= vec->capacity) {
+        u32 new_capacity = vec->capacity == 0 ? 16 : vec->capacity * 2;
+        vec_docline_reserve(vec, new_capacity);
+    }
+    
+    vec->data[vec->size] = line;
+    vec->size++;
+}
+
+u32 vec_docline_size(vector_docline* vec) {
+    return vec ? vec->size : 0;
+}
+
+document_line* vec_docline_get(vector_docline* vec, u32 index) {
+    if (!vec || index >= vec->size) return nullptr;
+    return vec->data[index];
+}
+
+void vec_docline_insert(vector_docline* vec, u32 index, document_line* line) {
+    if (!vec || !line || index > vec->size) return;
+    
+    if (vec->size >= vec->capacity) {
+        u32 new_capacity = vec->capacity == 0 ? 16 : vec->capacity * 2;
+        vec_docline_reserve(vec, new_capacity);
+    }
+    
+    for (u32 i = vec->size; i > index; i--) {
+        vec->data[i] = vec->data[i - 1];
+    }
+    
+    vec->data[index] = line;
+    vec->size++;
+}
+
+void vec_docline_remove(vector_docline* vec, u32 index) {
+    if (!vec || index >= vec->size) return;
+    
+    docline_destroy(vec->data[index]);
+    
+    for (u32 i = index; i < vec->size - 1; i++) {
+        vec->data[i] = vec->data[i + 1];
+    }
+    
+    vec->size--;
+}
+
+vector_docline* vec_docline_clone(vector_docline* vec) {
+    if (!vec) return nullptr;
+    
+    vector_docline* clone = vec_docline_create();
+    vec_docline_reserve(clone, vec->capacity);
+    
+    for (u32 i = 0; i < vec->size; i++) {
+        document_line* original = vec->data[i];
+        document_line* line_clone = docline_create_with_text(original->text);
+        line_clone->dirty = original->dirty;
+        
+        if (original->token_count > 0) {
+            line_clone->tokens = (token_span*)malloc(original->token_capacity * sizeof(token_span));
+            memcpy(line_clone->tokens, original->tokens, original->token_count * sizeof(token_span));
+            line_clone->token_count = original->token_count;
+            line_clone->token_capacity = original->token_capacity;
+        }
+        
+        vec_docline_push(clone, line_clone);
+    }
+    
+    return clone;
 }

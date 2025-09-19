@@ -190,7 +190,7 @@ u32_string* doc_to_str32(document* doc) {
     
     for (u32 i = 0; i < line_count; i++) {
         document_line* line = vec_docline_get(doc->lines, i);
-        total_length += u32str_length(line->text);
+        total_length += docline_get_text_length(line);
         if (i < line_count - 1) {
             total_length++;
         }
@@ -202,11 +202,11 @@ u32_string* doc_to_str32(document* doc) {
 
     for (u32 i = 0; i < line_count; i++) {
         document_line* line = vec_docline_get(doc->lines, i);
-        u32 line_len = u32str_length(line->text);
+        u32 line_len = docline_get_text_length(line);
 
         // Copy line content
         for (u32 j = 0; j < line_len; j++) {
-            buffer[pos++] = u32str_get(line->text, j);
+            buffer[pos++] = u32str_get(docline_access_text(line), j);
         }
 
         // Add newline after each line except the last
@@ -230,8 +230,8 @@ u32 doc_line_count(document* doc) {
 u32 doc_get_line_length(document* doc, u32 line_index) {
     if (!doc || line_index >= vec_docline_size(doc->lines)) return 0;
     document_line* line = vec_docline_get(doc->lines, line_index);
-    if (!line || !line->text) return 0;
-    return u32str_length(line->text);
+    if (!line || !docline_access_text(line)) return 0;
+    return docline_get_text_length(line);
 }
 
 bool doc_is_modified(document* doc) {
@@ -245,7 +245,7 @@ void doc_set_modified(document* doc, bool modified) {
 u32_string* doc_get_line(document* doc, u32 line_index) {
     if (!doc || line_index >= vec_docline_size(doc->lines)) return nullptr;
     document_line* line = vec_docline_get(doc->lines, line_index);
-    return line ? line->text : nullptr;
+    return line ? docline_access_text(line) : nullptr;
 }
 
 u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_line, u32 end_col) {
@@ -257,7 +257,7 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
     if (end_line >= line_count) {
         end_line = line_count - 1;
         document_line* last_line = vec_docline_get(doc->lines, end_line);
-        end_col = u32str_length(last_line->text);
+        end_col = docline_get_text_length(last_line);
     }
     
     u32_string* result = u32str_create();
@@ -265,13 +265,13 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
     if (start_line == end_line) {
         document_line* line = vec_docline_get(doc->lines, start_line);
         u32 length = end_col - start_col;
-        u32_string* substr = u32str_substr(line->text, start_col, length);
+        u32_string* substr = docline_text_substr(line, start_col, length);
         u32str_insert(result, substr, 0, 0, u32str_length(substr));
         u32str_destroy(substr);
     } else {
         document_line* first_line = vec_docline_get(doc->lines, start_line);
-        u32 first_length = u32str_length(first_line->text) - start_col;
-        u32_string* first_substr = u32str_substr(first_line->text, start_col, first_length);
+        u32 first_length = docline_get_text_length(first_line) - start_col;
+        u32_string* first_substr = docline_text_substr(first_line, start_col, first_length);
         u32str_insert(result, first_substr, 0, 0, u32str_length(first_substr));
         u32str_destroy(first_substr);
         
@@ -284,7 +284,7 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
         
         for (u32 i = start_line + 1; i < end_line; i++) {
             document_line* line = vec_docline_get(doc->lines, i);
-            u32str_insert(result, line->text, u32str_length(result), 0, u32str_length(line->text));
+            u32str_insert(result, docline_access_text(line), u32str_length(result), 0, docline_get_text_length(line));
             
             u32_string* nl = u32str_create();
             u32str_reserve(nl, 4);
@@ -294,7 +294,7 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
         }
         
         document_line* last_line = vec_docline_get(doc->lines, end_line);
-        u32_string* last_substr = u32str_substr(last_line->text, 0, end_col);
+        u32_string* last_substr = docline_text_substr(last_line, 0, end_col);
         u32str_insert(result, last_substr, u32str_length(result), 0, u32str_length(last_substr));
         u32str_destroy(last_substr);
     }
@@ -363,12 +363,12 @@ void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
     }
 
     document_line* doc_line = vec_docline_get(doc->lines, line);
-    if (col > u32str_length(doc_line->text)) {
-        col = u32str_length(doc_line->text);
+    if (col > docline_get_text_length(doc_line)) {
+        col = docline_get_text_length(doc_line);
     }
 
     // Insert the character into the document
-    u32str_insert_char(doc_line->text, col, codepoint);
+    docline_text_insert_char(doc_line, col, codepoint);
     docline_mark_dirty(doc_line);
 
     // Check if we need to start a new word or continue building one
@@ -421,18 +421,18 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
     commit_word_undo(doc);
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
-    if (col > u32str_length(doc_line->text)) {
-        col = u32str_length(doc_line->text);
+    if (col > docline_get_text_length(doc_line)) {
+        col = docline_get_text_length(doc_line);
     }
     
     i32 newline_pos = u32str_indexOf(text, '\n');
     
     if (newline_pos == -1) {
-        u32str_insert(doc_line->text, text, col, 0, u32str_length(text));
+        docline_text_insert(doc_line, text, col, 0, u32str_length(text));
         docline_mark_dirty(doc_line);
     } else {
-        u32_string* remainder = u32str_substr(doc_line->text, col, u32str_length(doc_line->text) - col);
-        u32str_remove(doc_line->text, col, u32str_length(doc_line->text) - col);
+        u32_string* remainder = docline_text_substr(doc_line, col, docline_get_text_length(doc_line) - col);
+        docline_text_remove(doc_line, col, docline_get_text_length(doc_line) - col);
         docline_mark_dirty(doc_line);
         
         u32 text_start = 0;
@@ -450,7 +450,7 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
             if (next_newline == -1) {
                 u32_string* last_part = u32str_substr(text, text_start, u32str_length(text) - text_start);
                 if (current_line == line) {
-                    u32str_insert(doc_line->text, last_part, u32str_length(doc_line->text), 0, u32str_length(last_part));
+                    docline_text_insert(doc_line, last_part, docline_get_text_length(doc_line), 0, u32str_length(last_part));
                     docline_mark_dirty(doc_line);
                 } else {
                     u32_string* new_text = u32str_create();
@@ -466,7 +466,7 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
                 u32_string* part = u32str_substr(text, text_start, part_length);
                 
                 if (current_line == line) {
-                    u32str_insert(doc_line->text, part, u32str_length(doc_line->text), 0, u32str_length(part));
+                    docline_text_insert(doc_line, part, docline_get_text_length(doc_line), 0, u32str_length(part));
                     docline_mark_dirty(doc_line);
                     current_line++;
                     document_line* new_line = docline_create();
@@ -486,7 +486,7 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
         }
         
         document_line* last_line = vec_docline_get(doc->lines, current_line);
-        u32str_insert(last_line->text, remainder, u32str_length(last_line->text), 0, u32str_length(remainder));
+        docline_text_insert(last_line, remainder, docline_get_text_length(last_line), 0, u32str_length(remainder));
         docline_mark_dirty(last_line);
         u32str_destroy(remainder);
     }
@@ -525,9 +525,9 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
     
-    if (col < u32str_length(doc_line->text)) {
-        u32 deleted_char = u32str_get(doc_line->text, col);
-        u32str_remove(doc_line->text, col, 1);
+    if (col < docline_get_text_length(doc_line)) {
+        u32 deleted_char = u32str_get(docline_access_text(doc_line), col);
+        u32str_remove(docline_access_text(doc_line), col, 1);
         docline_mark_dirty(doc_line);
         
         edit_action action;
@@ -543,9 +543,9 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
         action.cursor_line_after_undo = line;
         action.cursor_col_after_undo = col + 1;
         add_undo_action(doc, action);
-    } else if (col == u32str_length(doc_line->text) && line + 1 < vec_docline_size(doc->lines)) {
+    } else if (col == docline_get_text_length(doc_line) && line + 1 < vec_docline_size(doc->lines)) {
         document_line* next_line = vec_docline_get(doc->lines, line + 1);
-        u32str_insert(doc_line->text, next_line->text, u32str_length(doc_line->text), 0, u32str_length(next_line->text));
+        docline_text_insert(doc_line, docline_access_text(next_line), docline_get_text_length(doc_line), 0, docline_get_text_length(next_line));
         docline_mark_dirty(doc_line);
         vec_docline_remove(doc->lines, line + 1);
         
@@ -575,16 +575,16 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
     
     if (start_line == end_line) {
         document_line* line = vec_docline_get(doc->lines, start_line);
-        u32str_remove(line->text, start_col, end_col - start_col);
+        u32str_remove(docline_access_text(line), start_col, end_col - start_col);
         docline_mark_dirty(line);
     } else {
         document_line* first_line = vec_docline_get(doc->lines, start_line);
         document_line* last_line = vec_docline_get(doc->lines, end_line);
         
-        u32_string* remainder = u32str_substr(last_line->text, end_col, u32str_length(last_line->text) - end_col);
+        u32_string* remainder = docline_text_substr(last_line, end_col, docline_get_text_length(last_line) - end_col);
         
-        u32str_remove(first_line->text, start_col, u32str_length(first_line->text) - start_col);
-        u32str_insert(first_line->text, remainder, u32str_length(first_line->text), 0, u32str_length(remainder));
+        u32str_remove(docline_access_text(first_line), start_col, docline_get_text_length(first_line) - start_col);
+        u32str_insert(docline_access_text(first_line), remainder, docline_get_text_length(first_line), 0, u32str_length(remainder));
         docline_mark_dirty(first_line);
         u32str_destroy(remainder);
         
@@ -648,16 +648,16 @@ void doc_delete_line(document* doc, u32 line_index) {
 
     printf("[doc_delete_line] Getting line at index %u\n", line_index);
     document_line* deleted_line = vec_docline_get(doc->lines, line_index);
-    if (!deleted_line || !deleted_line->text) {
+    if (!deleted_line || !docline_access_text(deleted_line)) {
         // If line is invalid, just remove it from the vector
         printf("[doc_delete_line] Line is invalid (deleted_line=%p, text=%p), removing from vector\n",
-               deleted_line, deleted_line ? deleted_line->text : nullptr);
+               deleted_line, deleted_line ? docline_access_text(deleted_line) : nullptr);
         vec_docline_remove(doc->lines, line_index);
         return;
     }
 
-    printf("[doc_delete_line] Creating copy of line text (length=%u)\n", u32str_length(deleted_line->text));
-    u32_string* line_copy = u32str_substr(deleted_line->text, 0, u32str_length(deleted_line->text));
+    printf("[doc_delete_line] Creating copy of line text (length=%u)\n", docline_get_text_length(deleted_line));
+    u32_string* line_copy = docline_text_substr(deleted_line, 0, docline_get_text_length(deleted_line));
 
     printf("[doc_delete_line] Removing line from vector\n");
     vec_docline_remove(doc->lines, line_index);
@@ -687,12 +687,12 @@ void doc_split_line(document* doc, u32 line, u32 col) {
     commit_word_undo(doc);
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
-    if (col > u32str_length(doc_line->text)) {
-        col = u32str_length(doc_line->text);
+    if (col > docline_get_text_length(doc_line)) {
+        col = docline_get_text_length(doc_line);
     }
     
-    u32_string* new_text = u32str_substr(doc_line->text, col, u32str_length(doc_line->text) - col);
-    u32str_remove(doc_line->text, col, u32str_length(doc_line->text) - col);
+    u32_string* new_text = docline_text_substr(doc_line, col, docline_get_text_length(doc_line) - col);
+    docline_text_remove(doc_line, col, docline_get_text_length(doc_line) - col);
     docline_mark_dirty(doc_line);
     
     document_line* new_line = docline_create_with_text(new_text);
@@ -720,8 +720,8 @@ void doc_join_lines(document* doc, u32 line) {
     document_line* doc_line = vec_docline_get(doc->lines, line);
     document_line* next_line = vec_docline_get(doc->lines, line + 1);
     
-    u32 join_pos = u32str_length(doc_line->text);
-    u32str_insert(doc_line->text, next_line->text, u32str_length(doc_line->text), 0, u32str_length(next_line->text));
+    u32 join_pos = docline_get_text_length(doc_line);
+    docline_text_insert(doc_line, docline_access_text(next_line), docline_get_text_length(doc_line), 0, docline_get_text_length(next_line));
     docline_mark_dirty(doc_line);
     vec_docline_remove(doc->lines, line + 1);
     
@@ -754,7 +754,7 @@ void doc_undo(document* doc) {
         case edit_action::INSERT_CHAR:
             {
                 document_line* line = vec_docline_get(doc->lines, action->line);
-                u32str_remove(line->text, action->col, 1);
+                docline_text_remove(line, action->col, 1);
                 docline_mark_dirty(line);
             }
             break;
@@ -762,7 +762,7 @@ void doc_undo(document* doc) {
         case edit_action::DELETE_CHAR:
             {
                 document_line* line = vec_docline_get(doc->lines, action->line);
-                u32str_insert_char(line->text, action->col, action->codepoint);
+                docline_text_insert_char(line, action->col, action->codepoint);
                 docline_mark_dirty(line);
             }
             break;
@@ -778,7 +778,7 @@ void doc_undo(document* doc) {
                 
                 if (newline_count == 0) {
                     document_line* line = vec_docline_get(doc->lines, action->line);
-                    u32str_remove(line->text, action->col, u32str_length(action->text));
+                    docline_text_remove(line, action->col, u32str_length(action->text));
                     docline_mark_dirty(line);
                 } else {
                     document_line* first_line = vec_docline_get(doc->lines, action->line);
@@ -793,11 +793,11 @@ void doc_undo(document* doc) {
                     }
                     
                     u32 text_after_last_newline = u32str_length(action->text) - last_newline - 1;
-                    u32_string* remainder = u32str_substr(last_line->text, text_after_last_newline, 
-                                                         u32str_length(last_line->text) - text_after_last_newline);
+                    u32_string* remainder = docline_text_substr(last_line, text_after_last_newline, 
+                                                         docline_get_text_length(last_line) - text_after_last_newline);
                     
-                    u32str_remove(first_line->text, action->col, u32str_length(first_line->text) - action->col);
-                    u32str_insert(first_line->text, remainder, u32str_length(first_line->text), 0, u32str_length(remainder));
+                    docline_text_remove(first_line, action->col, docline_get_text_length(first_line) - action->col);
+                    docline_text_insert(first_line, remainder, docline_get_text_length(first_line), 0, u32str_length(remainder));
                     docline_mark_dirty(first_line);
                     u32str_destroy(remainder);
                     
@@ -854,7 +854,7 @@ void doc_redo(document* doc) {
         case edit_action::INSERT_CHAR:
             {
                 document_line* line = vec_docline_get(doc->lines, action->line);
-                u32str_insert_char(line->text, action->col, action->codepoint);
+                docline_text_insert_char(line, action->col, action->codepoint);
                 docline_mark_dirty(line);
             }
             break;
@@ -862,7 +862,7 @@ void doc_redo(document* doc) {
         case edit_action::DELETE_CHAR:
             {
                 document_line* line = vec_docline_get(doc->lines, action->line);
-                u32str_remove(line->text, action->col, 1);
+                docline_text_remove(line, action->col, 1);
                 docline_mark_dirty(line);
             }
             break;
@@ -941,7 +941,7 @@ void doc_tokenize_line(document* doc, u32 line) {
     if (!doc || line >= vec_docline_size(doc->lines)) return;
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
-    if (doc_line && doc_line->dirty) {
+    if (doc_line && docline_is_dirty(doc_line)) {
         docline_tokenize(doc_line);
     }
 }
@@ -950,23 +950,23 @@ bool doc_is_line_dirty(document* doc, u32 line) {
     if (!doc || line >= vec_docline_size(doc->lines)) return false;
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
-    return doc_line ? doc_line->dirty : false;
+    return doc_line ? docline_is_dirty(doc_line) : false;
 }
 
 token_span* doc_get_line_tokens(document* doc, u32 line_index) {
     if (!doc || line_index >= vec_docline_size(doc->lines)) return nullptr;
     
     document_line* doc_line = vec_docline_get(doc->lines, line_index);
-    if (!doc_line || doc_line->dirty) return nullptr;
+    if (!doc_line || docline_is_dirty(doc_line)) return nullptr;
     
-    return doc_line->tokens;
+    return docline_access_tokens(doc_line);
 }
 
 u32 doc_get_line_token_count(document* doc, u32 line_index) {
     if (!doc || line_index >= vec_docline_size(doc->lines)) return 0;
     
     document_line* doc_line = vec_docline_get(doc->lines, line_index);
-    if (!doc_line || doc_line->dirty) return 0;
+    if (!doc_line || docline_is_dirty(doc_line)) return 0;
     
-    return doc_line->token_count;
+    return docline_get_token_count(doc_line);
 }
