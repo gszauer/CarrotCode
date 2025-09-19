@@ -385,7 +385,24 @@ int main(int argc, char** argv) {
                         // Check for clipboard shortcuts before passing to ImGui/document
                         bool handled = false;
                         if (isKeyDown && ctrlDown && !user->waiting_for_operation) {
-                            if (!user->views.empty() && user->active_view < user->views.size()) {
+                            // Handle Ctrl+N and Ctrl+O even when no document is open
+                            if (keysym == XK_o || keysym == XK_O) {  // Ctrl+O (Open)
+                                user->waiting_for_operation = true;
+                                platform_open_file(file_open_callback, user);
+                                handled = true;
+                            }
+                            else if (keysym == XK_n || keysym == XK_N) {  // Ctrl+N (New)
+                                // Create a new empty document
+                                document* doc = doc_create(100);
+                                u32 empty_data[] = {0};
+                                u32_string* empty_line = u32str_init(empty_data);
+                                doc_append_line_str32(doc, empty_line);
+                                u32str_destroy(empty_line);
+                                AddDocumentView(user, doc, nullptr);
+                                handled = true;
+                            }
+                            // Other shortcuts require an active document view
+                            else if (!user->views.empty() && user->active_view < user->views.size()) {
                                 document_view* view = user->views[user->active_view];
                                 if (view) {
                                     if (keysym == XK_x || keysym == XK_X) {  // Ctrl+X (Cut)
@@ -576,21 +593,6 @@ int main(int argc, char** argv) {
                                                 }
                                             }
                                         }
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_o || keysym == XK_O) {  // Ctrl+O (Open)
-                                        user->waiting_for_operation = true;
-                                        platform_open_file(file_open_callback, user);
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_n || keysym == XK_N) {  // Ctrl+N (New)
-                                        // Create a new empty document
-                                        document* doc = doc_create(100);
-                                        u32 empty_data[] = {0};
-                                        u32_string* empty_line = u32str_init(empty_data);
-                                        doc_append_line_str32(doc, empty_line);
-                                        u32str_destroy(empty_line);
-                                        AddDocumentView(user, doc, nullptr);
                                         handled = true;
                                     }
                                     else if (keysym == XK_d || keysym == XK_D) {  // Ctrl+D (Duplicate Line)
