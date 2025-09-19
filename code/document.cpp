@@ -147,22 +147,28 @@ u32_string* doc_to_str32(document* doc) {
         }
     }
     
-    u32_string* result = u32str_create();
-    u32str_reserve(result, total_length * 4);
-    
+    // Allocate buffer for the entire content
+    u32* buffer = (u32*)malloc((total_length + 1) * sizeof(u32));
+    u32 pos = 0;
+
     for (u32 i = 0; i < line_count; i++) {
         document_line* line = vec_docline_get(doc->lines, i);
-        u32str_insert(result, line->text, u32str_length(result), 0, u32str_length(line->text));
-        
+        u32 line_len = u32str_length(line->text);
+
+        // Copy line content
+        for (u32 j = 0; j < line_len; j++) {
+            buffer[pos++] = u32str_get(line->text, j);
+        }
+
+        // Add newline after each line except the last
         if (i < line_count - 1) {
-            u32 newline = '\n';
-            u32_string* newline_str = u32str_create();
-            u32str_reserve(newline_str, 4);
-            u32str_set(newline_str, 0, newline);
-            u32str_insert(result, newline_str, u32str_length(result), 0, 1);
-            u32str_destroy(newline_str);
+            buffer[pos++] = '\n';
         }
     }
+    buffer[pos] = 0; // null terminator
+
+    u32_string* result = u32str_init(buffer);
+    free(buffer);
     
     return result;
 }

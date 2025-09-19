@@ -487,6 +487,10 @@ int main(int argc, char** argv) {
                                         platform_clipboard_paste_text(clipboard_paste_callback, user);
                                         handled = true;
                                     }
+                                    else if (keysym == XK_a || keysym == XK_A) {  // Ctrl+A (Select All)
+                                        document_view_select_all(view);
+                                        handled = true;
+                                    }
                                 }
                             }
                         }
@@ -883,4 +887,170 @@ void platform_open_file(platform_open_file_callback callback, void* userData) {
     }
 
     pclose(fp);
+}
+
+void platform_modal_yesno(const char* message, platform_modal_yesno_callback callback, void* userData) {
+    if (!callback) return;
+
+    bool result = false;
+
+    // Escape single quotes in the message for shell safety
+    std::string safe_message;
+    if (message) {
+        for (const char* p = message; *p; p++) {
+            if (*p == '\'') {
+                safe_message += "'\\''";
+            } else {
+                safe_message += *p;
+            }
+        }
+    }
+
+    // Try kdialog first (KDE systems)
+    char command[4096];
+    snprintf(command, sizeof(command),
+             "kdialog --yesno '%s' 2>/dev/null; echo $?",
+             safe_message.c_str());
+
+    FILE* fp = popen(command, "r");
+
+    if (!fp) {
+        // Try zenity as fallback (GNOME/GTK systems)
+        snprintf(command, sizeof(command),
+                 "zenity --question --text='%s' 2>/dev/null; echo $?",
+                 safe_message.c_str());
+        fp = popen(command, "r");
+    }
+
+    if (fp) {
+        // Read the exit code
+        char buffer[16];
+        if (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            int exit_code = atoi(buffer);
+            // Exit code 0 means Yes/OK was clicked
+            // Exit code 1 means No/Cancel was clicked
+            result = (exit_code == 0);
+        }
+        pclose(fp);
+    } else {
+        // No dialog tool available, default to false
+        result = false;
+    }
+
+    // Call the callback with the result and userData
+    callback(result, userData);
+}
+
+void platform_save_file_as(void* fileData, u32 fileSizeBytes, platform_save_file_as_callback callback, void* userData) {
+    if (!callback) return;
+
+    // Try kdialog first (KDE systems)
+    FILE* fp = popen("kdialog --getsavefilename . 2>/dev/null", "r");
+
+    if (!fp) {
+        // Try zenity as fallback (GNOME/GTK systems)
+        fp = popen("zenity --file-selection --save --confirm-overwrite 2>/dev/null", "r");
+    }
+
+    if (!fp) {
+        // No dialog tool available, call callback with null
+        callback(nullptr, userData);
+        return;
+    }
+
+    // Read the selected file path
+    char filepath[4096];
+    if (fgets(filepath, sizeof(filepath), fp) != nullptr) {
+        // Remove trailing newline
+        size_t len = strlen(filepath);
+        if (len > 0 && filepath[len-1] == '\n') {
+            filepath[len-1] = '\0';
+            len--;
+        }
+
+        // Check if user cancelled (empty path)
+        if (len > 0) {
+            // Write the file
+            FILE* file = fopen(filepath, "wb");
+            if (file) {
+                size_t bytes_written = 0;
+                if (fileData && fileSizeBytes > 0) {
+                    bytes_written = fwrite(fileData, 1, fileSizeBytes, file);
+                }
+                fclose(file);
+
+                if (bytes_written == fileSizeBytes || fileSizeBytes == 0) {
+                    // Success - convert filepath to u32_string
+                    u32* path_u32 = (u32*)malloc((len + 1) * sizeof(u32));
+                    for (size_t i = 0; i <= len; i++) {
+                        path_u32[i] = (u32)(unsigned char)filepath[i];
+                    }
+                    u32_string* path_str = u32str_init(path_u32);
+                    free(path_u32);
+
+                    // Call callback with file path
+                    callback(path_str, userData);
+
+                    // Clean up
+                    u32str_destroy(path_str);
+                } else {
+                    // Write failed
+                    fprintf(stderr, "Failed to write all data to file: %s\n", filepath);
+                    callback(nullptr, userData);
+                }
+            } else {
+                // Could not open file for writing
+                fprintf(stderr, "Failed to open file for writing: %s\n", filepath);
+                callback(nullptr, userData);
+            }
+        } else {
+            // User cancelled
+            callback(nullptr, userData);
+        }
+    } else {
+        // No file selected or error reading
+        callback(nullptr, userData);
+    }
+
+    pclose(fp);
+}
+
+void platform_write_file(u32_string* filePath, void* fileData, u32 fileSizeBytes, platform_write_file_callback callback, void* userData) {
+    if (!callback) return;
+
+    bool success = false;
+
+    if (filePath) {
+        // Convert u32_string path to char*
+        u32 path_len = u32str_length(filePath);
+        char* filepath = (char*)malloc(path_len + 1);
+        for (u32 i = 0; i < path_len; i++) {
+            filepath[i] = (char)u32str_get(filePath, i);
+        }
+        filepath[path_len] = '\0';
+
+        // Write the file
+        FILE* file = fopen(filepath, "wb");
+        if (file) {
+            size_t bytes_written = 0;
+            if (fileData && fileSizeBytes > 0) {
+                bytes_written = fwrite(fileData, 1, fileSizeBytes, file);
+            }
+            fclose(file);
+
+            if (bytes_written == fileSizeBytes || fileSizeBytes == 0) {
+                success = true;
+            } else {
+                fprintf(stderr, "Failed to write all data to file: %s (wrote %zu of %u bytes)\n",
+                        filepath, bytes_written, fileSizeBytes);
+            }
+        } else {
+            fprintf(stderr, "Failed to open file for writing: %s\n", filepath);
+        }
+
+        free(filepath);
+    }
+
+    // Call callback with result
+    callback(success, userData);
 }

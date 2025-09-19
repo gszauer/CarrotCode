@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
+#include <string>
 
 // Clipboard callback functions
 void clipboard_copy_callback(void* userData) {
@@ -31,6 +32,343 @@ void clipboard_paste_callback(u32_string* content, void* userData) {
             document_view_paste(view, text_data, text_len);
 
             free(text_data);
+        }
+    }
+}
+
+// Structure to hold data for the close confirmation callback
+struct CloseConfirmData {
+    UserData* user;
+    u32 view_index;
+    bool has_path;
+};
+
+// Structure to hold data for the save file as callback when closing
+struct SaveAsCloseData {
+    UserData* user;
+    u32 view_index;
+};
+
+// Structure to hold data for the write file callback when closing
+struct WriteFileCloseData {
+    UserData* user;
+    u32 view_index;
+};
+
+// Callback for write file operation when closing an existing document
+void write_file_close_callback(bool success, void* userData) {
+    WriteFileCloseData* data = (WriteFileCloseData*)userData;
+    UserData* user = data->user;
+    u32 view_index = data->view_index;
+
+    // Close the document regardless of whether save succeeded
+    if (view_index < user->views.size()) {
+        document_view* view = user->views[view_index];
+        document* doc = view->target;
+
+        if (success && doc) {
+            // Mark document as saved if write succeeded
+            doc_set_modified(doc, false);
+        }
+
+        // Destroy the document and its view
+        if (doc) {
+            doc_destroy(doc);
+        }
+        document_view_destroy(view);
+
+        // Remove from vector
+        user->views.erase(user->views.begin() + view_index);
+
+        // Adjust active tab after closing
+        if (!user->views.empty()) {
+            if (user->active_view >= user->views.size()) {
+                // We closed the last tab, select the new last tab
+                user->active_view = user->views.size() - 1;
+            } else if (view_index < user->active_view) {
+                // We closed a tab before the active one, adjust the index
+                user->active_view--;
+            }
+            // Otherwise keep the same index (which now points to the next tab)
+        } else {
+            // No tabs left
+            user->active_view = 0;
+        }
+    }
+
+    delete data;
+}
+
+// Callback for save file as operation when closing a new document
+void save_as_close_callback(u32_string* filePath, void* userData) {
+    SaveAsCloseData* data = (SaveAsCloseData*)userData;
+    UserData* user = data->user;
+    u32 view_index = data->view_index;
+
+    // Whether save succeeded or not, close the document
+    // (If filePath is not null, the save succeeded, but we close either way)
+
+    if (view_index < user->views.size()) {
+        document_view* view = user->views[view_index];
+        document* doc = view->target;
+
+        // If save succeeded, update the document's path
+        if (filePath) {
+            // Update the view's path
+            if (view->path) {
+                u32str_destroy(view->path);
+            }
+            // Create a copy of the path for the view
+            u32 path_len = u32str_length(filePath);
+            u32* path_copy = (u32*)malloc((path_len + 1) * sizeof(u32));
+            for (u32 i = 0; i <= path_len; i++) {
+                path_copy[i] = u32str_get(filePath, i);
+            }
+            view->path = u32str_init(path_copy);
+            free(path_copy);
+
+            // Mark document as saved
+            if (doc) {
+                doc_set_modified(doc, false);
+            }
+        }
+
+        // Now close the document
+        if (doc) {
+            doc_destroy(doc);
+        }
+        document_view_destroy(view);
+
+        // Remove from vector
+        user->views.erase(user->views.begin() + view_index);
+
+        // Adjust active tab after closing
+        if (!user->views.empty()) {
+            if (user->active_view >= user->views.size()) {
+                // We closed the last tab, select the new last tab
+                user->active_view = user->views.size() - 1;
+            } else if (view_index < user->active_view) {
+                // We closed a tab before the active one, adjust the index
+                user->active_view--;
+            }
+            // Otherwise keep the same index (which now points to the next tab)
+        } else {
+            // No tabs left
+            user->active_view = 0;
+        }
+    }
+
+    delete data;
+}
+
+// Callback for the save changes dialog when closing a document
+void close_confirm_callback(bool yes_clicked, void* userData) {
+    CloseConfirmData* data = (CloseConfirmData*)userData;
+    UserData* user = data->user;
+    u32 view_index = data->view_index;
+
+    if (yes_clicked) {
+        // User clicked Yes - they want to save
+        if (data->has_path) {
+            // Document has a backing file - save to existing path
+            if (view_index < user->views.size()) {
+                document_view* view = user->views[view_index];
+                document* doc = view->target;
+
+                if (doc && view->path) {
+                    // Convert document content to string (includes newlines between lines)
+                    u32_string* content = doc_to_str32(doc);
+
+                    if (content) {
+                        // Get the UTF-32 content length
+                        u32 content_len = u32str_length(content);
+
+                        // Convert to UTF-8 for compatibility with text editors
+                        // Allocate worst-case buffer (4 bytes per character)
+                        u32 buffer_size = content_len * 4 + 1;
+                        unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
+                        u32 utf8_len = 0;
+
+                        // Convert UTF-32 to UTF-8, preserving all Unicode characters
+                        for (u32 i = 0; i < content_len; i++) {
+                            u32 ch = u32str_get(content, i);
+
+                            if (ch <= 0x7F) {
+                                // 1-byte sequence (ASCII, including newlines)
+                                utf8_content[utf8_len++] = (unsigned char)ch;
+                            } else if (ch <= 0x7FF) {
+                                // 2-byte sequence
+                                utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                            } else if (ch <= 0xFFFF) {
+                                // 3-byte sequence
+                                utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                            } else if (ch <= 0x10FFFF) {
+                                // 4-byte sequence (for emojis and other extended Unicode)
+                                utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                            }
+                            // Skip invalid Unicode values above 0x10FFFF
+                        }
+
+                        // Create callback data for write file
+                        WriteFileCloseData* writeData = new WriteFileCloseData();
+                        writeData->user = user;
+                        writeData->view_index = view_index;
+
+                        // Call platform write file
+                        platform_write_file(view->path, utf8_content, utf8_len, write_file_close_callback, writeData);
+
+                        // Clean up
+                        free(utf8_content);
+                        u32str_destroy(content);
+                    }
+                }
+            }
+        } else {
+            // No backing file - use Save As dialog
+            if (view_index < user->views.size()) {
+                document_view* view = user->views[view_index];
+                document* doc = view->target;
+
+                if (doc) {
+                    // Convert document content to string (includes newlines between lines)
+                    u32_string* content = doc_to_str32(doc);
+
+                    if (content) {
+                        // Get the UTF-32 content length
+                        u32 content_len = u32str_length(content);
+
+                        // Convert to UTF-8 for compatibility with text editors
+                        // Allocate worst-case buffer (4 bytes per character)
+                        u32 buffer_size = content_len * 4 + 1;
+                        unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
+                        u32 utf8_len = 0;
+
+                        // Convert UTF-32 to UTF-8, preserving all Unicode characters
+                        for (u32 i = 0; i < content_len; i++) {
+                            u32 ch = u32str_get(content, i);
+
+                            if (ch <= 0x7F) {
+                                // 1-byte sequence (ASCII, including newlines)
+                                utf8_content[utf8_len++] = (unsigned char)ch;
+                            } else if (ch <= 0x7FF) {
+                                // 2-byte sequence
+                                utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                            } else if (ch <= 0xFFFF) {
+                                // 3-byte sequence
+                                utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                            } else if (ch <= 0x10FFFF) {
+                                // 4-byte sequence (for emojis and other extended Unicode)
+                                utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                            }
+                            // Skip invalid Unicode values above 0x10FFFF
+                        }
+
+                        // Create callback data for save as
+                        SaveAsCloseData* saveData = new SaveAsCloseData();
+                        saveData->user = user;
+                        saveData->view_index = view_index;
+
+                        // Call platform save file as with UTF-8 data
+                        platform_save_file_as(utf8_content, utf8_len, save_as_close_callback, saveData);
+
+                        // Clean up
+                        free(utf8_content);
+                        u32str_destroy(content);
+                    }
+                }
+            }
+        }
+    } else {
+        // User clicked No - close without saving
+        if (view_index < user->views.size()) {
+            document_view* view = user->views[view_index];
+            document* doc = view->target;
+
+            // Destroy the document and its view
+            if (doc) {
+                doc_destroy(doc);
+            }
+            document_view_destroy(view);
+
+            // Remove from vector
+            user->views.erase(user->views.begin() + view_index);
+
+            // Adjust active tab after closing
+            if (!user->views.empty()) {
+                if (user->active_view >= user->views.size()) {
+                    // We closed the last tab, select the new last tab
+                    user->active_view = user->views.size() - 1;
+                } else if (view_index < user->active_view) {
+                    // We closed a tab before the active one, adjust the index
+                    user->active_view--;
+                }
+                // Otherwise keep the same index (which now points to the next tab)
+            } else {
+                // No tabs left
+                user->active_view = 0;
+            }
+        }
+    }
+
+    delete data;
+}
+
+// Callback for save file operation
+void save_file_callback(bool success, void* userData) {
+    UserData* user = (UserData*)userData;
+
+    if (success) {
+        // Mark document as saved if we have an active view
+        if (!user->views.empty() && user->active_view < user->views.size()) {
+            document_view* view = user->views[user->active_view];
+            if (view && view->target) {
+                doc_set_modified(view->target, false);
+            }
+        }
+    } else {
+        fprintf(stderr, "Failed to save file\n");
+    }
+}
+
+// Callback for save as operation
+void save_as_callback(u32_string* filePath, void* userData) {
+    UserData* user = (UserData*)userData;
+
+    if (filePath) {
+        // Update the document's path
+        if (!user->views.empty() && user->active_view < user->views.size()) {
+            document_view* view = user->views[user->active_view];
+            if (view) {
+                // Update the view's path
+                if (view->path) {
+                    u32str_destroy(view->path);
+                }
+                // Create a copy of the path for the view
+                u32 path_len = u32str_length(filePath);
+                u32* path_copy = (u32*)malloc((path_len + 1) * sizeof(u32));
+                for (u32 i = 0; i <= path_len; i++) {
+                    path_copy[i] = u32str_get(filePath, i);
+                }
+                view->path = u32str_init(path_copy);
+                free(path_copy);
+
+                // Mark document as saved
+                if (view->target) {
+                    doc_set_modified(view->target, false);
+                }
+            }
         }
     }
 }
@@ -226,25 +564,64 @@ canvas* Render(UserData* user) {
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 3)) {
             // Close current tab
             if (!user->views.empty() && user->active_view < user->views.size()) {
-                // Destroy the document and its view
-                if (user->views[user->active_view]->target) {
-                    doc_destroy(user->views[user->active_view]->target);
-                }
-                document_view_destroy(user->views[user->active_view]);
+                document_view* view = user->views[user->active_view];
+                document* doc = view->target;
 
-                // Remove from vector
-                user->views.erase(user->views.begin() + user->active_view);
+                // Check if document has unsaved changes
+                if (doc && doc_is_modified(doc)) {
+                    // Build the dialog message
+                    std::string message;
+                    bool has_path = (view->path != nullptr);
 
-                // Adjust active tab after closing
-                if (!user->views.empty()) {
-                    if (user->active_view >= user->views.size()) {
-                        // We closed the last tab, select the new last tab
-                        user->active_view = user->views.size() - 1;
+                    if (has_path) {
+                        // Document has a file path - extract just the filename
+                        u32 path_len = u32str_length(view->path);
+                        std::string full_path;
+                        for (u32 i = 0; i < path_len; i++) {
+                            full_path += (char)u32str_get(view->path, i);
+                        }
+
+                        // Extract filename from path
+                        size_t last_slash = full_path.find_last_of("/\\");
+                        std::string filename = (last_slash != std::string::npos)
+                            ? full_path.substr(last_slash + 1)
+                            : full_path;
+
+                        message = "Save changes before closing?\n" + filename;
+                    } else {
+                        // Document doesn't have a file path
+                        message = "Save file before closing?\nUntitled";
                     }
-                    // Otherwise keep the same index (which now points to the next tab)
+
+                    // Create callback data
+                    CloseConfirmData* data = new CloseConfirmData();
+                    data->user = user;
+                    data->view_index = user->active_view;
+                    data->has_path = has_path;
+
+                    // Show the modal dialog
+                    platform_modal_yesno(message.c_str(), close_confirm_callback, data);
                 } else {
-                    // No tabs left
-                    user->active_view = 0;
+                    // No unsaved changes, close normally
+                    if (doc) {
+                        doc_destroy(doc);
+                    }
+                    document_view_destroy(view);
+
+                    // Remove from vector
+                    user->views.erase(user->views.begin() + user->active_view);
+
+                    // Adjust active tab after closing
+                    if (!user->views.empty()) {
+                        if (user->active_view >= user->views.size()) {
+                            // We closed the last tab, select the new last tab
+                            user->active_view = user->views.size() - 1;
+                        }
+                        // Otherwise keep the same index (which now points to the next tab)
+                    } else {
+                        // No tabs left
+                        user->active_view = 0;
+                    }
                 }
             }
             menuIndex = -1;
@@ -275,6 +652,67 @@ canvas* Render(UserData* user) {
                 // Set waiting state and call platform file open
                 user->waiting_for_operation = true;
                 platform_open_file(file_open_callback, user);
+            }
+            else if (clickedItem == 2) {  // Save
+                // Save the current document
+                if (!user->views.empty() && user->active_view < user->views.size()) {
+                    document_view* view = user->views[user->active_view];
+                    document* doc = view->target;
+
+                    if (doc) {
+                        // Convert document content to string (includes newlines between lines)
+                        u32_string* content = doc_to_str32(doc);
+
+                        if (content) {
+                            // Get the UTF-32 content length
+                            u32 content_len = u32str_length(content);
+
+                            // Convert to UTF-8 for compatibility with text editors
+                            // Allocate worst-case buffer (4 bytes per character)
+                            u32 buffer_size = content_len * 4 + 1;
+                            unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
+                            u32 utf8_len = 0;
+
+                            // Convert UTF-32 to UTF-8, preserving all Unicode characters
+                            for (u32 i = 0; i < content_len; i++) {
+                                u32 ch = u32str_get(content, i);
+
+                                if (ch <= 0x7F) {
+                                    // 1-byte sequence (ASCII, including newlines)
+                                    utf8_content[utf8_len++] = (unsigned char)ch;
+                                } else if (ch <= 0x7FF) {
+                                    // 2-byte sequence
+                                    utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
+                                    utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                } else if (ch <= 0xFFFF) {
+                                    // 3-byte sequence
+                                    utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
+                                    utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                    utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                } else if (ch <= 0x10FFFF) {
+                                    // 4-byte sequence (for emojis and other extended Unicode)
+                                    utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
+                                    utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
+                                    utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                    utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                }
+                                // Skip invalid Unicode values above 0x10FFFF
+                            }
+
+                            if (view->path) {
+                                // Document has a backing file - save directly
+                                platform_write_file(view->path, utf8_content, utf8_len, save_file_callback, user);
+                            } else {
+                                // No backing file - show save as dialog
+                                platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
+                            }
+
+                            // Clean up
+                            free(utf8_content);
+                            u32str_destroy(content);
+                        }
+                    }
+                }
             }
             else if (clickedItem == 4) {  // Exit
                 platform_exit();
