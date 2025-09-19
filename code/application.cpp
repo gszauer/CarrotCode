@@ -511,9 +511,9 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
 
     // Set display area (will be updated in render)
     view->displayAreaX = 0;
-    view->displayAreaY = 50; // Below menu and tabs (no gap)
+    view->displayAreaY = 51; // Below menu and tabs with border
     view->displayAreaW = canvas_get_width(user->cnvs);
-    view->displayAreaH = canvas_get_height(user->cnvs) - 50;
+    view->displayAreaH = canvas_get_height(user->cnvs) - 51;
 
     user->views.push_back(view);
     user->active_view = user->views.size() - 1;
@@ -956,7 +956,7 @@ canvas* Render(UserData* user) {
                 for (size_t i = 0; i < user->views.size(); i++) {
                     if (user->views[i]) {
                         user->views[i]->displayAreaW = canvasWidth;
-                        user->views[i]->displayAreaH = canvasHeight - 50;  // Account for menu bar
+                        user->views[i]->displayAreaH = canvasHeight - 51;  // Account for menu bar and border
                     }
                 }
             }
@@ -997,8 +997,11 @@ canvas* Render(UserData* user) {
 
     // Always render tab bar area as part of the header (even with no tabs)
     if (canvasWidth > 360) {
-        // Draw tab bar background to match menu bar
-        canvas_draw_rect(user->cnvs, 360, 0, canvasWidth - 360, 50, 0x27, 0x27, 0x27);  // SPECTRUM_DARKEST_GRAY_75
+        // Draw tab bar background to match menu bar color
+        canvas_draw_rect(user->cnvs, 360, 0, canvasWidth - 360, 50, 0x39, 0x39, 0x39);  // SPECTRUM_DARKEST_GRAY_200 - matches menu bar
+
+        // Draw bottom border for tab bar area to match menu bar
+        canvas_draw_rect(user->cnvs, 360, 49, canvasWidth - 360, 1, 0x52, 0x52, 0x52);  // BORDER color
 
         if (!user->views.empty()) {
             ImGuiBeginTabBar(user->imgui_context, 360, 0, canvasWidth - 360, 50, user->views.size(), user->active_view);
@@ -1106,9 +1109,9 @@ canvas* Render(UserData* user) {
         if (view) {
             // Update display area
             view->displayAreaX = 0;
-            view->displayAreaY = 50;  // Directly below menu/tab bar (50px), no gap
+            view->displayAreaY = 51;  // Below menu/tab bar with 1px border
             view->displayAreaW = canvasWidth;
-            view->displayAreaH = canvasHeight - 50;
+            view->displayAreaH = canvasHeight - 51;  // Account for border
 
             // Render the document view
             document_view_render(view, user->imgui_context, user->cnvs, user->fnt, true);

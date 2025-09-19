@@ -971,8 +971,8 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
         context->mouseInputConsumed = true;
     }
 
-    // Draw tab bar background
-    canvas_draw_rect(context->cnvs, x, y, w, h, Colors::SURFACE_R, Colors::SURFACE_G, Colors::SURFACE_B);
+    // Draw tab bar background - use CONTROL color to match menu bar
+    canvas_draw_rect(context->cnvs, x, y, w, h, Colors::CONTROL_R, Colors::CONTROL_G, Colors::CONTROL_B);
 
     // Set initial clip rectangle for the full tab bar
     // This will be adjusted in ImGuiTab if overflow is detected

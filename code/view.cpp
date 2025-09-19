@@ -587,10 +587,10 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 
     view->showLineNumbers = showLineNumbers;
 
-    // Draw document background - SPECTRUM_DARKEST_GRAY_75 (swapped with line number gutter)
+    // Draw document background - SPECTRUM_DARKEST_GRAY_100 (darker than header)
     canvas_draw_rect(cnvs, view->displayAreaX, view->displayAreaY,
                      view->displayAreaW, view->displayAreaH,
-                     0x27, 0x27, 0x27);
+                     0x2F, 0x2F, 0x2F);
 
     f32 viewWidth = view->displayAreaW;
     f32 viewHeight = view->displayAreaH;
@@ -625,16 +625,16 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         u32 charWidth = font_get_char_width(fnt, '0');
         u32 marginSplit = charWidth / 2;
 
-        // Draw line number background - SPECTRUM_DARKEST_GRAY_100 (swapped - now lighter)
+        // Draw line number background - SPECTRUM_DARKEST_GRAY_75 (slightly darker than document)
         // Reduce width slightly to give some margin pixels to the document area
         canvas_draw_rect(cnvs, view->displayAreaX, view->displayAreaY,
                         view->lineNumberWidth - marginSplit, view->displayAreaH,
-                        0x2F, 0x2F, 0x2F);  // Now using the lighter gray
+                        0x27, 0x27, 0x27);  // Darker than document background
 
         // Draw a thin strip of document background color in the margin area
         canvas_draw_rect(cnvs, view->displayAreaX + view->lineNumberWidth - marginSplit, view->displayAreaY,
                         marginSplit, view->displayAreaH,
-                        0x27, 0x27, 0x27);  // Document background color (now darker)
+                        0x2F, 0x2F, 0x2F);  // Document background color
 
         // Set clip rect for line numbers to prevent overlap with menu bar
         canvas_set_clip(cnvs, view->displayAreaX, view->displayAreaY,
