@@ -19,27 +19,39 @@ struct edit_action {
         SPLIT_LINE,
         JOIN_LINE
     } type;
-    
+
     u32 line;
     u32 col;
     u32 end_line;
     u32 end_col;
     u32_string* text;
     u32 codepoint;
+
+    // Cursor position hints for undo/redo
+    u32 cursor_line_after_redo;  // Where cursor should be after performing the action
+    u32 cursor_col_after_redo;
+    u32 cursor_line_after_undo;  // Where cursor should be after undoing the action
+    u32 cursor_col_after_undo;
 };
 
 struct document {
     vector_docline* lines;
     bool modified;
-    
+
     edit_action* undo_stack;
     u32 undo_stack_size;
     u32 undo_position;
     u32 max_undo_levels;
+    bool in_undo_redo;  // Flag to prevent recording during undo/redo
+
+    // Last edit position for cursor positioning after undo/redo
+    u32 last_edit_line;
+    u32 last_edit_col;
+    bool has_edit_position;
 };
 
 static void add_undo_action(document* doc, edit_action action) {
-    if (doc->max_undo_levels == 0) {
+    if (doc->max_undo_levels == 0 || doc->in_undo_redo) {
         doc->modified = true;
         // If there's text in the action that was allocated, free it
         if (action.text) {
@@ -75,8 +87,9 @@ static void add_undo_action(document* doc, edit_action action) {
         if (doc->undo_position > 0) doc->undo_position--;
     }
     
+    doc->undo_stack[doc->undo_stack_size] = action;
+    doc->undo_stack_size++;
     doc->undo_position = doc->undo_stack_size;
-    doc->undo_stack[doc->undo_stack_size++] = action;
     doc->modified = true;
 }
 
@@ -94,6 +107,10 @@ document* doc_create(u32 undo_levels) {
     
     doc->undo_stack_size = 0;
     doc->undo_position = 0;
+    doc->in_undo_redo = false;
+    doc->last_edit_line = 0;
+    doc->last_edit_col = 0;
+    doc->has_edit_position = false;
     return doc;
 }
 
@@ -275,6 +292,11 @@ void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
     action.end_col = 0;
     action.codepoint = codepoint;
     action.text = nullptr;
+    // Cursor positions: after inserting char, cursor is at col+1; after undo, back at col
+    action.cursor_line_after_redo = line;
+    action.cursor_col_after_redo = col + 1;
+    action.cursor_line_after_undo = line;
+    action.cursor_col_after_undo = col;
     add_undo_action(doc, action);
 }
 
@@ -360,6 +382,21 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = u32str_substr(text, 0, u32str_length(text));
+    // Calculate cursor position after text insertion
+    u32 final_line = line;
+    u32 final_col = col + u32str_length(text);
+    for (u32 i = 0; i < u32str_length(text); i++) {
+        if (u32str_get(text, i) == '\n') {
+            final_line++;
+            final_col = 0;
+        } else {
+            final_col++;
+        }
+    }
+    action.cursor_line_after_redo = final_line;
+    action.cursor_col_after_redo = final_col;
+    action.cursor_line_after_undo = line;
+    action.cursor_col_after_undo = col;
     add_undo_action(doc, action);
 }
 
@@ -381,6 +418,10 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
         action.end_col = 0;
         action.codepoint = deleted_char;
         action.text = nullptr;
+        action.cursor_line_after_redo = line;
+        action.cursor_col_after_redo = col;
+        action.cursor_line_after_undo = line;
+        action.cursor_col_after_undo = col + 1;
         add_undo_action(doc, action);
     } else if (col == u32str_length(doc_line->text) && line + 1 < vec_docline_size(doc->lines)) {
         document_line* next_line = vec_docline_get(doc->lines, line + 1);
@@ -396,6 +437,10 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
         action.end_col = 0;
         action.codepoint = 0;
         action.text = nullptr;
+        action.cursor_line_after_redo = line;
+        action.cursor_col_after_redo = col;
+        action.cursor_line_after_undo = line + 1;
+        action.cursor_col_after_undo = 0;
         add_undo_action(doc, action);
     }
 }
@@ -433,6 +478,10 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
     action.end_col = end_col;
     action.codepoint = 0;
     action.text = deleted_text;
+    action.cursor_line_after_redo = start_line;
+    action.cursor_col_after_redo = start_col;
+    action.cursor_line_after_undo = end_line;
+    action.cursor_col_after_undo = end_col;
     add_undo_action(doc, action);
 }
 
@@ -454,6 +503,10 @@ void doc_insert_line_str32(document* doc, u32 line_index, u32_string* content) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = u32str_substr(content, 0, u32str_length(content));
+    action.cursor_line_after_redo = line_index;
+    action.cursor_col_after_redo = u32str_length(content);
+    action.cursor_line_after_undo = line_index;
+    action.cursor_col_after_undo = 0;
     add_undo_action(doc, action);
 }
 
@@ -494,6 +547,10 @@ void doc_delete_line(document* doc, u32 line_index) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = line_copy;
+    action.cursor_line_after_redo = line_index > 0 ? line_index - 1 : 0;
+    action.cursor_col_after_redo = 0;
+    action.cursor_line_after_undo = line_index;
+    action.cursor_col_after_undo = 0;
 
     printf("[doc_delete_line] Adding undo action\n");
     add_undo_action(doc, action);
@@ -524,6 +581,10 @@ void doc_split_line(document* doc, u32 line, u32 col) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = nullptr;
+    action.cursor_line_after_redo = line + 1;
+    action.cursor_col_after_redo = 0;
+    action.cursor_line_after_undo = line;
+    action.cursor_col_after_undo = col;
     add_undo_action(doc, action);
 }
 
@@ -546,12 +607,17 @@ void doc_join_lines(document* doc, u32 line) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = nullptr;
+    action.cursor_line_after_redo = line;
+    action.cursor_col_after_redo = join_pos;
+    action.cursor_line_after_undo = line + 1;
+    action.cursor_col_after_undo = 0;
     add_undo_action(doc, action);
 }
 
 void doc_undo(document* doc) {
     if (!doc || doc->max_undo_levels == 0 || doc->undo_position == 0) return;
-    
+
+    doc->in_undo_redo = true;  // Prevent recording undo actions
     doc->undo_position--;
     edit_action* action = &doc->undo_stack[doc->undo_position];
     
@@ -567,12 +633,8 @@ void doc_undo(document* doc) {
         case edit_action::DELETE_CHAR:
             {
                 document_line* line = vec_docline_get(doc->lines, action->line);
-                u32_string* char_str = u32str_create();
-                u32str_reserve(char_str, 4);
-                u32str_set(char_str, 0, action->codepoint);
-                u32str_insert(line->text, char_str, action->col, 0, 1);
+                u32str_insert_char(line->text, action->col, action->codepoint);
                 docline_mark_dirty(line);
-                u32str_destroy(char_str);
             }
             break;
             
@@ -619,7 +681,6 @@ void doc_undo(document* doc) {
             
         case edit_action::DELETE_RANGE:
             doc_insert_str32(doc, action->line, action->col, action->text);
-            doc->undo_position--;
             break;
             
         case edit_action::INSERT_LINE:
@@ -635,26 +696,35 @@ void doc_undo(document* doc) {
             
         case edit_action::SPLIT_LINE:
             doc_join_lines(doc, action->line);
-            doc->undo_position--;
             break;
-            
+
         case edit_action::JOIN_LINE:
             doc_split_line(doc, action->line, action->col);
-            doc->undo_position--;
             break;
     }
+
+    // Set the last edit position for cursor positioning
+    doc->last_edit_line = action->cursor_line_after_undo;
+    doc->last_edit_col = action->cursor_col_after_undo;
+    doc->has_edit_position = true;
+
+    doc->in_undo_redo = false;  // Re-enable undo recording
 }
 
 void doc_redo(document* doc) {
     if (!doc || doc->max_undo_levels == 0 || doc->undo_position >= doc->undo_stack_size) return;
-    
+
+    doc->in_undo_redo = true;  // Prevent recording undo actions
     edit_action* action = &doc->undo_stack[doc->undo_position];
     doc->undo_position++;
     
     switch (action->type) {
         case edit_action::INSERT_CHAR:
-            doc_insert_char(doc, action->line, action->col, action->codepoint);
-            doc->undo_position--;
+            {
+                document_line* line = vec_docline_get(doc->lines, action->line);
+                u32str_insert_char(line->text, action->col, action->codepoint);
+                docline_mark_dirty(line);
+            }
             break;
             
         case edit_action::DELETE_CHAR:
@@ -667,12 +737,10 @@ void doc_redo(document* doc) {
             
         case edit_action::INSERT_TEXT:
             doc_insert_str32(doc, action->line, action->col, action->text);
-            doc->undo_position--;
             break;
-            
+
         case edit_action::DELETE_RANGE:
             doc_delete_range(doc, action->line, action->col, action->end_line, action->end_col);
-            doc->undo_position--;
             break;
             
         case edit_action::INSERT_LINE:
@@ -688,14 +756,19 @@ void doc_redo(document* doc) {
             
         case edit_action::SPLIT_LINE:
             doc_split_line(doc, action->line, action->col);
-            doc->undo_position--;
             break;
-            
+
         case edit_action::JOIN_LINE:
             doc_join_lines(doc, action->line);
-            doc->undo_position--;
             break;
     }
+
+    // Set the last edit position for cursor positioning
+    doc->last_edit_line = action->cursor_line_after_redo;
+    doc->last_edit_col = action->cursor_col_after_redo;
+    doc->has_edit_position = true;
+
+    doc->in_undo_redo = false;  // Re-enable undo recording
 }
 
 bool doc_can_undo(document* doc) {
@@ -704,6 +777,18 @@ bool doc_can_undo(document* doc) {
 
 bool doc_can_redo(document* doc) {
     return doc && doc->max_undo_levels > 0 && doc->undo_position < doc->undo_stack_size;
+}
+
+bool doc_get_last_edit_position(document* doc, u32* out_line, u32* out_col) {
+    if (!doc || !doc->has_edit_position) return false;
+    if (out_line) *out_line = doc->last_edit_line;
+    if (out_col) *out_col = doc->last_edit_col;
+    return true;
+}
+
+void doc_clear_last_edit_position(document* doc) {
+    if (!doc) return;
+    doc->has_edit_position = false;
 }
 
 void doc_mark_line_dirty(document* doc, u32 line) {

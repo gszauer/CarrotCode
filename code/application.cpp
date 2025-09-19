@@ -776,12 +776,12 @@ canvas* Render(UserData* user) {
                 if (view) {
                     if (clickedItem == 0) {  // Undo
                         if (doc_can_undo(view->target)) {
-                            doc_undo(view->target);
+                            document_view_undo(view);
                         }
                     }
                     else if (clickedItem == 1) {  // Redo
                         if (doc_can_redo(view->target)) {
-                            doc_redo(view->target);
+                            document_view_redo(view);
                         }
                     }
                     else if (clickedItem == 2) {  // Cut

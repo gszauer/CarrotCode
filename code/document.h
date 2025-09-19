@@ -107,6 +107,12 @@ bool doc_can_undo(document* doc);
 // Returns true if there are operations that can be redone
 bool doc_can_redo(document* doc);
 
+// Get the last edit position after undo/redo (returns false if no position available)
+bool doc_get_last_edit_position(document* doc, u32* out_line, u32* out_col);
+
+// Clear the last edit position
+void doc_clear_last_edit_position(document* doc);
+
 // Syntax highlighting
 
 // Marks a line as dirty (needs re-tokenization)

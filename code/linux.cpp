@@ -640,13 +640,13 @@ int main(int argc, char** argv) {
                                     }
                                     else if (keysym == XK_z || keysym == XK_Z) {  // Ctrl+Z (Undo)
                                         if (doc_can_undo(view->target)) {
-                                            doc_undo(view->target);
+                                            document_view_undo(view);
                                         }
                                         handled = true;
                                     }
                                     else if (keysym == XK_y || keysym == XK_Y) {  // Ctrl+Y (Redo)
                                         if (doc_can_redo(view->target)) {
-                                            doc_redo(view->target);
+                                            document_view_redo(view);
                                         }
                                         handled = true;
                                     }

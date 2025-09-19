@@ -1377,12 +1377,60 @@ void document_view_paste(document_view* view, const u32* text, u32 length) {
 
 void document_view_undo(document_view* view) {
     doc_undo(view->target);
-    clamp_cursor(view);
+    document_view_update_cursor_after_undo_redo(view);
 }
 
 void document_view_redo(document_view* view) {
     doc_redo(view->target);
+    document_view_update_cursor_after_undo_redo(view);
+}
+
+void document_view_validate_cursor_and_selection(document_view* view) {
+    if (!view || !view->target) return;
+
+    // Validate cursor
     clamp_cursor(view);
+
+    // Validate selection anchor if selection exists
+    if (view->hasSelection) {
+        u32 line_count = doc_line_count(view->target);
+
+        // Clamp selection anchor
+        if (view->selectionAnchor.row >= line_count) {
+            view->selectionAnchor.row = line_count > 0 ? line_count - 1 : 0;
+        }
+        u32_string* anchor_line = doc_get_line(view->target, view->selectionAnchor.row);
+        if (anchor_line) {
+            u32 anchor_line_len = u32str_length(anchor_line);
+            if (view->selectionAnchor.column > anchor_line_len) {
+                view->selectionAnchor.column = anchor_line_len;
+            }
+        }
+    }
+}
+
+void document_view_update_cursor_after_undo_redo(document_view* view) {
+    if (!view || !view->target) return;
+
+    // Clear any existing selection
+    document_view_clear_selection(view);
+
+    // Try to get the last edit position from the document
+    u32 edit_line, edit_col;
+    if (doc_get_last_edit_position(view->target, &edit_line, &edit_col)) {
+        // Move cursor to the edit position
+        view->cursor.row = edit_line;
+        view->cursor.column = edit_col;
+
+        // Clear the position so it doesn't affect other views
+        doc_clear_last_edit_position(view->target);
+    }
+
+    // Ensure cursor is within valid bounds
+    clamp_cursor(view);
+
+    // Make sure the cursor is visible
+    document_view_ensure_cursor_visible(view);
 }
 
 document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y) {

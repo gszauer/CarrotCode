@@ -85,5 +85,10 @@ void document_view_paste(document_view* view, const u32* text, u32 length);
 void document_view_undo(document_view* view);
 void document_view_redo(document_view* view);
 
+// Validate and fix cursor/selection after document changes
+void document_view_validate_cursor_and_selection(document_view* view);
+void document_view_clear_selection(document_view* view);
+void document_view_update_cursor_after_undo_redo(document_view* view);
+
 document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y);
 void document_view_get_cursor_pixel_position(document_view* view, document_cursor cursor, u32* x, u32* y);
