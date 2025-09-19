@@ -1,7 +1,6 @@
 #define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
 #undef CARROT_INCLUDE_SYNTAX_DEFS
-#include "vectors.h"
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
