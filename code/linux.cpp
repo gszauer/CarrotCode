@@ -7,9 +7,13 @@
 #define WINDOW_HEIGHT 1200
 #define WINDOW_TITLE "Code Viewer - Drop File to Preview"
 
-// External clipboard callback functions from application.cpp
+// External callback functions from application.cpp
 extern void clipboard_copy_callback(void* userData);
 extern void clipboard_paste_callback(u32_string* content, void* userData);
+extern void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, void* userData);
+extern void save_file_callback(bool success, void* userData);
+extern void save_as_callback(u32_string* filePath, void* userData);
+extern void AddDocumentView(UserData* user, document* doc, const char* path);
 
 // Global window data for platform_exit
 static WindowData* g_windowData = nullptr;
@@ -489,6 +493,147 @@ int main(int argc, char** argv) {
                                     }
                                     else if (keysym == XK_a || keysym == XK_A) {  // Ctrl+A (Select All)
                                         document_view_select_all(view);
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_s || keysym == XK_S) {  // Ctrl+S (Save) or Ctrl+Shift+S (Save As)
+                                        if (shiftDown) {
+                                            // Ctrl+Shift+S - Save As
+                                            // Trigger save as for the current document
+                                            document* doc = view->target;
+                                            if (doc) {
+                                                // Convert document content to string
+                                                u32_string* content = doc_to_str32(doc);
+                                                if (content) {
+                                                    // Get the UTF-32 content length
+                                                    u32 content_len = u32str_length(content);
+                                                    // Convert to UTF-8
+                                                    u32 buffer_size = content_len * 4 + 1;
+                                                    unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
+                                                    u32 utf8_len = 0;
+                                                    for (u32 i = 0; i < content_len; i++) {
+                                                        u32 ch = u32str_get(content, i);
+                                                        if (ch <= 0x7F) {
+                                                            utf8_content[utf8_len++] = (unsigned char)ch;
+                                                        } else if (ch <= 0x7FF) {
+                                                            utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                                        } else if (ch <= 0xFFFF) {
+                                                            utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                                        } else if (ch <= 0x10FFFF) {
+                                                            utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                                        }
+                                                    }
+                                                    platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
+                                                    free(utf8_content);
+                                                    u32str_destroy(content);
+                                                }
+                                            }
+                                        } else {
+                                            // Ctrl+S - Save
+                                            document* doc = view->target;
+                                            if (doc) {
+                                                // Convert document content to string
+                                                u32_string* content = doc_to_str32(doc);
+                                                if (content) {
+                                                    // Get the UTF-32 content length
+                                                    u32 content_len = u32str_length(content);
+                                                    // Convert to UTF-8
+                                                    u32 buffer_size = content_len * 4 + 1;
+                                                    unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
+                                                    u32 utf8_len = 0;
+                                                    for (u32 i = 0; i < content_len; i++) {
+                                                        u32 ch = u32str_get(content, i);
+                                                        if (ch <= 0x7F) {
+                                                            utf8_content[utf8_len++] = (unsigned char)ch;
+                                                        } else if (ch <= 0x7FF) {
+                                                            utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                                        } else if (ch <= 0xFFFF) {
+                                                            utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                                        } else if (ch <= 0x10FFFF) {
+                                                            utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+                                                        }
+                                                    }
+                                                    if (view->path) {
+                                                        // Has backing file - save directly
+                                                        platform_write_file(view->path, utf8_content, utf8_len, save_file_callback, user);
+                                                    } else {
+                                                        // No backing file - save as
+                                                        platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
+                                                    }
+                                                    free(utf8_content);
+                                                    u32str_destroy(content);
+                                                }
+                                            }
+                                        }
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_o || keysym == XK_O) {  // Ctrl+O (Open)
+                                        user->waiting_for_operation = true;
+                                        platform_open_file(file_open_callback, user);
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_n || keysym == XK_N) {  // Ctrl+N (New)
+                                        // Create a new empty document
+                                        document* doc = doc_create(100);
+                                        u32 empty_data[] = {0};
+                                        u32_string* empty_line = u32str_init(empty_data);
+                                        doc_append_line_str32(doc, empty_line);
+                                        u32str_destroy(empty_line);
+                                        AddDocumentView(user, doc, nullptr);
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_d || keysym == XK_D) {  // Ctrl+D (Duplicate Line)
+                                        document* doc = view->target;
+                                        u32 line_row = view->cursor.row;
+                                        if (doc && line_row < doc_line_count(doc)) {
+                                            // Get the current line
+                                            u32_string* line = doc_get_line(doc, line_row);
+                                            if (line) {
+                                                // Create a copy of the line
+                                                u32 line_len = u32str_length(line);
+                                                u32* line_data = (u32*)malloc((line_len + 1) * sizeof(u32));
+                                                for (u32 i = 0; i < line_len; i++) {
+                                                    line_data[i] = u32str_get(line, i);
+                                                }
+                                                line_data[line_len] = 0;
+                                                u32_string* duplicate = u32str_init(line_data);
+                                                free(line_data);
+
+                                                // Insert the duplicate after the current line
+                                                doc_insert_line_str32(doc, line_row + 1, duplicate);
+                                                u32str_destroy(duplicate);
+
+                                                // Move cursor to the duplicated line
+                                                view->cursor.row = line_row + 1;
+                                            }
+                                        }
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_l || keysym == XK_L) {  // Ctrl+L (Delete Line)
+                                        document* doc = view->target;
+                                        u32 line_row = view->cursor.row;
+                                        if (doc && line_row < doc_line_count(doc)) {
+                                            // Delete the current line
+                                            doc_delete_line(doc, line_row);
+
+                                            // Adjust cursor if needed
+                                            u32 new_line_count = doc_line_count(doc);
+                                            if (view->cursor.row >= new_line_count && new_line_count > 0) {
+                                                view->cursor.row = new_line_count - 1;
+                                            }
+                                            view->cursor.column = 0;
+                                        }
                                         handled = true;
                                     }
                                 }
