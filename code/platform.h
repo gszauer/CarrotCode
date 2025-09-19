@@ -13,4 +13,7 @@ void platform_clipboard_paste_text(platform_clipboard_paste_text_callback callba
 void platform_exit();
 void platform_launch_browser(const char* url);
 
+typedef void (*platform_open_file_callback)(u32_string* filePath, void* fileData, u32 fileBytes, void* userData); // path, data, and bytes will be 0 on fail
+void platform_open_file(platform_open_file_callback callback, void* userData);
+
 #endif

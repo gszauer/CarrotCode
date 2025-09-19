@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
 
                         // Check for clipboard shortcuts before passing to ImGui/document
                         bool handled = false;
-                        if (isKeyDown && ctrlDown && !user->waiting_for_clipboard) {
+                        if (isKeyDown && ctrlDown && !user->waiting_for_operation) {
                             if (!user->views.empty() && user->active_view < user->views.size()) {
                                 document_view* view = user->views[user->active_view];
                                 if (view) {
@@ -419,7 +419,7 @@ int main(int argc, char** argv) {
 
                                         if (text_to_cut) {
                                             // Copy to clipboard
-                                            user->waiting_for_clipboard = true;
+                                            user->waiting_for_operation = true;
                                             platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
 
                                             if (has_selection) {
@@ -476,14 +476,14 @@ int main(int argc, char** argv) {
 
                                         if (text_to_copy) {
                                             // Copy to clipboard
-                                            user->waiting_for_clipboard = true;
+                                            user->waiting_for_operation = true;
                                             platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
                                             u32str_destroy(text_to_copy);
                                         }
                                         handled = true;
                                     }
                                     else if (keysym == XK_v || keysym == XK_V) {  // Ctrl+V (Paste)
-                                        user->waiting_for_clipboard = true;
+                                        user->waiting_for_operation = true;
                                         platform_clipboard_paste_text(clipboard_paste_callback, user);
                                         handled = true;
                                     }
@@ -800,4 +800,87 @@ void platform_launch_browser(const char* url) {
     // Use system() to execute the command
     // The & at the end runs it in background so we don't block
     system(command);
+}
+
+void platform_open_file(platform_open_file_callback callback, void* userData) {
+    if (!callback) return;
+
+    // Try kdialog first (KDE systems)
+    FILE* fp = popen("kdialog --getopenfilename . 2>/dev/null", "r");
+
+    if (!fp) {
+        // Try zenity as fallback (GNOME/GTK systems)
+        fp = popen("zenity --file-selection 2>/dev/null", "r");
+    }
+
+    if (!fp) {
+        // No dialog tool available, call callback with null
+        callback(nullptr, nullptr, 0, userData);
+        return;
+    }
+
+    // Read the selected file path
+    char filepath[4096];
+    if (fgets(filepath, sizeof(filepath), fp) != nullptr) {
+        // Remove trailing newline
+        size_t len = strlen(filepath);
+        if (len > 0 && filepath[len-1] == '\n') {
+            filepath[len-1] = '\0';
+            len--;
+        }
+
+        // Check if user cancelled (zenity returns empty, kdialog returns nothing)
+        if (len > 0) {
+            // Read the file
+            FILE* file = fopen(filepath, "rb");
+            if (file) {
+                // Get file size
+                fseek(file, 0, SEEK_END);
+                long filesize = ftell(file);
+                fseek(file, 0, SEEK_SET);
+
+                if (filesize > 0) {
+                    // Allocate buffer and read file
+                    void* filedata = malloc(filesize);
+                    if (filedata) {
+                        size_t bytes_read = fread(filedata, 1, filesize, file);
+                        fclose(file);
+
+                        // Convert filepath to u32_string
+                        u32* path_u32 = (u32*)malloc((len + 1) * sizeof(u32));
+                        for (size_t i = 0; i <= len; i++) {
+                            path_u32[i] = (u32)filepath[i];
+                        }
+                        u32_string* path_str = u32str_init(path_u32);
+                        free(path_u32);
+
+                        // Call callback with file data
+                        callback(path_str, filedata, bytes_read, userData);
+
+                        // Clean up
+                        u32str_destroy(path_str);
+                        free(filedata);
+                    } else {
+                        fclose(file);
+                        callback(nullptr, nullptr, 0, userData);
+                    }
+                } else {
+                    fclose(file);
+                    // Empty file
+                    callback(nullptr, nullptr, 0, userData);
+                }
+            } else {
+                // Could not open file
+                callback(nullptr, nullptr, 0, userData);
+            }
+        } else {
+            // User cancelled
+            callback(nullptr, nullptr, 0, userData);
+        }
+    } else {
+        // No file selected
+        callback(nullptr, nullptr, 0, userData);
+    }
+
+    pclose(fp);
 }

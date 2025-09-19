@@ -18,8 +18,8 @@ struct UserData {
     std::vector<document_view*> views;
     u32 active_view;
 
-    // Clipboard operation state
-    bool waiting_for_clipboard;
+    // Async operation state
+    bool waiting_for_operation;
 
     // Deferred operations
     bool has_deferred_line_delete;

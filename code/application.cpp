@@ -9,12 +9,12 @@
 // Clipboard callback functions
 void clipboard_copy_callback(void* userData) {
     UserData* user = (UserData*)userData;
-    user->waiting_for_clipboard = false;
+    user->waiting_for_operation = false;
 }
 
 void clipboard_paste_callback(u32_string* content, void* userData) {
     UserData* user = (UserData*)userData;
-    user->waiting_for_clipboard = false;
+    user->waiting_for_operation = false;
 
     // If we have content and an active document view, insert it
     if (content && !user->views.empty() && user->active_view < user->views.size()) {
@@ -35,6 +35,44 @@ void clipboard_paste_callback(u32_string* content, void* userData) {
     }
 }
 
+// File open callback function
+void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, void* userData) {
+    UserData* user = (UserData*)userData;
+    user->waiting_for_operation = false;
+
+    // If we have a file, create a document and add it
+    if (filePath && fileData && fileBytes > 0) {
+        // Convert file path to char* for AddDocumentView
+        u32 path_len = u32str_length(filePath);
+        char* path = (char*)malloc(path_len + 1);
+        for (u32 i = 0; i < path_len; i++) {
+            path[i] = (char)u32str_get(filePath, i);
+        }
+        path[path_len] = '\0';
+
+        // Convert file data to u32_string
+        std::vector<u32> u32content;
+        char* file_chars = (char*)fileData;
+        for (u32 i = 0; i < fileBytes; i++) {
+            u32content.push_back((unsigned char)file_chars[i]);
+        }
+        u32content.push_back(0); // null terminator
+
+        u32_string* file_str = u32str_init(u32content.data());
+
+        // Create document from the string
+        document* doc = doc_from_str32(file_str, 100);
+        u32str_destroy(file_str);
+
+        if (doc) {
+            // Add the document view
+            AddDocumentView(user, doc, path);
+        }
+
+        free(path);
+    }
+}
+
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     UserData* user = new UserData();
     user->offset = 0.0f;
@@ -45,8 +83,8 @@ UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     // Initialize document views (vector is already empty)
     user->active_view = 0;
 
-    // Initialize clipboard state
-    user->waiting_for_clipboard = false;
+    // Initialize async operation state
+    user->waiting_for_operation = false;
 
     // Initialize deferred operations
     user->has_deferred_line_delete = false;
@@ -134,8 +172,8 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
 canvas* Render(UserData* user) {
     ImGuiBeginFrame(user->imgui_context);
 
-    // Push disabled state if waiting for clipboard operation
-    if (user->waiting_for_clipboard) {
+    // Push disabled state if waiting for async operation
+    if (user->waiting_for_operation) {
         ImGuiPushDisabled(user->imgui_context);
     }
 
@@ -233,6 +271,11 @@ canvas* Render(UserData* user) {
                 // Add the document view with no path (nullptr)
                 AddDocumentView(user, doc, nullptr);
             }
+            else if (clickedItem == 1) {  // Open
+                // Set waiting state and call platform file open
+                user->waiting_for_operation = true;
+                platform_open_file(file_open_callback, user);
+            }
             else if (clickedItem == 4) {  // Exit
                 platform_exit();
             }
@@ -301,7 +344,7 @@ canvas* Render(UserData* user) {
 
                         if (text_to_cut) {
                             // Copy to clipboard
-                            user->waiting_for_clipboard = true;
+                            user->waiting_for_operation = true;
                             platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
 
                             if (has_selection) {
@@ -357,13 +400,13 @@ canvas* Render(UserData* user) {
 
                         if (text_to_copy) {
                             // Copy to clipboard
-                            user->waiting_for_clipboard = true;
+                            user->waiting_for_operation = true;
                             platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
                             u32str_destroy(text_to_copy);
                         }
                     }
                     else if (clickedItem == 4) {  // Paste
-                        user->waiting_for_clipboard = true;
+                        user->waiting_for_operation = true;
                         platform_clipboard_paste_text(clipboard_paste_callback, user);
                     }
                 }
@@ -684,7 +727,7 @@ canvas* Render(UserData* user) {
     }
 
     // Pop disabled state if we pushed it
-    if (user->waiting_for_clipboard) {
+    if (user->waiting_for_operation) {
         ImGuiPopDisabled(user->imgui_context);
     }
 
