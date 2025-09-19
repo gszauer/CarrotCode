@@ -18,6 +18,9 @@ struct UserData {
     std::vector<document_view*> views;
     u32 active_view;
 
+    // Zoom level (0=50%, 1=100%, 2=200%)
+    u32 zoom_level;
+
     // Async operation state
     bool waiting_for_operation;
 

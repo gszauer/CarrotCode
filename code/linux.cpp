@@ -123,6 +123,7 @@ int main(int argc, char** argv) {
     XFlush(windowData.display);
     
     // Initialize user data
+    // Initialize with window dimensions - zoom will be handled in rendering
     UserData* user = Initialize(windowData.width, windowData.height);
     
     // Main loop
@@ -178,9 +179,14 @@ int main(int argc, char** argv) {
                             0
                         );
                         
-                        // Recreate canvas with new size
+                        // Recreate canvas with new size - adjust for zoom level
+                        float scale = 1.0f;
+                        if (user->zoom_level == 0) scale = 0.5f;       // 50%
+                        else if (user->zoom_level == 1) scale = 1.0f;  // 100%
+                        else if (user->zoom_level == 2) scale = 2.0f;  // 200%
+
                         canvas_destroy(user->cnvs);
-                        user->cnvs = canvas_create(windowData.width, windowData.height);
+                        user->cnvs = canvas_create((u32)(windowData.width / scale), (u32)(windowData.height / scale));
                         // Update ImGui canvas target
                         ImGuiSetTargets(user->imgui_context, user->cnvs, user->fnt);
                     }
@@ -675,9 +681,14 @@ int main(int argc, char** argv) {
                 case ButtonRelease:
                 case MotionNotify:
                     {
-                        // Get mouse position
-                        u32 mouseX = event.xbutton.x;
-                        u32 mouseY = event.xbutton.y;
+                        // Get mouse position and adjust for zoom
+                        float scale = 1.0f;
+                        if (user->zoom_level == 0) scale = 0.5f;       // 50%
+                        else if (user->zoom_level == 1) scale = 1.0f;  // 100%
+                        else if (user->zoom_level == 2) scale = 2.0f;  // 200%
+
+                        u32 mouseX = (u32)(event.xbutton.x / scale);
+                        u32 mouseY = (u32)(event.xbutton.y / scale);
                         f32 normX = (f32)mouseX / windowData.width;
                         f32 normY = (f32)mouseY / windowData.height;
 
@@ -749,35 +760,75 @@ int main(int argc, char** argv) {
 
             // Draw application
             canvas* toDraw = Render(user);
-            
+
             // Blit Safety check
             u32* doc_canvas_pixels = canvas_get_raw_pixels(toDraw);
             u32 doc_canvas_width = canvas_get_width(toDraw);
             u32 doc_canvas_height = canvas_get_height(toDraw);
 
             if (doc_canvas_pixels && doc_canvas_width > 0 && doc_canvas_height > 0) {
-                // Copy what fits into the window buffer
-                u32 copy_width = (doc_canvas_width < (u32)windowData.width) ? doc_canvas_width : windowData.width;
-                u32 copy_height = (doc_canvas_height < (u32)windowData.height) ? doc_canvas_height : windowData.height;
+                // Get zoom scale factor
+                float scale = 1.0f;
+                if (user->zoom_level == 0) scale = 0.5f;       // 50%
+                else if (user->zoom_level == 1) scale = 1.0f;  // 100%
+                else if (user->zoom_level == 2) scale = 2.0f;  // 200%
 
-                for (u32 y = 0; y < copy_height; y++) {
+                // Calculate scaled dimensions
+                u32 scaled_width = (u32)(doc_canvas_width * scale);
+                u32 scaled_height = (u32)(doc_canvas_height * scale);
+
+                // Simple nearest-neighbor scaling
+                if (scale == 1.0f) {
+                    // No scaling needed - direct copy
+                    u32 copy_width = (doc_canvas_width < (u32)windowData.width) ? doc_canvas_width : windowData.width;
+                    u32 copy_height = (doc_canvas_height < (u32)windowData.height) ? doc_canvas_height : windowData.height;
+
+                    for (u32 y = 0; y < copy_height; y++) {
 #ifdef RAW_COPY
-                    memcpy(windowData.pixels + y * windowData.width,
-                        doc_canvas_pixels + y * doc_canvas_width,
-                        copy_width * sizeof(u32));
+                        memcpy(windowData.pixels + y * windowData.width,
+                            doc_canvas_pixels + y * doc_canvas_width,
+                            copy_width * sizeof(u32));
 #else
-                    // Swizzle RGBA to BGRA for X11
-                    for (u32 x = 0; x < copy_width; x++) {
-                        u32 pixel = doc_canvas_pixels[y * doc_canvas_width + x];
-                        // Extract RGBA components
-                        u32 r = pixel & 0xFF;
-                        u32 g = (pixel >> 8) & 0xFF;
-                        u32 b = (pixel >> 16) & 0xFF;
-                        u32 a = (pixel >> 24) & 0xFF;
-                        // Repack as BGRA for X11
-                        windowData.pixels[y * windowData.width + x] = (a << 24) | (r << 16) | (g << 8) | b;
-                    }
+                        // Swizzle RGBA to BGRA for X11
+                        for (u32 x = 0; x < copy_width; x++) {
+                            u32 pixel = doc_canvas_pixels[y * doc_canvas_width + x];
+                            // Extract RGBA components
+                            u32 r = pixel & 0xFF;
+                            u32 g = (pixel >> 8) & 0xFF;
+                            u32 b = (pixel >> 16) & 0xFF;
+                            u32 a = (pixel >> 24) & 0xFF;
+                            // Repack as BGRA for X11
+                            windowData.pixels[y * windowData.width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+                        }
 #endif
+                    }
+                } else {
+                    // Scaled copy with nearest-neighbor sampling
+                    u32 copy_width = (scaled_width < (u32)windowData.width) ? scaled_width : windowData.width;
+                    u32 copy_height = (scaled_height < (u32)windowData.height) ? scaled_height : windowData.height;
+
+                    for (u32 y = 0; y < copy_height; y++) {
+                        u32 src_y = (u32)(y / scale);
+                        if (src_y >= doc_canvas_height) continue;
+
+                        for (u32 x = 0; x < copy_width; x++) {
+                            u32 src_x = (u32)(x / scale);
+                            if (src_x >= doc_canvas_width) continue;
+
+                            u32 pixel = doc_canvas_pixels[src_y * doc_canvas_width + src_x];
+#ifdef RAW_COPY
+                            windowData.pixels[y * windowData.width + x] = pixel;
+#else
+                            // Extract RGBA components
+                            u32 r = pixel & 0xFF;
+                            u32 g = (pixel >> 8) & 0xFF;
+                            u32 b = (pixel >> 16) & 0xFF;
+                            u32 a = (pixel >> 24) & 0xFF;
+                            // Repack as BGRA for X11
+                            windowData.pixels[y * windowData.width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+#endif
+                        }
+                    }
                 }
             }
         }
@@ -805,6 +856,14 @@ int main(int argc, char** argv) {
     XCloseDisplay(windowData.display);
     
     return 0;
+}
+
+// Platform function to get window size
+void platform_get_window_size(u32* width, u32* height) {
+    if (g_windowData && width && height) {
+        *width = g_windowData->width;
+        *height = g_windowData->height;
+    }
 }
 
 // Platform clipboard implementation for Linux/X11

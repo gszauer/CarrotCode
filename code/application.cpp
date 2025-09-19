@@ -414,7 +414,22 @@ void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, voi
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     UserData* user = new UserData();
     user->offset = 0.0f;
-    user->cnvs = canvas_create(desiredWidth, desiredHeight);
+
+    // Initialize zoom level to 100% first
+    user->zoom_level = 1;
+
+    // Adjust canvas size based on initial zoom level
+    // At 50% zoom, we need 2x canvas size to fill the screen
+    // At 200% zoom, we need 0.5x canvas size
+    float scale = 1.0f;
+    if (user->zoom_level == 0) scale = 0.5f;       // 50% - need larger canvas
+    else if (user->zoom_level == 1) scale = 1.0f;  // 100% - normal
+    else if (user->zoom_level == 2) scale = 2.0f;  // 200% - need smaller canvas
+
+    u32 canvasWidth = (u32)(desiredWidth / scale);
+    u32 canvasHeight = (u32)(desiredHeight / scale);
+
+    user->cnvs = canvas_create(canvasWidth, canvasHeight);
     user->fnt = font_create(nullptr, 0, 32);
     user->imgui_context = ImGuiInit(user->cnvs, user->fnt);
 
@@ -890,13 +905,12 @@ canvas* Render(UserData* user) {
     }
     else if (menuIndex == 2) {
         menuX = 175;
-        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 7, 220);
+        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 5, 220);
 
+        // Process zoom menu items (0-2)
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
 
         // Disable syntax menu items if no document is open
         bool hasDocument = !user->views.empty();
@@ -904,8 +918,8 @@ canvas* Render(UserData* user) {
             ImGuiPushDisabled(user->imgui_context);
         }
 
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 5)) clickedItem = 5;
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 6)) clickedItem = 6;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
 
         if (!hasDocument) {
             ImGuiPopDisabled(user->imgui_context);
@@ -914,11 +928,43 @@ canvas* Render(UserData* user) {
         if (clickedItem >= 0) {
             menuIndex = -1;
 
+            // Handle zoom level changes
+            if (clickedItem >= 0 && clickedItem <= 2) {
+                user->zoom_level = clickedItem;  // 0=50%, 1=100%, 2=200%
+
+                // Get current window size and recreate canvas with proper dimensions
+                u32 windowWidth, windowHeight;
+                platform_get_window_size(&windowWidth, &windowHeight);
+
+                // Calculate canvas size based on zoom level
+                float scale = 1.0f;
+                if (user->zoom_level == 0) scale = 0.5f;       // 50% - need larger canvas
+                else if (user->zoom_level == 1) scale = 1.0f;  // 100% - normal
+                else if (user->zoom_level == 2) scale = 2.0f;  // 200% - need smaller canvas
+
+                u32 canvasWidth = (u32)(windowWidth / scale);
+                u32 canvasHeight = (u32)(windowHeight / scale);
+
+                // Recreate canvas with new size
+                canvas_destroy(user->cnvs);
+                user->cnvs = canvas_create(canvasWidth, canvasHeight);
+
+                // Update ImGui canvas target
+                ImGuiSetTargets(user->imgui_context, user->cnvs, user->fnt);
+
+                // Update view display areas
+                for (size_t i = 0; i < user->views.size(); i++) {
+                    if (user->views[i]) {
+                        user->views[i]->displayAreaW = canvasWidth;
+                        user->views[i]->displayAreaH = canvasHeight - 50;  // Account for menu bar
+                    }
+                }
+            }
             // Handle syntax highlighting toggle
-            if ((clickedItem == 5 || clickedItem == 6) && !user->views.empty() && user->active_view < user->views.size()) {
+            else if ((clickedItem == 3 || clickedItem == 4) && !user->views.empty() && user->active_view < user->views.size()) {
                 document_view* view = user->views[user->active_view];
                 if (view) {
-                    bool syntaxEnabled = (clickedItem == 5);  // 5 = "Syntax: On", 6 = "Syntax: Off"
+                    bool syntaxEnabled = (clickedItem == 3);  // 3 = "Syntax: On", 4 = "Syntax: Off"
                     document_view_set_highlight_syntax(view, syntaxEnabled);
                 }
             }
@@ -1157,12 +1203,16 @@ canvas* Render(UserData* user) {
         ImGuiRenderEndMenu(user->imgui_context);
     }
     else if (menuIndex == 2) {
-        ImGuiRenderBeginMenu(user->imgui_context, 175, menuY, 7);
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 0, "Zoom: 50%");
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 1, "Zoom: 75%");
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 2, "> Zoom: 100%");
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 3, "Zoom: 125%");
-        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 4, "Zoom: 150%");
+        ImGuiRenderBeginMenu(user->imgui_context, 175, menuY, 5);
+
+        // Dynamic zoom menu items with indicator for active zoom level
+        const char* zoom_50 = (user->zoom_level == 0) ? "> Zoom: 50%" : "Zoom: 50%";
+        const char* zoom_100 = (user->zoom_level == 1) ? "> Zoom: 100%" : "Zoom: 100%";
+        const char* zoom_200 = (user->zoom_level == 2) ? "> Zoom: 200%" : "Zoom: 200%";
+
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 0, zoom_50);
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 1, zoom_100);
+        ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 2, zoom_200);
 
         // Show syntax highlighting state based on current document
         bool hasDocument = !user->views.empty();
@@ -1182,15 +1232,15 @@ canvas* Render(UserData* user) {
 
         // Show with > indicator based on current state
         if (hasDocument && syntaxEnabled) {
-            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "> Syntax: On");
-            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "Syntax: Off");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 3, "> Syntax: On");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 4, "Syntax: Off");
         } else if (hasDocument && !syntaxEnabled) {
-            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "Syntax: On");
-            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "> Syntax: Off");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 3, "Syntax: On");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 4, "> Syntax: Off");
         } else {
             // No document open - show without > indicator
-            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 5, "Syntax: On");
-            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 6, "Syntax: Off");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 3, "Syntax: On");
+            ImGuiRenderMenuItem(user->imgui_context, 175, menuY, 4, "Syntax: Off");
         }
 
         if (!hasDocument) {
