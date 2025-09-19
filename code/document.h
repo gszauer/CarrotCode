@@ -93,12 +93,16 @@ void doc_split_line(document* doc, u32 line, u32 col);
 // The newline between them is removed
 void doc_join_lines(document* doc, u32 line);
 
-// Undo/redo
+// === Undo/Redo System ===
 
 // Undoes the last edit operation if possible
+// Automatically commits any pending word-based undo before undoing
+// Sets last_edit_position for cursor positioning
 void doc_undo(document* doc);
 
 // Redoes the previously undone operation if possible
+// Automatically commits any pending word-based undo before redoing
+// Sets last_edit_position for cursor positioning
 void doc_redo(document* doc);
 
 // Returns true if there are operations that can be undone
@@ -107,11 +111,23 @@ bool doc_can_undo(document* doc);
 // Returns true if there are operations that can be redone
 bool doc_can_redo(document* doc);
 
-// Get the last edit position after undo/redo (returns false if no position available)
+// === Cursor Position Management for Undo/Redo ===
+
+// Get the last edit position after undo/redo operation
+// Used by views to position cursor at the edit location
+// Returns false if no position available, true if out_line/out_col were set
 bool doc_get_last_edit_position(document* doc, u32* out_line, u32* out_col);
 
-// Clear the last edit position
+// Clear the stored last edit position
+// Should be called after a view uses the position to prevent other views from using stale data
 void doc_clear_last_edit_position(document* doc);
+
+// === Word-Based Undo System ===
+
+// Commit any pending word buffer as an INSERT_TEXT undo action
+// Should be called when: cursor moves, other operations occur, or word boundary is hit
+// This completes the current word grouping and prepares for the next
+void doc_commit_pending_undo(document* doc);
 
 // Syntax highlighting
 

@@ -369,6 +369,11 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     static bool wasLeftDown = false;
     static bool wasRightDown = false;
 
+    // Commit any pending word when mouse is clicked
+    if (view && view->target && (leftDown || rightDown)) {
+        doc_commit_pending_undo(view->target);
+    }
+
     // Check if mouse is over scrollbar areas
     f32 viewWidth = view->displayAreaW;
     f32 viewHeight = view->displayAreaH;
@@ -1087,6 +1092,11 @@ void document_view_delete_backward(document_view* view) {
 }
 
 void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, bool extend_selection) {
+    // Commit any pending word when cursor moves
+    if (view && view->target) {
+        doc_commit_pending_undo(view->target);
+    }
+
     if (!extend_selection && view->hasSelection) {
         view->hasSelection = false;
     }

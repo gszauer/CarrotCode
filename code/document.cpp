@@ -8,48 +8,72 @@
 #include <cstring>
 #include <cstdio>
 
+/**
+ * Represents a single edit operation that can be undone/redone.
+ * Each action stores enough information to both apply and reverse the operation.
+ */
 struct edit_action {
     enum action_type {
-        INSERT_CHAR,
-        DELETE_CHAR,
-        INSERT_TEXT,
-        DELETE_RANGE,
-        INSERT_LINE,
-        DELETE_LINE,
-        SPLIT_LINE,
-        JOIN_LINE
+        INSERT_CHAR,    // Single character insertion
+        DELETE_CHAR,    // Single character deletion
+        INSERT_TEXT,    // Multi-character text insertion (includes word-based undo)
+        DELETE_RANGE,   // Range deletion (selection delete)
+        INSERT_LINE,    // Full line insertion
+        DELETE_LINE,    // Full line deletion
+        SPLIT_LINE,     // Line split (Enter key)
+        JOIN_LINE       // Line join (Delete at end of line)
     } type;
 
-    u32 line;
-    u32 col;
-    u32 end_line;
-    u32 end_col;
-    u32_string* text;
-    u32 codepoint;
+    // Position where the action occurred
+    u32 line;           // Starting line number
+    u32 col;            // Starting column number
+    u32 end_line;       // Ending line (for range operations)
+    u32 end_col;        // Ending column (for range operations)
 
-    // Cursor position hints for undo/redo
+    // Data for the action
+    u32_string* text;   // Text content (for INSERT_TEXT, DELETE_RANGE, INSERT_LINE, DELETE_LINE)
+    u32 codepoint;      // Single character (for INSERT_CHAR, DELETE_CHAR)
+
+    // Cursor position hints for better UX after undo/redo
     u32 cursor_line_after_redo;  // Where cursor should be after performing the action
-    u32 cursor_col_after_redo;
+    u32 cursor_col_after_redo;   // (e.g., end of inserted text)
     u32 cursor_line_after_undo;  // Where cursor should be after undoing the action
-    u32 cursor_col_after_undo;
+    u32 cursor_col_after_undo;   // (e.g., start of where text was)
 };
 
+/**
+ * Main document structure that manages text content and edit history.
+ * Handles both the text lines and the undo/redo system.
+ */
 struct document {
-    vector_docline* lines;
-    bool modified;
+    // === Document Content ===
+    vector_docline* lines;      // Dynamic array of text lines (each line is a document_line)
+    bool modified;               // True if document has unsaved changes
 
-    edit_action* undo_stack;
-    u32 undo_stack_size;
-    u32 undo_position;
-    u32 max_undo_levels;
-    bool in_undo_redo;  // Flag to prevent recording during undo/redo
+    // === Undo/Redo System ===
+    edit_action* undo_stack;    // Array of edit actions for undo/redo
+    u32 undo_stack_size;        // Number of actions currently in the stack
+    u32 undo_position;          // Current position in undo stack (0 = nothing to undo)
+    u32 max_undo_levels;        // Maximum number of undo levels (0 = undo disabled)
+    bool in_undo_redo;          // Flag to prevent recording actions during undo/redo operations
 
-    // Last edit position for cursor positioning after undo/redo
-    u32 last_edit_line;
-    u32 last_edit_col;
-    bool has_edit_position;
+    // === Cursor Positioning After Undo/Redo ===
+    u32 last_edit_line;         // Line where last undo/redo occurred
+    u32 last_edit_col;          // Column where last undo/redo occurred
+    bool has_edit_position;     // True if last_edit_line/col contains valid position
+
+    // === Word-Based Undo System ===
+    bool building_word;         // True if currently accumulating characters into a word
+    u32 word_start_line;        // Line where current word started
+    u32 word_start_col;         // Column where current word started
+    u32_string* current_word;   // Buffer holding characters of word being built
 };
 
+/**
+ * Adds an edit action to the undo stack.
+ * Handles stack overflow by removing oldest action.
+ * Clears redo stack if we're in the middle of it.
+ */
 static void add_undo_action(document* doc, edit_action action) {
     if (doc->max_undo_levels == 0 || doc->in_undo_redo) {
         doc->modified = true;
@@ -111,14 +135,22 @@ document* doc_create(u32 undo_levels) {
     doc->last_edit_line = 0;
     doc->last_edit_col = 0;
     doc->has_edit_position = false;
+    doc->building_word = false;
+    doc->word_start_line = 0;
+    doc->word_start_col = 0;
+    doc->current_word = u32str_create();
     return doc;
 }
 
 void doc_destroy(document* doc) {
     if (!doc) return;
-    
+
     vec_docline_destroy(doc->lines);
-    
+
+    if (doc->current_word) {
+        u32str_destroy(doc->current_word);
+    }
+
     if (doc->undo_stack) {
         for (u32 i = 0; i < doc->undo_stack_size; i++) {
             if (doc->undo_stack[i].text) {
@@ -270,6 +302,61 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
     return result;
 }
 
+/**
+ * Determines if a character should break word grouping for undo.
+ * Word boundaries include spaces, punctuation, and special characters.
+ * @param codepoint Unicode character to check
+ * @return true if character is a word boundary
+ */
+static bool is_word_boundary(u32 codepoint) {
+    // Word boundaries: space, tab, newline, and common punctuation
+    return codepoint == ' ' || codepoint == '\t' || codepoint == '\n' ||
+           codepoint == '.' || codepoint == ',' || codepoint == ';' ||
+           codepoint == ':' || codepoint == '!' || codepoint == '?' ||
+           codepoint == '(' || codepoint == ')' || codepoint == '[' ||
+           codepoint == ']' || codepoint == '{' || codepoint == '}' ||
+           codepoint == '"' || codepoint == '\'' || codepoint == '/' ||
+           codepoint == '\\' || codepoint == '<' || codepoint == '>' ||
+           codepoint == '=' || codepoint == '+' || codepoint == '-' ||
+           codepoint == '*' || codepoint == '&' || codepoint == '|' ||
+           codepoint == '^' || codepoint == '%' || codepoint == '#';
+}
+
+/**
+ * Commits the accumulated word buffer as a single INSERT_TEXT undo action.
+ * Called when word boundary is reached or cursor moves.
+ * Resets the word building state after committing.
+ */
+static void commit_word_undo(document* doc) {
+    if (!doc->building_word || u32str_length(doc->current_word) == 0) {
+        return;
+    }
+
+    edit_action action;
+    action.type = edit_action::INSERT_TEXT;
+    action.line = doc->word_start_line;
+    action.col = doc->word_start_col;
+    action.end_line = 0;
+    action.end_col = 0;
+    action.codepoint = 0;
+    action.text = u32str_substr(doc->current_word, 0, u32str_length(doc->current_word));
+
+    // Calculate cursor position after text insertion
+    u32 final_line = doc->word_start_line;
+    u32 final_col = doc->word_start_col + u32str_length(doc->current_word);
+
+    action.cursor_line_after_redo = final_line;
+    action.cursor_col_after_redo = final_col;
+    action.cursor_line_after_undo = doc->word_start_line;
+    action.cursor_col_after_undo = doc->word_start_col;
+
+    add_undo_action(doc, action);
+
+    // Reset word building state
+    doc->building_word = false;
+    u32str_clear(doc->current_word);
+}
+
 void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
     if (!doc || line >= vec_docline_size(doc->lines)) {
         return;
@@ -280,28 +367,58 @@ void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
         col = u32str_length(doc_line->text);
     }
 
-    // Use the new efficient single-character insert
+    // Insert the character into the document
     u32str_insert_char(doc_line->text, col, codepoint);
     docline_mark_dirty(doc_line);
-    
-    edit_action action;
-    action.type = edit_action::INSERT_CHAR;
-    action.line = line;
-    action.col = col;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = codepoint;
-    action.text = nullptr;
-    // Cursor positions: after inserting char, cursor is at col+1; after undo, back at col
-    action.cursor_line_after_redo = line;
-    action.cursor_col_after_redo = col + 1;
-    action.cursor_line_after_undo = line;
-    action.cursor_col_after_undo = col;
-    add_undo_action(doc, action);
+
+    // Check if we need to start a new word or continue building one
+    bool is_boundary = is_word_boundary(codepoint);
+
+    if (doc->building_word) {
+        // Check if we're still typing at the expected position
+        u32 expected_col = doc->word_start_col + u32str_length(doc->current_word);
+        bool position_matches = (line == doc->word_start_line && col == expected_col);
+
+        if (!position_matches || is_boundary) {
+            // Position changed or hit a boundary - commit the current word
+            commit_word_undo(doc);
+        }
+    }
+
+    if (is_boundary) {
+        // Word boundary characters get their own undo action
+        edit_action action;
+        action.type = edit_action::INSERT_CHAR;
+        action.line = line;
+        action.col = col;
+        action.end_line = 0;
+        action.end_col = 0;
+        action.codepoint = codepoint;
+        action.text = nullptr;
+        action.cursor_line_after_redo = line;
+        action.cursor_col_after_redo = col + 1;
+        action.cursor_line_after_undo = line;
+        action.cursor_col_after_undo = col;
+        add_undo_action(doc, action);
+    } else {
+        // Regular character - add to current word
+        if (!doc->building_word) {
+            // Start a new word
+            doc->building_word = true;
+            doc->word_start_line = line;
+            doc->word_start_col = col;
+            u32str_clear(doc->current_word);
+        }
+        // Add character to current word
+        u32str_insert_char(doc->current_word, u32str_length(doc->current_word), codepoint);
+    }
 }
 
 void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
     if (!doc || !text || line >= vec_docline_size(doc->lines)) return;
+
+    // Commit any pending word before inserting text
+    commit_word_undo(doc);
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > u32str_length(doc_line->text)) {
@@ -402,6 +519,9 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
 
 void doc_delete_char(document* doc, u32 line, u32 col) {
     if (!doc || line >= vec_docline_size(doc->lines)) return;
+
+    // Commit any pending word before deleting
+    commit_word_undo(doc);
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
     
@@ -447,6 +567,9 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
 
 void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line, u32 end_col) {
     if (!doc || start_line >= vec_docline_size(doc->lines)) return;
+
+    // Commit any pending word before deleting range
+    commit_word_undo(doc);
     
     u32_string* deleted_text = doc_get_range(doc, start_line, start_col, end_line, end_col);
     
@@ -559,6 +682,9 @@ void doc_delete_line(document* doc, u32 line_index) {
 
 void doc_split_line(document* doc, u32 line, u32 col) {
     if (!doc || line >= vec_docline_size(doc->lines)) return;
+
+    // Commit any pending word before splitting line
+    commit_word_undo(doc);
     
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > u32str_length(doc_line->text)) {
@@ -616,6 +742,9 @@ void doc_join_lines(document* doc, u32 line) {
 
 void doc_undo(document* doc) {
     if (!doc || doc->max_undo_levels == 0 || doc->undo_position == 0) return;
+
+    // Commit any pending word before undoing
+    commit_word_undo(doc);
 
     doc->in_undo_redo = true;  // Prevent recording undo actions
     doc->undo_position--;
@@ -714,6 +843,9 @@ void doc_undo(document* doc) {
 void doc_redo(document* doc) {
     if (!doc || doc->max_undo_levels == 0 || doc->undo_position >= doc->undo_stack_size) return;
 
+    // Commit any pending word before redoing
+    commit_word_undo(doc);
+
     doc->in_undo_redo = true;  // Prevent recording undo actions
     edit_action* action = &doc->undo_stack[doc->undo_position];
     doc->undo_position++;
@@ -789,6 +921,11 @@ bool doc_get_last_edit_position(document* doc, u32* out_line, u32* out_col) {
 void doc_clear_last_edit_position(document* doc) {
     if (!doc) return;
     doc->has_edit_position = false;
+}
+
+void doc_commit_pending_undo(document* doc) {
+    if (!doc) return;
+    commit_word_undo(doc);
 }
 
 void doc_mark_line_dirty(document* doc, u32 line) {
