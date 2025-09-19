@@ -348,6 +348,13 @@ u32_string* u32str_substr(u32_string* target, u32 startIndex, u32 length) {
     return result;
 }
 
+u32* u32str_getBuffer(u32_string* target) {
+    if (target) {
+        return target->buffer;
+    }
+    return 0;
+}
+
 i32 u32str_compare(u32_string* a, u32_string* b) {
     if (!a && !b) return 0;
     if (!a) return -1;

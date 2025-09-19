@@ -64,7 +64,7 @@ void write_file_close_callback(bool success, void* userData) {
     // Close the document regardless of whether save succeeded
     if (view_index < user->views.size()) {
         document_view* view = user->views[view_index];
-        document* doc = view->target;
+        document* doc = document_view_get_document(view);
 
         if (success && doc) {
             // Mark document as saved if write succeeded
@@ -110,22 +110,15 @@ void save_as_close_callback(u32_string* filePath, void* userData) {
 
     if (view_index < user->views.size()) {
         document_view* view = user->views[view_index];
-        document* doc = view->target;
+        document* doc = document_view_get_document(view);
 
         // If save succeeded, update the document's path
         if (filePath) {
             // Update the view's path
-            if (view->path) {
-                u32str_destroy(view->path);
-            }
+            document_view_clear_path(view);
+            
             // Create a copy of the path for the view
-            u32 path_len = u32str_length(filePath);
-            u32* path_copy = (u32*)malloc((path_len + 1) * sizeof(u32));
-            for (u32 i = 0; i <= path_len; i++) {
-                path_copy[i] = u32str_get(filePath, i);
-            }
-            view->path = u32str_init(path_copy);
-            free(path_copy);
+            document_view_set_path(view, filePath);
 
             // Mark document as saved
             if (doc) {
@@ -173,9 +166,9 @@ void close_confirm_callback(bool yes_clicked, void* userData) {
             // Document has a backing file - save to existing path
             if (view_index < user->views.size()) {
                 document_view* view = user->views[view_index];
-                document* doc = view->target;
+                document* doc = document_view_get_document(view);
 
-                if (doc && view->path) {
+                if (doc && document_view_get_path(view)) {
                     // Convert document content to string (includes newlines between lines)
                     u32_string* content = doc_to_str32(doc);
 
@@ -221,7 +214,7 @@ void close_confirm_callback(bool yes_clicked, void* userData) {
                         writeData->view_index = view_index;
 
                         // Call platform write file
-                        platform_write_file(view->path, utf8_content, utf8_len, write_file_close_callback, writeData);
+                        platform_write_file(document_view_get_path(view), utf8_content, utf8_len, write_file_close_callback, writeData);
 
                         // Clean up
                         free(utf8_content);
@@ -233,7 +226,7 @@ void close_confirm_callback(bool yes_clicked, void* userData) {
             // No backing file - use Save As dialog
             if (view_index < user->views.size()) {
                 document_view* view = user->views[view_index];
-                document* doc = view->target;
+                document* doc = document_view_get_document(view);
 
                 if (doc) {
                     // Convert document content to string (includes newlines between lines)
@@ -294,7 +287,7 @@ void close_confirm_callback(bool yes_clicked, void* userData) {
         // User clicked No - close without saving
         if (view_index < user->views.size()) {
             document_view* view = user->views[view_index];
-            document* doc = view->target;
+            document* doc = document_view_get_document(view);
 
             // Destroy the document and its view
             if (doc) {
@@ -333,8 +326,8 @@ void save_file_callback(bool success, void* userData) {
         // Mark document as saved if we have an active view
         if (!user->views.empty() && user->active_view < user->views.size()) {
             document_view* view = user->views[user->active_view];
-            if (view && view->target) {
-                doc_set_modified(view->target, false);
+            if (view && document_view_get_document(view)) {
+                doc_set_modified(document_view_get_document(view), false);
             }
         }
     } else {
@@ -352,21 +345,12 @@ void save_as_callback(u32_string* filePath, void* userData) {
             document_view* view = user->views[user->active_view];
             if (view) {
                 // Update the view's path
-                if (view->path) {
-                    u32str_destroy(view->path);
-                }
-                // Create a copy of the path for the view
-                u32 path_len = u32str_length(filePath);
-                u32* path_copy = (u32*)malloc((path_len + 1) * sizeof(u32));
-                for (u32 i = 0; i <= path_len; i++) {
-                    path_copy[i] = u32str_get(filePath, i);
-                }
-                view->path = u32str_init(path_copy);
-                free(path_copy);
+                document_view_clear_path(view);
+                document_view_set_path(view, filePath);
 
                 // Mark document as saved
-                if (view->target) {
-                    doc_set_modified(view->target, false);
+                if (document_view_get_document(view)) {
+                    doc_set_modified(document_view_get_document(view), false);
                 }
             }
         }
@@ -464,12 +448,13 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
     // Check if a document with this path is already open
     if (path) {
         for (size_t i = 0; i < user->views.size(); i++) {
-            if (user->views[i] && user->views[i]->path) {
+            u32_string* path_string = document_view_get_path(user->views[i]);
+            if (user->views[i] && path_string) {
                 // Convert the stored path to char* for comparison
-                u32 stored_path_len = u32str_length(user->views[i]->path);
+                u32 stored_path_len = u32str_length(path_string);
                 char* stored_path = (char*)malloc(stored_path_len + 1);
                 for (u32 j = 0; j < stored_path_len; j++) {
-                    stored_path[j] = (char)u32str_get(user->views[i]->path, j);
+                    stored_path[j] = (char)u32str_get(path_string, j);
                 }
                 stored_path[stored_path_len] = '\0';
 
@@ -510,10 +495,10 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
     }
 
     // Set display area (will be updated in render)
-    view->displayAreaX = 0;
-    view->displayAreaY = 51; // Below menu and tabs with border
-    view->displayAreaW = canvas_get_width(user->cnvs);
-    view->displayAreaH = canvas_get_height(user->cnvs) - 51;
+    document_view_set_display_area(view, 0, 51, // Below menu and tabs with border
+        canvas_get_width(user->cnvs),
+        canvas_get_height(user->cnvs) >= 51? canvas_get_height(user->cnvs) - 51 : 0
+    );
 
     user->views.push_back(view);
     user->active_view = user->views.size() - 1;
@@ -580,20 +565,21 @@ canvas* Render(UserData* user) {
             // Close current tab
             if (!user->views.empty() && user->active_view < user->views.size()) {
                 document_view* view = user->views[user->active_view];
-                document* doc = view->target;
+                document* doc = document_view_get_document(view);
 
                 // Check if document has unsaved changes
                 if (doc && doc_is_modified(doc)) {
                     // Build the dialog message
                     std::string message;
-                    bool has_path = (view->path != nullptr);
+                    bool has_path = document_view_get_path(view) != nullptr;
 
                     if (has_path) {
+                        u32_string* path_string = document_view_get_path(view);
                         // Document has a file path - extract just the filename
-                        u32 path_len = u32str_length(view->path);
+                        u32 path_len = u32str_length(path_string);
                         std::string full_path;
                         for (u32 i = 0; i < path_len; i++) {
-                            full_path += (char)u32str_get(view->path, i);
+                            full_path += (char)u32str_get(path_string, i);
                         }
 
                         // Extract filename from path
@@ -672,7 +658,7 @@ canvas* Render(UserData* user) {
                 // Save the current document
                 if (!user->views.empty() && user->active_view < user->views.size()) {
                     document_view* view = user->views[user->active_view];
-                    document* doc = view->target;
+                    document* doc = document_view_get_document(view);
 
                     if (doc) {
                         // Convert document content to string (includes newlines between lines)
@@ -714,9 +700,9 @@ canvas* Render(UserData* user) {
                                 // Skip invalid Unicode values above 0x10FFFF
                             }
 
-                            if (view->path) {
+                            if (document_view_get_path(view)) {
                                 // Document has a backing file - save directly
-                                platform_write_file(view->path, utf8_content, utf8_len, save_file_callback, user);
+                                platform_write_file(document_view_get_path(view), utf8_content, utf8_len, save_file_callback, user);
                             } else {
                                 // No backing file - show save as dialog
                                 platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
@@ -745,9 +731,10 @@ canvas* Render(UserData* user) {
 
         if (hasDocument && user->active_view < user->views.size()) {
             document_view* view = user->views[user->active_view];
-            if (view && view->target) {
-                canUndo = doc_can_undo(view->target);
-                canRedo = doc_can_redo(view->target);
+            document* view_target = document_view_get_document(view);
+            if (view && view_target) {
+                canUndo = doc_can_undo(view_target);
+                canRedo = doc_can_redo(view_target);
             }
         }
 
@@ -790,12 +777,12 @@ canvas* Render(UserData* user) {
                 document_view* view = user->views[user->active_view];
                 if (view) {
                     if (clickedItem == 0) {  // Undo
-                        if (doc_can_undo(view->target)) {
+                        if (doc_can_undo(document_view_get_document(view))) {
                             document_view_undo(view);
                         }
                     }
                     else if (clickedItem == 1) {  // Redo
-                        if (doc_can_redo(view->target)) {
+                        if (doc_can_redo(document_view_get_document(view))) {
                             document_view_redo(view);
                         }
                     }
@@ -811,8 +798,8 @@ canvas* Render(UserData* user) {
 
                         // If no selection, get the current line
                         if (!has_selection) {
-                            document* doc = view->target;
-                            u32 line_row = view->cursor.row;
+                            document* doc = document_view_get_document(view);
+                            u32 line_row = document_view_get_cursor_row(view);
                             // Make sure the line exists
                             if (line_row < doc_line_count(doc)) {
                                 u32_string* line = doc_get_line(doc, line_row);
@@ -842,7 +829,7 @@ canvas* Render(UserData* user) {
                                 document_view_delete_selection(view);
                             } else {
                                 // Defer the whole line deletion until after rendering
-                                u32 current_line = view->cursor.row;
+                                u32 current_line = document_view_get_cursor_row(view);
 
                                 printf("[CUT] Deferring deletion of line %u\n", current_line);
 
@@ -867,8 +854,8 @@ canvas* Render(UserData* user) {
 
                         // If no selection, get the current line
                         if (!has_selection) {
-                            document* doc = view->target;
-                            u32 line_row = view->cursor.row;
+                            document* doc = document_view_get_document(view);
+                            u32 line_row = document_view_get_cursor_row(view);
                             // Make sure the line exists
                             if (line_row < doc_line_count(doc)) {
                                 u32_string* line = doc_get_line(doc, line_row);
@@ -906,7 +893,7 @@ canvas* Render(UserData* user) {
                         // Build the markdown export string
                         for (size_t i = 0; i < user->views.size(); i++) {
                             document_view* export_view = user->views[i];
-                            if (!export_view || !export_view->target) continue;
+                            if (!export_view || !document_view_get_document(export_view)) continue;
 
                             // Add header with file path
                             u32_string* header = u32str_create();
@@ -915,8 +902,9 @@ canvas* Render(UserData* user) {
                             u32str_insert_char(header, 0, hash_sym);
                             u32str_insert_char(header, 1, space);
 
-                            if (export_view->path && u32str_length(export_view->path) > 0) {
-                                u32str_insert(header, export_view->path, 2, 0, u32str_length(export_view->path));
+                            u32_string* export_view_path = document_view_get_path(export_view);
+                            if (export_view_path && u32str_length(export_view_path) > 0) {
+                                u32str_insert(header, export_view_path, 2, 0, u32str_length(export_view_path));
                             } else {
                                 // Add "Untitled"
                                 const char* untitled = "Untitled";
@@ -943,7 +931,7 @@ canvas* Render(UserData* user) {
                             u32str_destroy(code_start);
 
                             // Add document content
-                            document* src_doc = export_view->target;
+                            document* src_doc = document_view_get_document(export_view);
                             u32 line_count = doc_line_count(src_doc);
                             for (u32 line_idx = 0; line_idx < line_count; line_idx++) {
                                 u32_string* line = doc_get_line(src_doc, line_idx);
@@ -1035,8 +1023,8 @@ canvas* Render(UserData* user) {
                 // Update view display areas
                 for (size_t i = 0; i < user->views.size(); i++) {
                     if (user->views[i]) {
-                        user->views[i]->displayAreaW = canvasWidth;
-                        user->views[i]->displayAreaH = canvasHeight - 51;  // Account for menu bar and border
+                        document_view_set_display_size(user->views[i],
+                            canvasWidth, canvasHeight >= 51? canvasHeight - 51 : 0);  // Account for menu bar and border
                     }
                 }
             }
@@ -1105,11 +1093,12 @@ canvas* Render(UserData* user) {
             bool is_open = true;
             bool is_saved = false;
 
-            if (view && view->path && u32str_length(view->path) > 0) {
+            u32_string* view_path_string = document_view_get_path(view);
+            if (view && view_path_string && u32str_length(view_path_string) > 0) {
                 // Convert path to char* for display
-                u32 path_len = u32str_length(view->path);
+                u32 path_len = u32str_length(view_path_string);
                 for (u32 j = 0; j < path_len && j < 255; j++) {
-                    tab_text[j] = (char)u32str_get(view->path, j);
+                    tab_text[j] = (char)u32str_get(view_path_string, j);
                 }
                 tab_text[path_len < 255 ? path_len : 255] = '\0';
 
@@ -1122,8 +1111,8 @@ canvas* Render(UserData* user) {
                 }
 
                 // Document is saved if it has a backing file AND is not modified
-                if (view->target) {
-                    is_saved = !doc_is_modified(view->target);
+                if (document_view_get_document(view)) {
+                    is_saved = !doc_is_modified(document_view_get_document(view));
                 }
 
                 is_open = ImGuiTab(user->imgui_context, filename, is_saved);
@@ -1145,8 +1134,8 @@ canvas* Render(UserData* user) {
             // Handle tab closing after the tab bar is complete
             if (tab_to_close >= 0 && (size_t)tab_to_close < user->views.size()) {
                 // Destroy the document and its view
-                if (user->views[tab_to_close]->target) {
-                    doc_destroy(user->views[tab_to_close]->target);
+                if (document_view_get_document(user->views[tab_to_close])) {
+                    doc_destroy(document_view_get_document(user->views[tab_to_close]));
                 }
                 document_view_destroy(user->views[tab_to_close]);
 
@@ -1198,10 +1187,9 @@ canvas* Render(UserData* user) {
         document_view* view = user->views[user->active_view];
         if (view) {
             // Update display area
-            view->displayAreaX = 0;
-            view->displayAreaY = 51;  // Below menu/tab bar with 1px border
-            view->displayAreaW = canvasWidth;
-            view->displayAreaH = canvasHeight - 51;  // Account for border
+            document_view_set_display_area(view, 0, 51,
+                canvasWidth, canvasHeight >= 51? canvasHeight - 51 : 0
+            );
 
             // Render the document view
             document_view_render(view, user->imgui_context, user->cnvs, user->fnt, true);
@@ -1256,9 +1244,10 @@ canvas* Render(UserData* user) {
 
         if (hasDocument && user->active_view < user->views.size()) {
             document_view* view = user->views[user->active_view];
-            if (view && view->target) {
-                canUndo = doc_can_undo(view->target);
-                canRedo = doc_can_redo(view->target);
+            document* view_target = document_view_get_document(view);
+            if (view && view_target) {
+                canUndo = doc_can_undo(view_target);
+                canRedo = doc_can_redo(view_target);
             }
         }
 
@@ -1356,10 +1345,11 @@ canvas* Render(UserData* user) {
             char tab_text[256];
             document_view* view = user->views[i];
 
-            if (view && view->path && u32str_length(view->path) > 0) {
-                u32 path_len = u32str_length(view->path);
+            u32_string* view_path = document_view_get_path(view);
+            if (view && view_path && u32str_length(view_path) > 0) {
+                u32 path_len = u32str_length(view_path);
                 for (u32 j = 0; j < path_len && j < 255; j++) {
-                    tab_text[j] = (char)u32str_get(view->path, j);
+                    tab_text[j] = (char)u32str_get(view_path, j);
                 }
                 tab_text[path_len < 255 ? path_len : 255] = '\0';
 
@@ -1401,7 +1391,7 @@ canvas* Render(UserData* user) {
         if (user->deferred_delete_view < user->views.size()) {
             document_view* view = user->views[user->deferred_delete_view];
             if (view) {
-                document* doc = view->target;
+                document* doc = document_view_get_document(view);
                 u32 line_to_delete = user->deferred_delete_line;
 
                 printf("[DEFERRED] Deleting line %u from view %u\n", line_to_delete, user->deferred_delete_view);
@@ -1437,8 +1427,8 @@ void Shutdown(void* userData) {
     // Clean up document views and their documents
     for (document_view* view : user->views) {
         if (view) {
-            if (view->target) {
-                doc_destroy(view->target);
+            if (document_view_get_document(view)) {
+                doc_destroy(document_view_get_document(view));
             }
             document_view_destroy(view);
         }

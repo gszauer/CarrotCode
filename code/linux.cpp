@@ -493,8 +493,8 @@ int main(int argc, char** argv) {
 
                                         // If no selection, get the current line
                                         if (!has_selection) {
-                                            document* doc = view->target;
-                                            u32 line_row = view->cursor.row;
+                                            document* doc = document_view_get_document(view);
+                                            u32 line_row = document_view_get_cursor_row(view);
                                             // Make sure the line exists
                                             if (line_row < doc_line_count(doc)) {
                                                 u32_string* line = doc_get_line(doc, line_row);
@@ -524,7 +524,7 @@ int main(int argc, char** argv) {
                                                 document_view_delete_selection(view);
                                             } else {
                                                 // Defer the whole line deletion until after rendering
-                                                u32 current_line = view->cursor.row;
+                                                u32 current_line = document_view_get_cursor_row(view);
 
                                                 printf("[CTRL+X] Deferring deletion of line %u\n", current_line);
 
@@ -550,8 +550,8 @@ int main(int argc, char** argv) {
 
                                         // If no selection, get the current line
                                         if (!has_selection) {
-                                            document* doc = view->target;
-                                            u32 line_row = view->cursor.row;
+                                            document* doc = document_view_get_document(view);
+                                            u32 line_row = document_view_get_cursor_row(view);
                                             // Make sure the line exists
                                             if (line_row < doc_line_count(doc)) {
                                                 u32_string* line = doc_get_line(doc, line_row);
@@ -592,7 +592,7 @@ int main(int argc, char** argv) {
                                         if (shiftDown) {
                                             // Ctrl+Shift+S - Save As
                                             // Trigger save as for the current document
-                                            document* doc = view->target;
+                                            document* doc = document_view_get_document(view);
                                             if (doc) {
                                                 // Convert document content to string
                                                 u32_string* content = doc_to_str32(doc);
@@ -628,7 +628,7 @@ int main(int argc, char** argv) {
                                             }
                                         } else {
                                             // Ctrl+S - Save
-                                            document* doc = view->target;
+                                            document* doc = document_view_get_document(view);
                                             if (doc) {
                                                 // Convert document content to string
                                                 u32_string* content = doc_to_str32(doc);
@@ -657,9 +657,9 @@ int main(int argc, char** argv) {
                                                             utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
                                                         }
                                                     }
-                                                    if (view->path) {
+                                                    if (document_view_get_path(view)) {
                                                         // Has backing file - save directly
-                                                        platform_write_file(view->path, utf8_content, utf8_len, save_file_callback, user);
+                                                        platform_write_file(document_view_get_path(view), utf8_content, utf8_len, save_file_callback, user);
                                                     } else {
                                                         // No backing file - save as
                                                         platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
@@ -672,8 +672,8 @@ int main(int argc, char** argv) {
                                         handled = true;
                                     }
                                     else if (keysym == XK_d || keysym == XK_D) {  // Ctrl+D (Duplicate Line)
-                                        document* doc = view->target;
-                                        u32 line_row = view->cursor.row;
+                                        document* doc = document_view_get_document(view);
+                                        u32 line_row = document_view_get_cursor_row(view);
                                         if (doc && line_row < doc_line_count(doc)) {
                                             // Get the current line
                                             u32_string* line = doc_get_line(doc, line_row);
@@ -693,35 +693,35 @@ int main(int argc, char** argv) {
                                                 u32str_destroy(duplicate);
 
                                                 // Move cursor to the duplicated line
-                                                view->cursor.row = line_row + 1;
+                                                document_view_set_cursor_row(view, line_row + 1);
                                             }
                                         }
                                         handled = true;
                                     }
                                     else if (keysym == XK_l || keysym == XK_L) {  // Ctrl+L (Delete Line)
-                                        document* doc = view->target;
-                                        u32 line_row = view->cursor.row;
+                                        document* doc = document_view_get_document(view);
+                                        u32 line_row = document_view_get_cursor_row(view);
                                         if (doc && line_row < doc_line_count(doc)) {
                                             // Delete the current line
                                             doc_delete_line(doc, line_row);
 
                                             // Adjust cursor if needed
                                             u32 new_line_count = doc_line_count(doc);
-                                            if (view->cursor.row >= new_line_count && new_line_count > 0) {
-                                                view->cursor.row = new_line_count - 1;
+                                            if (document_view_get_cursor_row(view) >= new_line_count && new_line_count > 0) {
+                                                document_view_set_cursor_row(view, new_line_count - 1);
                                             }
-                                            view->cursor.column = 0;
+                                            document_view_set_cursor_col(view, 0);
                                         }
                                         handled = true;
                                     }
                                     else if (keysym == XK_z || keysym == XK_Z) {  // Ctrl+Z (Undo)
-                                        if (doc_can_undo(view->target)) {
+                                        if (doc_can_undo(document_view_get_document(view))) {
                                             document_view_undo(view);
                                         }
                                         handled = true;
                                     }
                                     else if (keysym == XK_y || keysym == XK_Y) {  // Ctrl+Y (Redo)
-                                        if (doc_can_redo(view->target)) {
+                                        if (doc_can_redo(document_view_get_document(view))) {
                                             document_view_redo(view);
                                         }
                                         handled = true;

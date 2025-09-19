@@ -1,25 +1,53 @@
 #include "view.h"
+
 #include "document.h"
 #include "strings.h"
 #include "renderer.h"
 #include "imgui.h"
+
 #define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
+#undef CARROT_INCLUDE_SYNTAX_DEFS
+
 #include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
 
-// Memory allocation functions
-inline void* allocate_memory(size_t size) {
-    return malloc(size);
-}
+struct document_cursor {
+    u32 row;
+    u32 column;
+};
 
-inline void free_memory(void* ptr) {
-    free(ptr);
-}
+struct document_view {
+    document* target;
+    font* fnt;
+    u32_string* path;
 
+    f32 scrollX;
+    f32 scrollY;
+    f32 maxScrollX;
+    f32 maxScrollY;
+
+    u32 displayAreaX;
+    u32 displayAreaY;
+    u32 displayAreaW;
+    u32 displayAreaH;
+
+    document_cursor cursor;
+    document_cursor selectionAnchor;
+    bool hasSelection;
+
+    bool showLineNumbers;
+    bool highlightSyntax;
+    u32 lineNumberWidth;
+    u32 tabWidth;
+
+    u32 lastClickTime;
+    u32 clickCount;
+    document_cursor lastClickPosition;
+};
 
 // Use X11 keysym values instead of Windows VK codes
 #define VK_BACK 0xff08     // XK_BackSpace
@@ -100,8 +128,80 @@ static bool has_code_extension(u32_string* path) {
     return false;
 }
 
+document* document_view_get_document(document_view* view) {
+    if (view) {
+        return view->target;
+    }
+    return 0;
+}
+
+u32 document_view_get_cursor_row(document_view* view) {
+    if (view) {
+        return view->cursor.row;
+    }
+    return 0;
+}
+
+void document_view_set_cursor_row(document_view* view, u32 value) {
+    if (view) {
+        view->cursor.row = value;
+    }
+}
+
+void document_view_set_cursor_col(document_view* view, u32 value) {
+ if (view) {
+        view->cursor.column = value;
+    }
+}
+
+void document_view_set_display_area(document_view* view, u32 x, u32 y, u32 w, u32 h) {
+ if (view) {
+    view->displayAreaX = x;
+    view->displayAreaY = y; 
+    view->displayAreaW = w;
+    view->displayAreaH = h;
+ }
+}
+
+void document_view_set_display_size(document_view* view, u32 w, u32 h) {
+    if (view) {
+    view->displayAreaW = w;
+    view->displayAreaH = h;
+ }
+}
+
+void document_view_clear_path(document_view* view) {
+    if (view) {
+        if (view->path) {
+            u32str_destroy(view->path);
+        }
+        view->path = 0;
+    }
+}
+
+void document_view_set_path(document_view* view, u32_string* path) {
+    document_view_clear_path(view);
+    if (path) {
+        view->path = u32str_init(u32str_getBuffer(path));
+    }
+}
+
+u32 document_view_get_cursor_col(document_view* view) {
+    if (view) {
+        return view->cursor.column;
+    }
+    return 0;
+}
+
+u32_string* document_view_get_path(document_view* view) {
+    if (view) {
+        return view->path;
+    }
+    return 0;
+}
+
 document_view* document_view_create(document* doc, font* fnt, u32_string* path) {
-    document_view* view = (document_view*)allocate_memory(sizeof(document_view));
+    document_view* view = (document_view*)malloc(sizeof(document_view));
 
     view->target = doc;
     view->fnt = fnt;
@@ -145,7 +245,7 @@ void document_view_destroy(document_view* view) {
     }
 
     // Don't destroy the document - it's owned externally
-    free_memory(view);
+    free(view);
 }
 
 void document_view_update_font(document_view* view, font* fnt) {
@@ -967,13 +1067,13 @@ u32_string* document_view_get_selection(document_view* view) {
             }
             u32 newline = '\n';
             // Add newline - need to use a temporary string
-            u32* nl_data = (u32*)allocate_memory(2 * sizeof(u32));
+            u32* nl_data = (u32*)malloc(2 * sizeof(u32));
             nl_data[0] = newline;
             nl_data[1] = 0;
             u32_string* nl_str = u32str_init(nl_data);
             u32str_insert(result, nl_str, u32str_length(result), 0, 1);
             u32str_destroy(nl_str);
-            free_memory(nl_data);
+            free(nl_data);
         }
 
         // Middle lines
@@ -983,13 +1083,13 @@ u32_string* document_view_get_selection(document_view* view) {
                 u32str_insert(result, line, u32str_length(result), 0, u32str_length(line));
                 u32 newline = '\n';
                 // Add newline - need to use a temporary string
-            u32* nl_data = (u32*)allocate_memory(2 * sizeof(u32));
+            u32* nl_data = (u32*)malloc(2 * sizeof(u32));
             nl_data[0] = newline;
             nl_data[1] = 0;
             u32_string* nl_str = u32str_init(nl_data);
             u32str_insert(result, nl_str, u32str_length(result), 0, 1);
             u32str_destroy(nl_str);
-            free_memory(nl_data);
+            free(nl_data);
             }
         }
 
@@ -1310,7 +1410,7 @@ u8* document_view_save_utf32(document_view* view, u32* out_size) {
         if (i < lineCount - 1) totalSize++;
     }
 
-    u32* buffer = (u32*)allocate_memory(totalSize * sizeof(u32));
+    u32* buffer = (u32*)malloc(totalSize * sizeof(u32));
     u32 pos = 0;
 
     for (u32 i = 0; i < lineCount; i++) {
@@ -1341,7 +1441,7 @@ u8* document_view_save_ascii(document_view* view, u32* out_size) {
         if (i < lineCount - 1) totalSize++;
     }
 
-    u8* buffer = (u8*)allocate_memory(totalSize);
+    u8* buffer = (u8*)malloc(totalSize);
     u32 pos = 0;
 
     for (u32 i = 0; i < lineCount; i++) {

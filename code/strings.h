@@ -44,6 +44,8 @@ u32_string* u32str_create(); // Empty string
 u32_string* u32str_init(u32* data); // Expected data to be null terminated
 void u32str_destroy(u32_string* str);
 
+u32* u32str_getBuffer(u32_string* target);
+
 u32 u32str_get(u32_string* target, u32 index);
 void u32str_set(u32_string* target, u32 index, u32 value);
 

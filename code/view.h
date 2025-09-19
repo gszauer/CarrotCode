@@ -4,44 +4,25 @@
 
 struct document;
 struct u32_string;
-
-struct document_cursor {
-    u32 row;
-    u32 column;
-};
-
-struct document_view {
-    document* target;
-    font* fnt;
-    u32_string* path;
-
-    f32 scrollX;
-    f32 scrollY;
-    f32 maxScrollX;
-    f32 maxScrollY;
-
-    u32 displayAreaX;
-    u32 displayAreaY;
-    u32 displayAreaW;
-    u32 displayAreaH;
-
-    document_cursor cursor;
-    document_cursor selectionAnchor;
-    bool hasSelection;
-
-    bool showLineNumbers;
-    bool highlightSyntax;
-    u32 lineNumberWidth;
-    u32 tabWidth;
-
-    u32 lastClickTime;
-    u32 clickCount;
-    document_cursor lastClickPosition;
-};
+struct document_cursor;
+struct document_view;
 
 document_view* document_view_create(document* doc, font* fnt, u32_string* path);
 void document_view_update_font(document_view* view, font* fnt);
 void document_view_destroy(document_view* view);
+
+document* document_view_get_document(document_view* view);
+u32 document_view_get_cursor_row(document_view* view);
+void document_view_set_cursor_row(document_view* view, u32 value);
+u32 document_view_get_cursor_col(document_view* view);
+void document_view_set_cursor_col(document_view* view, u32 value);
+
+u32_string* document_view_get_path(document_view* view); // DO NOT MODIFY RETURN VALUE!
+void document_view_clear_path(document_view* view);
+void document_view_set_path(document_view* view, u32_string* path); // Creates a copy of path
+
+void document_view_set_display_area(document_view* view, u32 x, u32 y, u32 w, u32 h);
+void document_view_set_display_size(document_view* view, u32 w, u32 h);
 
 void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualKey,
                                   bool isDown, bool alt, bool ctrl, bool shift);
