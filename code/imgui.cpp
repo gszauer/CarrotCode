@@ -28,10 +28,10 @@ namespace Colors {
     const u8 SCROLLBAR_HANDLE_HOVER_R = 0x5C, SCROLLBAR_HANDLE_HOVER_G = 0x5C, SCROLLBAR_HANDLE_HOVER_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
     const u8 SCROLLBAR_HANDLE_ACTIVE_R = 0x75, SCROLLBAR_HANDLE_ACTIVE_G = 0x75, SCROLLBAR_HANDLE_ACTIVE_B = 0x75;  // SPECTRUM_DARKEST_GRAY_500
 
-    // Primary blue for CTAs and selections
-    const u8 PRIMARY_R = 0x26, PRIMARY_G = 0x80, PRIMARY_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400
-    const u8 PRIMARY_HOVER_R = 0x37, PRIMARY_HOVER_G = 0x8E, PRIMARY_HOVER_B = 0xF0;  // SPECTRUM_DARKEST_BLUE_500
-    const u8 PRIMARY_ACTIVE_R = 0x4B, PRIMARY_ACTIVE_G = 0x9C, PRIMARY_ACTIVE_B = 0xF5;  // SPECTRUM_DARKEST_BLUE_600
+    // Primary magenta for CTAs and selections (Adobe Spectrum Magenta - dull pink/magenta)
+    const u8 PRIMARY_R = 0xBB, PRIMARY_G = 0x1A, PRIMARY_B = 0xA1;  // SPECTRUM_MAGENTA_700 - for buttons/tabs
+    const u8 PRIMARY_HOVER_R = 0xD2, PRIMARY_HOVER_G = 0x2D, PRIMARY_HOVER_B = 0xB4;  // SPECTRUM_MAGENTA_600 - hover
+    const u8 PRIMARY_ACTIVE_R = 0xE8, PRIMARY_ACTIVE_G = 0x48, PRIMARY_ACTIVE_B = 0xC3;  // SPECTRUM_MAGENTA_500 - active
 
     // Text colors
     const u8 TEXT_R = 0xDC, TEXT_G = 0xDC, TEXT_B = 0xDC;  // SPECTRUM_DARKEST_GRAY_800
@@ -42,8 +42,8 @@ namespace Colors {
     const u8 BORDER_R = 0x5C, BORDER_G = 0x5C, BORDER_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
 
     // Selection and highlights
-    const u8 CHECK_R = 0x26, CHECK_G = 0x80, CHECK_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400
-    const u8 SELECTION_R = 0x26, SELECTION_G = 0x80, SELECTION_B = 0xEB;  // SPECTRUM_DARKEST_BLUE_400 with alpha
+    const u8 CHECK_R = 0xBB, CHECK_G = 0x1A, CHECK_B = 0xA1;  // SPECTRUM_MAGENTA_700 - checkboxes
+    const u8 SELECTION_R = 0x5F, SELECTION_G = 0x14, SELECTION_B = 0x55;  // SPECTRUM_MAGENTA_1100 - paler for text selection
 
     // Shadow color for popup menus (darker than background)
     const u8 SHADOW_R = 0x00, SHADOW_G = 0x00, SHADOW_B = 0x00;  // Pure black for shadows

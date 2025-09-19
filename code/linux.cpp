@@ -9,7 +9,7 @@
 
 #define WINDOW_WIDTH 1600
 #define WINDOW_HEIGHT 1200
-#define WINDOW_TITLE "Code Viewer - Drop File to Preview"
+#define WINDOW_TITLE "Carrot Code"
 
 // External callback functions from application.cpp
 extern void clipboard_copy_callback(void* userData);

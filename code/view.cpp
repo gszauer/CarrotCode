@@ -700,7 +700,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                 if (selX2 > contentStartX + viewWidth) selX2 = contentStartX + (u32)viewWidth;
 
                 if (selX2 > selX1) {
-                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 0x26, 0x80, 0xEB);  // SPECTRUM_DARKEST_BLUE_400 with low opacity effect
+                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 0x5F, 0x14, 0x55);  // SPECTRUM_MAGENTA_1100 - paler for text selection
                 }
             }
         }
