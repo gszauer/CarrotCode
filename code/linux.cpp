@@ -2,6 +2,10 @@
 #include "application.h"
 #include "platform.h"
 #include "strings.h"
+#include "logo_256.xpm"  // Include XPM icon data
+#include <map>
+#include <string>
+#include <cstring>
 
 #define WINDOW_WIDTH 1600
 #define WINDOW_HEIGHT 1200
@@ -71,7 +75,73 @@ int main(int argc, char** argv) {
     
     // Set window title
     XStoreName(windowData.display, windowData.window, WINDOW_TITLE);
-    
+
+    // Set window icon from logo_256.xpm - manual parsing
+    {
+        // Parse XPM data manually
+        const char** xpm_data = b0ae89c132d64a2c8b12a6466c522e8016u6IrXAJrrPEpEz;
+
+        // First line contains: width height num_colors chars_per_pixel
+        int width, height, num_colors, chars_per_pixel;
+        sscanf(xpm_data[0], "%d %d %d %d", &width, &height, &num_colors, &chars_per_pixel);
+
+        // Parse color table
+        std::map<std::string, unsigned long> color_map;
+        for (int i = 1; i <= num_colors; i++) {
+            const char* line = xpm_data[i];
+            std::string key(line, chars_per_pixel);
+
+            // Find the color definition (look for 'c #' or 'c None')
+            const char* color_start = strstr(line, "c ");
+            if (color_start) {
+                color_start += 2; // Skip "c "
+
+                unsigned long color;
+                if (strncmp(color_start, "None", 4) == 0) {
+                    color = 0x00000000; // Transparent
+                } else if (color_start[0] == '#') {
+                    // Parse hex color
+                    unsigned int r, g, b;
+                    sscanf(color_start + 1, "%02x%02x%02x", &r, &g, &b);
+                    color = 0xFF000000 | (r << 16) | (g << 8) | b; // ARGB with full opacity
+                } else {
+                    color = 0xFF000000; // Default to opaque black
+                }
+                color_map[key] = color;
+            }
+        }
+
+        // Allocate icon data for _NET_WM_ICON
+        unsigned long* icon_data = (unsigned long*)malloc((2 + width * height) * sizeof(unsigned long));
+        icon_data[0] = width;
+        icon_data[1] = height;
+
+        // Parse pixel data
+        int pixel_index = 2;
+        for (int y = 0; y < height; y++) {
+            const char* line = xpm_data[1 + num_colors + y];
+            for (int x = 0; x < width; x++) {
+                std::string pixel_key(line + (x * chars_per_pixel), chars_per_pixel);
+                auto it = color_map.find(pixel_key);
+                if (it != color_map.end()) {
+                    icon_data[pixel_index++] = it->second;
+                } else {
+                    icon_data[pixel_index++] = 0xFF000000; // Default to opaque black
+                }
+            }
+        }
+
+        // Set _NET_WM_ICON property
+        Atom net_wm_icon = XInternAtom(windowData.display, "_NET_WM_ICON", False);
+        Atom cardinal = XInternAtom(windowData.display, "CARDINAL", False);
+
+        XChangeProperty(windowData.display, windowData.window, net_wm_icon, cardinal, 32,
+                      PropModeReplace, (unsigned char*)icon_data,
+                      2 + width * height);
+
+        free(icon_data);
+    }
+
     // Create graphics context
     windowData.gc = XCreateGC(windowData.display, windowData.window, 0, NULL);
     
