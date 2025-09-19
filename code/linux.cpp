@@ -638,6 +638,18 @@ int main(int argc, char** argv) {
                                         }
                                         handled = true;
                                     }
+                                    else if (keysym == XK_z || keysym == XK_Z) {  // Ctrl+Z (Undo)
+                                        if (doc_can_undo(view->target)) {
+                                            doc_undo(view->target);
+                                        }
+                                        handled = true;
+                                    }
+                                    else if (keysym == XK_y || keysym == XK_Y) {  // Ctrl+Y (Redo)
+                                        if (doc_can_redo(view->target)) {
+                                            doc_redo(view->target);
+                                        }
+                                        handled = true;
+                                    }
                                 }
                             }
                         }

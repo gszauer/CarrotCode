@@ -723,14 +723,41 @@ canvas* Render(UserData* user) {
         menuX = 90;
         ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6, 220);
 
-        // Disable edit menu if no document is open
+        // Check if we can undo/redo
         bool hasDocument = !user->views.empty();
+        bool canUndo = false;
+        bool canRedo = false;
+
+        if (hasDocument && user->active_view < user->views.size()) {
+            document_view* view = user->views[user->active_view];
+            if (view && view->target) {
+                canUndo = doc_can_undo(view->target);
+                canRedo = doc_can_redo(view->target);
+            }
+        }
+
+        // Disable undo if not possible
+        if (!canUndo) {
+            ImGuiPushDisabled(user->imgui_context);
+        }
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
+        if (!canUndo) {
+            ImGuiPopDisabled(user->imgui_context);
+        }
+
+        // Disable redo if not possible
+        if (!canRedo) {
+            ImGuiPushDisabled(user->imgui_context);
+        }
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+        if (!canRedo) {
+            ImGuiPopDisabled(user->imgui_context);
+        }
+
+        // Disable other edit menu items if no document is open
         if (!hasDocument) {
             ImGuiPushDisabled(user->imgui_context);
         }
-
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
-        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 4)) clickedItem = 4;
@@ -747,7 +774,17 @@ canvas* Render(UserData* user) {
             if (!user->views.empty() && user->active_view < user->views.size()) {
                 document_view* view = user->views[user->active_view];
                 if (view) {
-                    if (clickedItem == 2) {  // Cut
+                    if (clickedItem == 0) {  // Undo
+                        if (doc_can_undo(view->target)) {
+                            doc_undo(view->target);
+                        }
+                    }
+                    else if (clickedItem == 1) {  // Redo
+                        if (doc_can_redo(view->target)) {
+                            doc_redo(view->target);
+                        }
+                    }
+                    else if (clickedItem == 2) {  // Cut
                         // Get selected text or whole line
                         u32_string* text_to_cut = document_view_get_selection(view);
                         bool has_selection = (text_to_cut && u32str_length(text_to_cut) > 0);
@@ -1073,14 +1110,41 @@ canvas* Render(UserData* user) {
     else if (menuIndex == 1) {
         ImGuiRenderBeginMenu(user->imgui_context, 90, menuY, 6);
 
-        // Disable edit menu items if no document is open
+        // Check if we can undo/redo
         bool hasDocument = !user->views.empty();
+        bool canUndo = false;
+        bool canRedo = false;
+
+        if (hasDocument && user->active_view < user->views.size()) {
+            document_view* view = user->views[user->active_view];
+            if (view && view->target) {
+                canUndo = doc_can_undo(view->target);
+                canRedo = doc_can_redo(view->target);
+            }
+        }
+
+        // Disable undo if not possible
+        if (!canUndo) {
+            ImGuiPushDisabled(user->imgui_context);
+        }
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 0, "Undo");
+        if (!canUndo) {
+            ImGuiPopDisabled(user->imgui_context);
+        }
+
+        // Disable redo if not possible
+        if (!canRedo) {
+            ImGuiPushDisabled(user->imgui_context);
+        }
+        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 1, "Redo");
+        if (!canRedo) {
+            ImGuiPopDisabled(user->imgui_context);
+        }
+
+        // Disable other edit menu items if no document is open
         if (!hasDocument) {
             ImGuiPushDisabled(user->imgui_context);
         }
-
-        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 0, "Undo");
-        ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 1, "Redo");
         ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 2, "Cut");
         ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 3, "Copy");
         ImGuiRenderMenuItem(user->imgui_context, 90, menuY, 4, "Paste");
