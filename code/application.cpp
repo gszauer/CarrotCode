@@ -899,6 +899,86 @@ canvas* Render(UserData* user) {
                         user->waiting_for_operation = true;
                         platform_clipboard_paste_text(clipboard_paste_callback, user);
                     }
+                    else if (clickedItem == 5) {  // Export
+                        // Create a new document for the export
+                        document* export_doc = doc_create(100);
+
+                        // Build the markdown export string
+                        for (size_t i = 0; i < user->views.size(); i++) {
+                            document_view* export_view = user->views[i];
+                            if (!export_view || !export_view->target) continue;
+
+                            // Add header with file path
+                            u32_string* header = u32str_create();
+                            u32 hash_sym = '#';
+                            u32 space = ' ';
+                            u32str_insert_char(header, 0, hash_sym);
+                            u32str_insert_char(header, 1, space);
+
+                            if (export_view->path && u32str_length(export_view->path) > 0) {
+                                u32str_insert(header, export_view->path, 2, 0, u32str_length(export_view->path));
+                            } else {
+                                // Add "Untitled"
+                                const char* untitled = "Untitled";
+                                u32 pos = 2;
+                                while (*untitled) {
+                                    u32str_insert_char(header, pos++, (u32)*untitled);
+                                    untitled++;
+                                }
+                            }
+                            doc_append_line_str32(export_doc, header);
+                            u32str_destroy(header);
+
+                            // Add empty line after header
+                            u32_string* empty_after_header = u32str_create();
+                            doc_append_line_str32(export_doc, empty_after_header);
+                            u32str_destroy(empty_after_header);
+
+                            // Add code block start
+                            u32_string* code_start = u32str_create();
+                            u32str_insert_char(code_start, 0, '`');
+                            u32str_insert_char(code_start, 1, '`');
+                            u32str_insert_char(code_start, 2, '`');
+                            doc_append_line_str32(export_doc, code_start);
+                            u32str_destroy(code_start);
+
+                            // Add document content
+                            document* src_doc = export_view->target;
+                            u32 line_count = doc_line_count(src_doc);
+                            for (u32 line_idx = 0; line_idx < line_count; line_idx++) {
+                                u32_string* line = doc_get_line(src_doc, line_idx);
+                                if (line) {
+                                    // Create a copy of the line
+                                    u32_string* line_copy = u32str_create();
+                                    u32 line_len = u32str_length(line);
+                                    for (u32 j = 0; j < line_len; j++) {
+                                        u32str_insert_char(line_copy, j, u32str_get(line, j));
+                                    }
+                                    doc_append_line_str32(export_doc, line_copy);
+                                    u32str_destroy(line_copy);
+                                }
+                            }
+
+                            // Add code block end
+                            u32_string* code_end = u32str_create();
+                            u32str_insert_char(code_end, 0, '`');
+                            u32str_insert_char(code_end, 1, '`');
+                            u32str_insert_char(code_end, 2, '`');
+                            doc_append_line_str32(export_doc, code_end);
+                            u32str_destroy(code_end);
+
+                            // Add empty lines between documents (except after the last one)
+                            if (i < user->views.size() - 1) {
+                                u32_string* empty = u32str_create();
+                                doc_append_line_str32(export_doc, empty);
+                                doc_append_line_str32(export_doc, empty);
+                                u32str_destroy(empty);
+                            }
+                        }
+
+                        // Create a new view for the export document
+                        AddDocumentView(user, export_doc, nullptr);
+                    }
                 }
             }
         }
