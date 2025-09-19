@@ -927,6 +927,7 @@ canvas* Render(UserData* user) {
             document_view* view = user->views[i];
 
             bool is_open = true;
+            bool is_saved = false;
 
             if (view && view->path && u32str_length(view->path) > 0) {
                 // Convert path to char* for display
@@ -944,10 +945,17 @@ canvas* Render(UserData* user) {
                     filename = tab_text;
                 }
 
-                is_open = ImGuiTab(user->imgui_context, filename);
+                // Document is saved if it has a backing file AND is not modified
+                if (view->target) {
+                    is_saved = !doc_is_modified(view->target);
+                }
+
+                is_open = ImGuiTab(user->imgui_context, filename, is_saved);
             } else {
-                strcpy(tab_text, "Unsaved");
-                is_open = ImGuiTab(user->imgui_context, tab_text);
+                // No backing file - always unsaved
+                strcpy(tab_text, "Untitled");
+                is_saved = false;
+                is_open = ImGuiTab(user->imgui_context, tab_text, is_saved);
             }
 
             // Mark tab for closing (don't close during iteration)

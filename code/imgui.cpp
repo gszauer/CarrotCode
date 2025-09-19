@@ -979,14 +979,24 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
     canvas_set_clip(context->cnvs, x, y, w, h);
 }
 
-bool ImGuiTab(ImGui* context, const char* text) {
+bool ImGuiTab(ImGui* context, const char* text, bool saved) {
     if (!context->tabBar.inTabBar) return true;
 
     u32 tabIndex = context->tabBar.currentTabIndex++;
     bool isActiveTab = (tabIndex == context->tabBar.activeTab);
 
-    // Calculate tab dimensions
-    u32 textWidth = text ? font_get_width_cstr(context->fnt, text) : 40;
+    // Build the display text with asterisk if not saved
+    char displayText[512];
+    if (!saved && text) {
+        snprintf(displayText, sizeof(displayText), "%s*", text);
+    } else if (text) {
+        snprintf(displayText, sizeof(displayText), "%s", text);
+    } else {
+        displayText[0] = '\0';
+    }
+
+    // Calculate tab dimensions using display text
+    u32 textWidth = displayText[0] ? font_get_width_cstr(context->fnt, displayText) : 40;
     const u32 padding = 10;
     const u32 closeButtonSize = 32;
     const u32 closeButtonPadding = 5;
@@ -1158,12 +1168,12 @@ bool ImGuiTab(ImGui* context, const char* text) {
         canvas_draw_rect(context->cnvs, drawX, tabY + tabH - 1, tabWidth, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
     }
 
-    // Draw tab text
-    if (text) {
+    // Draw tab text with asterisk if unsaved
+    if (displayText[0]) {
         u32 textHeight = font_get_line_height(context->fnt);
         u32 textY = GetCenteredTextY(tabY, tabH, textHeight);
         // Use drawX for text position so it's properly clipped along with the tab
-        canvas_draw_text_cstr(context->cnvs, context->fnt, text, drawX + padding, textY,
+        canvas_draw_text_cstr(context->cnvs, context->fnt, displayText, drawX + padding, textY,
                         Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
     }
 
