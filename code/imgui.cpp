@@ -971,8 +971,8 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
         context->mouseInputConsumed = true;
     }
 
-    // Draw tab bar background - use CONTROL color to match menu bar
-    canvas_draw_rect(context->cnvs, x, y, w, h, Colors::CONTROL_R, Colors::CONTROL_G, Colors::CONTROL_B);
+    // Draw tab bar background - slightly darker than menu bar for separation
+    canvas_draw_rect(context->cnvs, x, y, w, h, 0x33, 0x33, 0x33);
 
     // Set initial clip rectangle for the full tab bar
     // This will be adjusted in ImGuiTab if overflow is detected
@@ -1188,9 +1188,10 @@ bool ImGuiTab(ImGui* context, const char* text, bool saved) {
     }
 
     // Draw X using a single 'x' character
-    u8 xR = isCloseHovered ? Colors::TEXT_R : Colors::TEXT_DISABLED_R;
-    u8 xG = isCloseHovered ? Colors::TEXT_G : Colors::TEXT_DISABLED_G;
-    u8 xB = isCloseHovered ? Colors::TEXT_B : Colors::TEXT_DISABLED_B;
+    // Use a medium gray (0x99) for default state, bright on hover
+    u8 xR = isCloseHovered ? Colors::TEXT_BRIGHT_R : 0x99;
+    u8 xG = isCloseHovered ? Colors::TEXT_BRIGHT_G : 0x99;
+    u8 xB = isCloseHovered ? Colors::TEXT_BRIGHT_B : 0x99;
 
     // Calculate position to center the 'x' in the close button
     u32 textHeight = font_get_line_height(context->fnt);
@@ -1331,9 +1332,9 @@ void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeIte
         context->mouseInputConsumed = true;
     }
 
-    // Draw menu bar background
+    // Draw menu bar background - use darker color to match tab area
     canvas_draw_rect(context->cnvs, x, y, w, h,
-                    Colors::CONTROL_R, Colors::CONTROL_G, Colors::CONTROL_B);
+                    0x33, 0x33, 0x33);
 
     // Draw bottom border
     canvas_draw_rect(context->cnvs, x, y + h - 1, w, 1,

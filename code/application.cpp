@@ -997,14 +997,24 @@ canvas* Render(UserData* user) {
 
     // Always render tab bar area as part of the header (even with no tabs)
     if (canvasWidth > 360) {
-        // Draw tab bar background to match menu bar color
-        canvas_draw_rect(user->cnvs, 360, 0, canvasWidth - 360, 50, 0x39, 0x39, 0x39);  // SPECTRUM_DARKEST_GRAY_200 - matches menu bar
+        // Draw separator area with spacing on both sides
+        // Total separator area is 20px (5px margin + 10px separator + 5px margin)
+        canvas_draw_rect(user->cnvs, 360, 0, 20, 50, 0x33, 0x33, 0x33);  // Same darker color as header
 
-        // Draw bottom border for tab bar area to match menu bar
+        // Draw three vertical lines in the separator area (centered)
+        canvas_draw_rect(user->cnvs, 366, 15, 1, 20, 0x52, 0x52, 0x52);  // Line 1
+        canvas_draw_rect(user->cnvs, 369, 15, 1, 20, 0x52, 0x52, 0x52);  // Line 2
+        canvas_draw_rect(user->cnvs, 372, 15, 1, 20, 0x52, 0x52, 0x52);  // Line 3
+
+        // Draw tab bar background (starts at 380 with proper spacing)
+        canvas_draw_rect(user->cnvs, 380, 0, canvasWidth - 380, 50, 0x33, 0x33, 0x33);  // Same darker color
+
+        // Draw bottom border for entire header area
         canvas_draw_rect(user->cnvs, 360, 49, canvasWidth - 360, 1, 0x52, 0x52, 0x52);  // BORDER color
 
         if (!user->views.empty()) {
-            ImGuiBeginTabBar(user->imgui_context, 360, 0, canvasWidth - 360, 50, user->views.size(), user->active_view);
+            // Start tabs at 385 to add 5px padding after separator
+            ImGuiBeginTabBar(user->imgui_context, 385, 0, canvasWidth - 385, 50, user->views.size(), user->active_view);
 
             i32 tab_to_close = -1;  // Track which tab to close after the loop
 
