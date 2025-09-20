@@ -19,6 +19,40 @@ struct vector_docline {
     u32 capacity;
 };
 
+struct token_span {
+    u32 start;
+    u32 end;
+    token_type type;
+};
+
+token_span* token_span_array_at(token_span* base, u32 index) {
+    if (base) {
+        return &base[index];
+    }
+    return 0;
+}
+
+u32 token_span_get_start(token_span* span) {
+    if (span) {
+        return span->start;
+    }
+    return 0;
+}
+
+u32 token_span_get_end(token_span* span) {
+    if (span) {
+        return span->end;
+    }
+    return 0;
+}
+
+token_type token_span_get_type(token_span* span) {
+    if (span) {
+        return span->type;
+    }
+    return TOKEN_NONE;
+}
+
 token_span* docline_access_tokens(document_line* line) {
     if (line) {
         return line->tokens;

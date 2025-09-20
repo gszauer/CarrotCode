@@ -4,7 +4,6 @@
 #include "types.h"
 #include "strings.h"
 
-#ifdef CARROT_INCLUDE_SYNTAX_DEFS
 enum token_type {
     TOKEN_NONE,
     TOKEN_KEYWORD,
@@ -14,15 +13,8 @@ enum token_type {
     TOKEN_LITERAL
 };
 
-struct token_span {
-    u32 start;
-    u32 end;
-    token_type type;
-};
-#else
-struct token_span;
-#endif
 
+struct token_span;
 struct document_line;
 
 document_line* docline_create();
@@ -31,6 +23,7 @@ void docline_destroy(document_line* line);
 void docline_mark_dirty(document_line* line); // TODO: If we don't allow direct editing of a docline, this can be refactored out!
 void docline_tokenize(document_line* line);
 void docline_clear_tokens(document_line* line);
+
 #ifdef CARROT_INCLUDE_SYNTAX_DEFS
 void docline_add_token(document_line* line, u32 start, u32 end, token_type type);
 #endif
@@ -59,5 +52,10 @@ document_line* vec_docline_get(vector_docline* vec, u32 index); // Returns a lin
 void vec_docline_insert(vector_docline* vec, u32 index, document_line* line); // Insert at index
 void vec_docline_remove(vector_docline* vec, u32 index); // Remove element at index
 vector_docline* vec_docline_clone(vector_docline* vec); // Deep copy
+
+u32 token_span_get_start(token_span* span);
+u32 token_span_get_end(token_span* span);
+token_type token_span_get_type(token_span* span);
+token_span* token_span_array_at(token_span* base, u32 index);
 
 #endif

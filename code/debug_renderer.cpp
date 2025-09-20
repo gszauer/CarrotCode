@@ -3,9 +3,7 @@
 #include "strings.h"
 #undef CARROT_INCLUDE_STRING_DEFS
 #include "document.h"
-#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
-#undef CARROT_INCLUDE_SYNTAX_DEFS
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
@@ -382,6 +380,7 @@ u32 canvas_get_height(canvas* cnvs) {
     return cnvs->height;
 }
 
+#if 0
 canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     if (!doc || !fnt) {
         printf("canvas_debug_doc: doc or fnt is null\n");
@@ -510,3 +509,4 @@ canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     
     return cnvs;
 }
+#endif

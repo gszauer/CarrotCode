@@ -106,14 +106,4 @@ u32 canvas_get_width(canvas* cnvs);
 // Returns 0 if canvas is NULL
 u32 canvas_get_height(canvas* cnvs);
 
-// Document rendering
-
-// Creates a canvas containing a rendering of a document
-// highlight_syntax: If true, tokenizes lines and colors by token type
-//                   If false, renders all text in default color
-// Canvas size is automatically calculated to fit all content
-// Caller owns the returned canvas and must free it with canvas_destroy
-// Returns NULL on failure or if document is empty
-canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax);
-
 #endif

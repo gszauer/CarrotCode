@@ -886,11 +886,13 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                 u32 visualCol = 0;
 
                 for (u32 tok_idx = 0; tok_idx < token_count; tok_idx++) {
-                    const token_span& token = tokens[tok_idx];
+                    u32 token_span_start = token_span_get_start(token_span_array_at(tokens, tok_idx));
+                    u32 token_span_end = token_span_get_end(token_span_array_at(tokens, tok_idx));
+                    token_type token_span_type = token_span_get_type(token_span_array_at(tokens, tok_idx));
 
                     // Choose color based on token type
                     const u8* color = color_default;
-                    switch (token.type) {
+                    switch (token_span_type) {
                         case TOKEN_KEYWORD:
                             color = color_keyword;
                             break;
@@ -913,7 +915,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                     }
 
                     // Draw each character in the token (handling tabs properly)
-                    for (u32 charIdx = token.start; charIdx < token.end && charIdx < lineLength; charIdx++) {
+                    for (u32 charIdx = token_span_start; charIdx < token_span_end && charIdx < lineLength; charIdx++) {
                         u32 ch = u32str_get(line, charIdx);
                         u32 xPos = (u32)(contentStartX + (visualCol * charWidth) - view->scrollX);
 
