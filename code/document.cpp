@@ -98,6 +98,54 @@ static edit_action* vec_edit_last(vector_edit* vec) {
     return &vec->data[vec->size - 1];
 }
 
+static void debug_print_text(const char* label, u32_string* text) {
+    if (!label) label = "";
+    if (!text) {
+        printf("%s<null>\n", label);
+        return;
+    }
+
+    u32 length = u32str_length(text);
+    printf("%slen=%u \"", label, length);
+    for (u32 i = 0; i < length; ++i) {
+        u32 ch = u32str_get(text, i);
+        if (ch == '\n') {
+            printf("\\n");
+        } else if (ch == '\r') {
+            printf("\\r");
+        } else if (ch == '\t') {
+            printf("\\t");
+        } else if (ch >= 32 && ch < 127) {
+            putchar((char)ch);
+        } else {
+            printf("?%02X", ch & 0xFF);
+        }
+    }
+    printf("\"\n");
+}
+
+static void compute_text_extent(u32 line, u32 col, u32_string* text,
+                                u32* out_line, u32* out_col) {
+    u32 current_line = line;
+    u32 current_col = col;
+
+    if (text) {
+        u32 length = u32str_length(text);
+        for (u32 i = 0; i < length; ++i) {
+            u32 ch = u32str_get(text, i);
+            if (ch == '\n') {
+                current_line++;
+                current_col = 0;
+            } else {
+                current_col++;
+            }
+        }
+    }
+
+    if (out_line) *out_line = current_line;
+    if (out_col) *out_col = current_col;
+}
+
 /**
  * Main document structure that manages text content and edit history.
  * Handles both the text lines and the undo/redo system.
@@ -232,6 +280,7 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
 
         vec_edit_push(doc->undo_stack, action);
         printf("[UNDO] Added action to undo stack, new size=%u\n", doc->undo_stack->size);
+        debug_print_text("[UNDO] Recorded text: ", action.text);
     }
 
     doc->last_action_time = current_time;
@@ -458,75 +507,52 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
         u32_string* remainder = docline_text_substr(doc_line, col, docline_get_text_length(doc_line) - col);
         docline_text_remove(doc_line, col, docline_get_text_length(doc_line) - col);
         docline_mark_dirty(doc_line);
-        
-        u32 text_start = 0;
-        u32 current_line = line;
-        
-        while (text_start < u32str_length(text)) {
+
+        u32 total_length = u32str_length(text);
+        u32 segment_start = 0;
+        u32 current_line_index = line;
+        document_line* current_line_ptr = doc_line;
+
+        while (segment_start <= total_length) {
             i32 next_newline = -1;
-            for (u32 i = text_start; i < u32str_length(text); i++) {
+            for (u32 i = segment_start; i < total_length; ++i) {
                 if (u32str_get(text, i) == '\n') {
                     next_newline = i;
                     break;
                 }
             }
-            
-            if (next_newline == -1) {
-                u32_string* last_part = u32str_substr(text, text_start, u32str_length(text) - text_start);
-                if (current_line == line) {
-                    docline_text_insert(doc_line, last_part, docline_get_text_length(doc_line), 0, u32str_length(last_part));
-                    docline_mark_dirty(doc_line);
-                } else {
-                    u32_string* new_text = u32str_create();
-                    u32str_insert(new_text, last_part, 0, 0, u32str_length(last_part));
-                    document_line* new_line = docline_create_with_text(new_text);
-                    vec_docline_insert(doc->lines, current_line, new_line);
-                    u32str_destroy(new_text);
-                }
-                u32str_destroy(last_part);
-                break;
-            } else {
-                u32 part_length = next_newline - text_start;
-                u32_string* part = u32str_substr(text, text_start, part_length);
-                
-                if (current_line == line) {
-                    docline_text_insert(doc_line, part, docline_get_text_length(doc_line), 0, u32str_length(part));
-                    docline_mark_dirty(doc_line);
-                    current_line++;
-                    document_line* new_line = docline_create();
-                    vec_docline_insert(doc->lines, current_line, new_line);
-                    printf("[DEBUG] Created new line at index %u\n", current_line);
-                } else {
-                    u32_string* new_text = u32str_create();
-                    u32str_insert(new_text, part, 0, 0, u32str_length(part));
-                    document_line* new_line = docline_create_with_text(new_text);
-                    vec_docline_insert(doc->lines, current_line, new_line);
-                    u32str_destroy(new_text);
-                    current_line++;
-                }
-                
-                u32str_destroy(part);
-                text_start = next_newline + 1;
+
+            u32 segment_end = (next_newline == -1) ? total_length : (u32)next_newline;
+            u32 segment_length = segment_end - segment_start;
+
+            if (segment_length > 0) {
+                u32_string* segment = u32str_substr(text, segment_start, segment_length);
+                docline_text_insert(current_line_ptr, segment, docline_get_text_length(current_line_ptr), 0, u32str_length(segment));
+                docline_mark_dirty(current_line_ptr);
+                u32str_destroy(segment);
             }
+
+            if (next_newline == -1) {
+                break;
+            }
+
+            document_line* new_line = docline_create();
+            vec_docline_insert(doc->lines, current_line_index + 1, new_line);
+            printf("[DEBUG] Created new line at index %u\n", current_line_index + 1);
+            current_line_index++;
+            current_line_ptr = new_line;
+            segment_start = (u32)next_newline + 1;
         }
-        
-        document_line* last_line = vec_docline_get(doc->lines, current_line);
-        docline_text_insert(last_line, remainder, docline_get_text_length(last_line), 0, u32str_length(remainder));
-        docline_mark_dirty(last_line);
+
+        docline_text_insert(current_line_ptr, remainder, docline_get_text_length(current_line_ptr), 0, u32str_length(remainder));
+        docline_mark_dirty(current_line_ptr);
         u32str_destroy(remainder);
     }
 
     // Calculate final cursor position
     u32 final_line = line;
     u32 final_col = col;
-    for (u32 i = 0; i < u32str_length(text); i++) {
-        if (u32str_get(text, i) == '\n') {
-            final_line++;
-            final_col = 0;
-        } else {
-            final_col++;
-        }
-    }
+    compute_text_extent(line, col, text, &final_line, &final_col);
 
     // Update cursor
     doc->cursor.row = final_line;
@@ -604,7 +630,9 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
         printf("[DEBUG] doc_delete_range: newlines in captured text=%u\n", newline_count);
     }
 
-    // Record for undo
+    debug_print_text("[DELETE_RANGE] captured: ", deleted_text);
+
+    // Record for undo (takes ownership of deleted_text)
     record_action(doc, edit_action::REMOVE, start_line, start_col, deleted_text);
 
     // Perform deletion
@@ -765,10 +793,16 @@ void doc_undo(document* doc) {
     // Apply inverse operation
     if (action.type == edit_action::INSERT) {
         // Was inserted, so remove it
-        doc_delete_range(doc, action.line, action.col,
-                        action.line, action.col + u32str_length(action.text));
+        u32 end_line = action.line;
+        u32 end_col = action.col;
+        compute_text_extent(action.line, action.col, action.text, &end_line, &end_col);
+        printf("[UNDO] Removing range %u:%u -> %u:%u\n", action.line, action.col, end_line, end_col);
+        debug_print_text("[UNDO] Text to remove: ", action.text);
+        doc_delete_range(doc, action.line, action.col, end_line, end_col);
     } else {  // REMOVE
         // Was removed, so insert it back
+        printf("[UNDO] Reinserting at %u:%u\n", action.line, action.col);
+        debug_print_text("[UNDO] Text to insert: ", action.text);
         doc_insert_str32(doc, action.line, action.col, action.text);
     }
 
@@ -806,10 +840,16 @@ void doc_redo(document* doc) {
     // Apply inverse operation (redo stack has inverted types)
     if (action.type == edit_action::INSERT) {
         // Was removed in undo, so remove it again
-        doc_delete_range(doc, action.line, action.col,
-                        action.line, action.col + u32str_length(action.text));
+        u32 end_line = action.line;
+        u32 end_col = action.col;
+        compute_text_extent(action.line, action.col, action.text, &end_line, &end_col);
+        printf("[REDO] Removing range %u:%u -> %u:%u\n", action.line, action.col, end_line, end_col);
+        debug_print_text("[REDO] Text to remove: ", action.text);
+        doc_delete_range(doc, action.line, action.col, end_line, end_col);
     } else {  // REMOVE
         // Was inserted in undo, so insert it again
+        printf("[REDO] Reinserting at %u:%u\n", action.line, action.col);
+        debug_print_text("[REDO] Text to insert: ", action.text);
         doc_insert_str32(doc, action.line, action.col, action.text);
     }
 
