@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _H_VIEW__CARROT_
+#define _H_VIEW__CARROT_ 
 
 #include "types.h"
 
@@ -73,3 +74,4 @@ void document_view_update_cursor_after_undo_redo(document_view* view);
 
 document_cursor document_view_pixel_to_cursor(document_view* view, u32 x, u32 y);
 void document_view_get_cursor_pixel_position(document_view* view, document_cursor cursor, u32* x, u32* y);
+#endif
