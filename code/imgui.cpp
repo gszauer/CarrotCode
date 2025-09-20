@@ -28,10 +28,10 @@ namespace Colors {
     const u8 SCROLLBAR_HANDLE_HOVER_R = 0x5C, SCROLLBAR_HANDLE_HOVER_G = 0x5C, SCROLLBAR_HANDLE_HOVER_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
     const u8 SCROLLBAR_HANDLE_ACTIVE_R = 0x75, SCROLLBAR_HANDLE_ACTIVE_G = 0x75, SCROLLBAR_HANDLE_ACTIVE_B = 0x75;  // SPECTRUM_DARKEST_GRAY_500
 
-    // Primary magenta for CTAs and selections (Adobe Spectrum Magenta - dull pink/magenta)
-    const u8 PRIMARY_R = 0xBB, PRIMARY_G = 0x1A, PRIMARY_B = 0xA1;  // SPECTRUM_MAGENTA_700 - for buttons/tabs
-    const u8 PRIMARY_HOVER_R = 0xD2, PRIMARY_HOVER_G = 0x2D, PRIMARY_HOVER_B = 0xB4;  // SPECTRUM_MAGENTA_600 - hover
-    const u8 PRIMARY_ACTIVE_R = 0xE8, PRIMARY_ACTIVE_G = 0x48, PRIMARY_ACTIVE_B = 0xC3;  // SPECTRUM_MAGENTA_500 - active
+    // Primary magenta for CTAs and selections (gray-pink for overlay effect)
+    const u8 PRIMARY_R = 0x7A, PRIMARY_G = 0x3A, PRIMARY_B = 0x6E;  // Gray-pink blend for tabs
+    const u8 PRIMARY_HOVER_R = 0x95, PRIMARY_HOVER_G = 0x45, PRIMARY_HOVER_B = 0x85;  // Brighter on hover
+    const u8 PRIMARY_ACTIVE_R = 0xA8, PRIMARY_ACTIVE_G = 0x50, PRIMARY_ACTIVE_B = 0x98;  // Even brighter when active
 
     // Text colors
     const u8 TEXT_R = 0xDC, TEXT_G = 0xDC, TEXT_B = 0xDC;  // SPECTRUM_DARKEST_GRAY_800
@@ -42,8 +42,8 @@ namespace Colors {
     const u8 BORDER_R = 0x5C, BORDER_G = 0x5C, BORDER_B = 0x5C;  // SPECTRUM_DARKEST_GRAY_400
 
     // Selection and highlights
-    const u8 CHECK_R = 0xBB, CHECK_G = 0x1A, CHECK_B = 0xA1;  // SPECTRUM_MAGENTA_700 - checkboxes
-    const u8 SELECTION_R = 0x5F, SELECTION_G = 0x14, SELECTION_B = 0x55;  // SPECTRUM_MAGENTA_1100 - paler for text selection
+    const u8 CHECK_R = 0x7A, CHECK_G = 0x3A, CHECK_B = 0x6E;  // Gray-pink for checkboxes
+    const u8 SELECTION_R = 0x7A, SELECTION_G = 0x3A, SELECTION_B = 0x6E;  // Gray-pink to match tabs
 
     // Shadow color for popup menus (darker than background)
     const u8 SHADOW_R = 0x00, SHADOW_G = 0x00, SHADOW_B = 0x00;  // Pure black for shadows
@@ -1060,18 +1060,13 @@ bool ImGuiTab(ImGui* context, const char* text, bool saved) {
         i32 actualStart = (i32)tabStartPosition - (i32)context->tabBar.scrollOffset;
         i32 actualEnd = actualStart + (i32)tabWidth;
 
-        // printf("Active tab %u: position %u-%u, visible area 0-%u, actual display %d-%d\n",
-        //        tabIndex, tabStartPosition, tabEndPosition, visibleWidth, actualStart, actualEnd);
-
         // Adjust scroll to make the active tab fully visible
         if (actualStart < 0) {
             // Tab is off or partially off the left edge - scroll to show it at the left
             context->tabBar.scrollOffset = tabStartPosition;
-            //printf("Tab %u is off left, scrolling to offset: %u\n", tabIndex, context->tabBar.scrollOffset);
         } else if (actualEnd > (i32)visibleWidth) {
             // Tab is off or partially off the right edge - scroll to show it fully
             context->tabBar.scrollOffset = tabEndPosition - visibleWidth;
-            //printf("Tab %u is off right, scrolling to offset: %u\n", tabIndex, context->tabBar.scrollOffset);
         }
     }
 
@@ -1280,20 +1275,17 @@ u32 ImGuiEndTabBar(ImGui* context) {
         if (context->tabBar.currentTabX > visibleWidth) {
             u32 maxScroll = context->tabBar.currentTabX - visibleWidth;
             if (context->tabBar.scrollOffset > maxScroll) {
-                //printf("Clamping scroll offset from %u to maximum: %u\n", context->tabBar.scrollOffset, maxScroll);
                 context->tabBar.scrollOffset = maxScroll;
             }
         } else {
             // All tabs fit, no scrolling needed
             if (context->tabBar.scrollOffset > 0) {
-                //printf("All tabs fit, resetting scroll offset from %u to 0\n", context->tabBar.scrollOffset);
                 context->tabBar.scrollOffset = 0;
             }
         }
     } else {
         // All tabs fit in the bar width, no scrolling needed
         if (context->tabBar.scrollOffset > 0) {
-            //printf("No overflow, resetting scroll offset from %u to 0\n", context->tabBar.scrollOffset);
             context->tabBar.scrollOffset = 0;
         }
     }
@@ -1470,7 +1462,6 @@ bool ImGuiProcessMenuItem(ImGui* context, u32 menuX, u32 menuY, u32 itemIndex) {
 
     // Check for click - using pressed instead of released for now
     if (isHovered && context->mouseLeftPressed) {
-        //printf("MenuItem %u clicked with mouseLeftPressed!\n", itemIndex);
         return true;  // Item was clicked
     }
 

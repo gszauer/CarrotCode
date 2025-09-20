@@ -636,27 +636,19 @@ void doc_append_line_str32(document* doc, u32_string* content) {
 }
 
 void doc_delete_line(document* doc, u32 line_index) {
-    printf("[doc_delete_line] Called with line_index=%u\n", line_index);
     if (!doc || line_index >= vec_docline_size(doc->lines)) {
-        printf("[doc_delete_line] Early return: doc=%p, line_index=%u, vec_size=%u\n",
-               doc, line_index, doc ? vec_docline_size(doc->lines) : 0);
         return;
     }
 
-    printf("[doc_delete_line] Getting line at index %u\n", line_index);
     document_line* deleted_line = vec_docline_get(doc->lines, line_index);
     if (!deleted_line || !docline_access_text(deleted_line)) {
         // If line is invalid, just remove it from the vector
-        printf("[doc_delete_line] Line is invalid (deleted_line=%p, text=%p), removing from vector\n",
-               deleted_line, deleted_line ? docline_access_text(deleted_line) : nullptr);
         vec_docline_remove(doc->lines, line_index);
         return;
     }
 
-    printf("[doc_delete_line] Creating copy of line text (length=%u)\n", docline_get_text_length(deleted_line));
     u32_string* line_copy = docline_text_substr(deleted_line, 0, docline_get_text_length(deleted_line));
 
-    printf("[doc_delete_line] Removing line from vector\n");
     vec_docline_remove(doc->lines, line_index);
     
     edit_action action;
@@ -672,9 +664,7 @@ void doc_delete_line(document* doc, u32 line_index) {
     action.cursor_line_after_undo = line_index;
     action.cursor_col_after_undo = 0;
 
-    printf("[doc_delete_line] Adding undo action\n");
     add_undo_action(doc, action);
-    printf("[doc_delete_line] Complete. Document now has %u lines\n", vec_docline_size(doc->lines));
 }
 
 void doc_split_line(document* doc, u32 line, u32 col) {

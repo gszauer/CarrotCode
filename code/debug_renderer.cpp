@@ -381,20 +381,17 @@ u32 canvas_get_height(canvas* cnvs) {
 #if 0
 canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     if (!doc || !fnt) {
-        printf("canvas_debug_doc: doc or fnt is null\n");
         return nullptr;
     }
     
     u32 line_count = doc_line_count(doc);
     if (line_count == 0) {
-        printf("canvas_debug_doc: line_count is 0\n");
         return nullptr;
     }
     
     // Calculate dimensions
     u32 line_height = font_get_line_height(fnt);
     u32 canvas_height = line_count * line_height;
-    printf("canvas_debug_doc: line_height=%u, canvas_height=%u\n", line_height, canvas_height);
     
     // Find the width of the longest line
     u32 max_width = 0;
@@ -413,16 +410,12 @@ canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
         max_width = 100; // Minimum width for empty documents
     }
     
-    printf("canvas_debug_doc: max_width=%u\n", max_width);
     if (canvas_height == 0) {
-        printf("canvas_debug_doc: canvas_height is 0, returning null\n");
         return nullptr;
     }
     
     // Create canvas
-    printf("canvas_debug_doc: About to create canvas %ux%u\n", max_width, canvas_height);
     canvas* cnvs = canvas_create(max_width, canvas_height);
-    printf("canvas_debug_doc: Canvas created at %p\n", cnvs);
     if (!cnvs) {
         return nullptr;
     }
@@ -442,7 +435,6 @@ canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     for (u32 line_idx = 0; line_idx < line_count; line_idx++) {
         u32_string* line_text = doc_get_line(doc, line_idx);
         if (!line_text) {
-            printf("Warning: line %u returned null text\n", line_idx);
             continue;
         }
         

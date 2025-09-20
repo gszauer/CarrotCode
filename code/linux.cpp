@@ -302,12 +302,10 @@ int main(int argc, char** argv) {
                     else if (event.xclient.message_type == XdndEnter) {
                         // DnD operation started
                         xdndSourceWindow = event.xclient.data.l[0];
-                        //printf("DnD Enter received from window %lu\n", xdndSourceWindow);
                     }
                     else if (event.xclient.message_type == XdndPosition) {
                         // Send XdndStatus
                         Window source = event.xclient.data.l[0];
-                        //printf("DnD Position received from window %lu\n", source);
                         XEvent reply;
                         memset(&reply, 0, sizeof(reply));
                         reply.type = ClientMessage;
@@ -324,7 +322,6 @@ int main(int argc, char** argv) {
                     }
                     else if (event.xclient.message_type == XdndLeave) {
                         // Drag cancelled
-                        //printf("DnD Leave received\n");
                         XDeleteProperty(windowData.display, windowData.window, XdndSelectionProperty);
                         xdndSourceWindow = None;
                     }
@@ -332,7 +329,6 @@ int main(int argc, char** argv) {
                         // Request the selection
                         xdndSourceWindow = event.xclient.data.l[0];
                         Time timestamp = (Time)event.xclient.data.l[2];
-                        //printf("DnD Drop received from window %lu, timestamp %lu\n", xdndSourceWindow, timestamp);
                         
                         // Clear any existing property first
                         XDeleteProperty(windowData.display, windowData.window, XdndSelectionProperty);
@@ -347,9 +343,6 @@ int main(int argc, char** argv) {
                     break;
                     
                 case SelectionNotify:
-                    // printf("SelectionNotify received\n");
-                    // printf("Selection property: %ld, Expected: %ld\n",
-                    //        event.xselection.property, XdndSelectionProperty);
                     if (event.xselection.property == XdndSelectionProperty) {
                         Atom actual_type;
                         int actual_format;
@@ -361,11 +354,9 @@ int main(int argc, char** argv) {
                                              AnyPropertyType, &actual_type, &actual_format,
                                              &nitems, &bytes_after, &data) == Success) {
                             
-                            //printf("Got property data, nitems=%lu, format=%d\n", nitems, actual_format);
                             if (data && nitems > 0) {
                                 // Parse URI list (file://path format)
                                 std::string uri((char*)data, nitems);
-                                //printf("Full URI data: '%s'\n", uri.c_str());
 
                                 // Process all files in the drop (they're separated by newlines)
                                 size_t pos = 0;
@@ -402,16 +393,12 @@ int main(int argc, char** argv) {
                                             decode_pos++;
                                         }
 
-                                        // printf("Processing file: %s\n", filepath.c_str());
-
                                         // Read file and create document
                                         std::ifstream file(filepath, std::ios::binary);
                                         if (file.is_open()) {
-                                            // printf("File opened successfully\n");
                                             std::string content((std::istreambuf_iterator<char>(file)),
                                                               std::istreambuf_iterator<char>());
                                             file.close();
-                                            // printf("File size: %zu bytes\n", content.size());
 
                                             // Convert to u32_string
                                             std::vector<u32> u32content;
@@ -425,12 +412,9 @@ int main(int argc, char** argv) {
                                             // Create document and add it as a view
                                             document* new_doc = doc_from_str32(file_str, 100);
                                             u32str_destroy(file_str);
-                                            // printf("Document created with %u lines\n", doc_line_count(new_doc));
 
                                             // Add document view
                                             AddDocumentView(user, new_doc, filepath.c_str());
-                                        } else {
-                                            printf("Failed to open file: %s\n", filepath.c_str());
                                         }
                                     }  // end if (file_uri.substr(0, 7) == "file://")
                                 }  // end while loop processing all files
@@ -451,7 +435,6 @@ int main(int argc, char** argv) {
                             reply.xclient.data.l[2] = XdndActionCopy;
                             XSendEvent(windowData.display, xdndSourceWindow, False, NoEventMask, &reply);
                             XFlush(windowData.display);
-                            //printf("Sent XdndFinished to window %lu\n", xdndSourceWindow);
                         }
                         
                         // Clear the property and source window
@@ -556,8 +539,6 @@ int main(int argc, char** argv) {
                                             } else {
                                                 // Defer the whole line deletion until after rendering
                                                 u32 current_line = document_view_get_cursor_row(view);
-
-                                                printf("[CTRL+X] Deferring deletion of line %u\n", current_line);
 
                                                 // Mark for deferred deletion
                                                 user->has_deferred_line_delete = true;

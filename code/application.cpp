@@ -330,9 +330,7 @@ void save_file_callback(bool success, void* userData) {
                 doc_set_modified(document_view_get_document(view), false);
             }
         }
-    } else {
-        fprintf(stderr, "Failed to save file\n");
-    }
+    } 
 }
 
 // Callback for save as operation
@@ -461,7 +459,6 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
                 // Compare paths
                 if (strcmp(stored_path, path) == 0) {
                     // Document already open, just switch to it
-                    // printf("File already open in tab %zu, switching to it: %s (was on tab %u)\n", i, path, user->active_view);
                     free(stored_path);
                     user->active_view = i;
 
@@ -530,13 +527,11 @@ canvas* Render(UserData* user) {
     if (menuIndex == 4 && !user->views.empty()) {
         u32 tabMenuY = 50;
 
-        // printf("Tab menu is open at %u,%u with %zu items\n", tabMenuX, tabMenuY, user->views.size());
         ImGuiConsumePopupMenuInput(user->imgui_context, tabMenuX, tabMenuY, user->views.size(), tabMenuW);
 
         for (size_t i = 0; i < user->views.size(); i++) {
             bool clicked = ImGuiProcessMenuItem(user->imgui_context, tabMenuX, tabMenuY, i);
             if (clicked) {
-                // printf("Tab menu: selected tab %zu (was %u)\n", i, user->active_view);
                 user->active_view = i;
                 menuIndex = -1;
                 break;
@@ -830,8 +825,6 @@ canvas* Render(UserData* user) {
                             } else {
                                 // Defer the whole line deletion until after rendering
                                 u32 current_line = document_view_get_cursor_row(view);
-
-                                printf("[CUT] Deferring deletion of line %u\n", current_line);
 
                                 // Mark for deferred deletion
                                 user->has_deferred_line_delete = true;
@@ -1387,32 +1380,23 @@ canvas* Render(UserData* user) {
 
     // Process deferred line deletion at end of frame (after rendering)
     if (user->has_deferred_line_delete) {
-        printf("[DEFERRED] Processing deferred line deletion at end of frame\n");
         if (user->deferred_delete_view < user->views.size()) {
             document_view* view = user->views[user->deferred_delete_view];
             if (view) {
                 document* doc = document_view_get_document(view);
                 u32 line_to_delete = user->deferred_delete_line;
 
-                printf("[DEFERRED] Deleting line %u from view %u\n", line_to_delete, user->deferred_delete_view);
-                printf("[DEFERRED] Document has %u lines before delete\n", doc_line_count(doc));
-
                 // Delete the line
                 doc_delete_line(doc, line_to_delete);
-
-                printf("[DEFERRED] Document has %u lines after delete\n", doc_line_count(doc));
 
                 // Adjust cursor position if needed
                 if (line_to_delete >= doc_line_count(doc) && line_to_delete > 0) {
                     // If we deleted the last line, move cursor to previous line
-                    printf("[DEFERRED] Moving cursor to previous line %u\n", line_to_delete - 1);
                     document_view_set_cursor(view, line_to_delete - 1, 0);
                 } else {
                     // Otherwise stay on the same line number (which is now the next line)
-                    printf("[DEFERRED] Keeping cursor on line %u\n", line_to_delete);
                     document_view_set_cursor(view, line_to_delete, 0);
                 }
-                printf("[DEFERRED] Cursor adjustment complete\n");
             }
         }
         user->has_deferred_line_delete = false;

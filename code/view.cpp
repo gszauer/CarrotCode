@@ -287,30 +287,19 @@ static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
 }
 
 static void clamp_cursor(document_view* view) {
-    printf("[clamp_cursor] Called with cursor at row=%u, column=%u\n",
-           view->cursor.row, view->cursor.column);
-
     u32 lineCount = doc_line_count(view->target);
-    printf("[clamp_cursor] Document has %u lines\n", lineCount);
 
     if (view->cursor.row >= lineCount) {
         u32 old_row = view->cursor.row;
         view->cursor.row = lineCount > 0 ? lineCount - 1 : 0;
-        printf("[clamp_cursor] Clamped row from %u to %u\n", old_row, view->cursor.row);
     }
 
-    printf("[clamp_cursor] Getting line length for row %u\n", view->cursor.row);
     u32 lineLength = doc_get_line_length(view->target, view->cursor.row);
-    printf("[clamp_cursor] Line %u has length %u\n", view->cursor.row, lineLength);
 
     if (view->cursor.column > lineLength) {
         u32 old_column = view->cursor.column;
         view->cursor.column = lineLength;
-        printf("[clamp_cursor] Clamped column from %u to %u\n", old_column, view->cursor.column);
     }
-
-    printf("[clamp_cursor] Complete. Cursor at row=%u, column=%u\n",
-           view->cursor.row, view->cursor.column);
 }
 
 static void normalize_selection(document_view* view, document_cursor* start, document_cursor* end) {
@@ -796,7 +785,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                 if (selX2 > contentStartX + viewWidth) selX2 = contentStartX + (u32)viewWidth;
 
                 if (selX2 > selX1) {
-                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 0x5F, 0x14, 0x55);  // SPECTRUM_MAGENTA_1100 - paler for text selection
+                    canvas_draw_rect(cnvs, selX1, (u32)yPos, selX2 - selX1, lineHeight, 0x7A, 0x3A, 0x6E);  // Gray-pink to match tabs
                 }
             }
         }
@@ -992,13 +981,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 }
 
 void document_view_set_cursor(document_view* view, u32 row, u32 column) {
-    printf("[document_view_set_cursor] Setting cursor to row=%u, column=%u\n", row, column);
     view->cursor.row = row;
     view->cursor.column = column;
-    printf("[document_view_set_cursor] Before clamp_cursor\n");
     clamp_cursor(view);
-    printf("[document_view_set_cursor] After clamp_cursor, cursor is now row=%u, column=%u\n",
-           view->cursor.row, view->cursor.column);
     view->hasSelection = false;
 }
 
@@ -1467,7 +1452,6 @@ void document_view_copy(document_view* view) {
 
     u32_string* selection = document_view_get_selection(view);
     if (selection) {
-        printf("Copy to clipboard: %d characters\n", u32str_length(selection));
         u32str_destroy(selection);
     }
 }
