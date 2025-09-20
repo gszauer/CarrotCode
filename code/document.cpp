@@ -31,11 +31,15 @@ struct edit_action {
     u32_string* text;   // Text content (for INSERT_TEXT, DELETE_RANGE, INSERT_LINE, DELETE_LINE)
     u32 codepoint;      // Single character (for INSERT_CHAR, DELETE_CHAR)
 
-    // Cursor position hints for better UX after undo/redo
-    u32 cursor_line_after_redo;  // Where cursor should be after performing the action
-    u32 cursor_col_after_redo;   // (e.g., end of inserted text)
-    u32 cursor_line_after_undo;  // Where cursor should be after undoing the action
-    u32 cursor_col_after_undo;   // (e.g., start of where text was)
+    // Complete cursor and selection state before the action
+    document_cursor cursor_before;           // Cursor position before action
+    document_cursor selection_anchor_before; // Selection anchor before action
+    bool had_selection_before;               // Whether there was a selection before
+
+    // Complete cursor and selection state after the action
+    document_cursor cursor_after;            // Cursor position after action
+    document_cursor selection_anchor_after;  // Selection anchor after action
+    bool had_selection_after;                // Whether there should be a selection after
 };
 
 /**
@@ -64,12 +68,18 @@ struct document {
     u32 word_start_line;        // Line where current word started
     u32 word_start_col;         // Column where current word started
     u32_string* current_word;   // Buffer holding characters of word being built
+
+    // === Cursor and Selection ===
+    document_cursor cursor;          // Current cursor position
+    document_cursor selection_anchor; // Anchor point for selection
+    bool has_selection;              // True if there's an active selection
 };
 
 /**
  * Adds an edit action to the undo stack.
  * Handles stack overflow by removing oldest action.
  * Clears redo stack if we're in the middle of it.
+ * Automatically captures current cursor/selection state as "before" state.
  */
 static void add_undo_action(document* doc, edit_action action) {
     if (doc->max_undo_levels == 0 || doc->in_undo_redo) {
@@ -80,6 +90,11 @@ static void add_undo_action(document* doc, edit_action action) {
         }
         return;
     }
+
+    // Capture current cursor/selection state as the "before" state
+    action.cursor_before = doc->cursor;
+    action.selection_anchor_before = doc->selection_anchor;
+    action.had_selection_before = doc->has_selection;
     
     // If we're in the middle of the undo stack (after undoing), 
     // we need to clear the redo portion
@@ -136,6 +151,14 @@ document* doc_create(u32 undo_levels) {
     doc->word_start_line = 0;
     doc->word_start_col = 0;
     doc->current_word = u32str_create();
+
+    // Initialize cursor and selection
+    doc->cursor.row = 0;
+    doc->cursor.column = 0;
+    doc->selection_anchor.row = 0;
+    doc->selection_anchor.column = 0;
+    doc->has_selection = false;
+
     return doc;
 }
 
@@ -342,10 +365,11 @@ static void commit_word_undo(document* doc) {
     u32 final_line = doc->word_start_line;
     u32 final_col = doc->word_start_col + u32str_length(doc->current_word);
 
-    action.cursor_line_after_redo = final_line;
-    action.cursor_col_after_redo = final_col;
-    action.cursor_line_after_undo = doc->word_start_line;
-    action.cursor_col_after_undo = doc->word_start_col;
+    // After inserting text, cursor is at the end
+    action.cursor_after.row = final_line;
+    action.cursor_after.column = final_col;
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
 
     add_undo_action(doc, action);
 
@@ -392,10 +416,11 @@ void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
         action.end_col = 0;
         action.codepoint = codepoint;
         action.text = nullptr;
-        action.cursor_line_after_redo = line;
-        action.cursor_col_after_redo = col + 1;
-        action.cursor_line_after_undo = line;
-        action.cursor_col_after_undo = col;
+        // After inserting a char, cursor moves forward by 1
+        action.cursor_after.row = line;
+        action.cursor_after.column = col + 1;
+        action.selection_anchor_after = action.cursor_after;
+        action.had_selection_after = false;
         add_undo_action(doc, action);
     } else {
         // Regular character - add to current word
@@ -507,10 +532,11 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
             final_col++;
         }
     }
-    action.cursor_line_after_redo = final_line;
-    action.cursor_col_after_redo = final_col;
-    action.cursor_line_after_undo = line;
-    action.cursor_col_after_undo = col;
+    // After inserting text, cursor is at the end of inserted text
+    action.cursor_after.row = final_line;
+    action.cursor_after.column = final_col;
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
     add_undo_action(doc, action);
 }
 
@@ -535,10 +561,11 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
         action.end_col = 0;
         action.codepoint = deleted_char;
         action.text = nullptr;
-        action.cursor_line_after_redo = line;
-        action.cursor_col_after_redo = col;
-        action.cursor_line_after_undo = line;
-        action.cursor_col_after_undo = col + 1;
+        // After deleting a char, cursor stays at same position
+        action.cursor_after.row = line;
+        action.cursor_after.column = col;
+        action.selection_anchor_after = action.cursor_after;
+        action.had_selection_after = false;
         add_undo_action(doc, action);
     } else if (col == docline_get_text_length(doc_line) && line + 1 < vec_docline_size(doc->lines)) {
         document_line* next_line = vec_docline_get(doc->lines, line + 1);
@@ -554,10 +581,11 @@ void doc_delete_char(document* doc, u32 line, u32 col) {
         action.end_col = 0;
         action.codepoint = 0;
         action.text = nullptr;
-        action.cursor_line_after_redo = line;
-        action.cursor_col_after_redo = col;
-        action.cursor_line_after_undo = line + 1;
-        action.cursor_col_after_undo = 0;
+        // After joining lines, cursor stays at join position
+        action.cursor_after.row = line;
+        action.cursor_after.column = col;
+        action.selection_anchor_after = action.cursor_after;
+        action.had_selection_after = false;
         add_undo_action(doc, action);
     }
 }
@@ -598,10 +626,11 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
     action.end_col = end_col;
     action.codepoint = 0;
     action.text = deleted_text;
-    action.cursor_line_after_redo = start_line;
-    action.cursor_col_after_redo = start_col;
-    action.cursor_line_after_undo = end_line;
-    action.cursor_col_after_undo = end_col;
+    // After deleting range, cursor is at start position
+    action.cursor_after.row = start_line;
+    action.cursor_after.column = start_col;
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
     add_undo_action(doc, action);
 }
 
@@ -623,10 +652,11 @@ void doc_insert_line_str32(document* doc, u32 line_index, u32_string* content) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = u32str_substr(content, 0, u32str_length(content));
-    action.cursor_line_after_redo = line_index;
-    action.cursor_col_after_redo = u32str_length(content);
-    action.cursor_line_after_undo = line_index;
-    action.cursor_col_after_undo = 0;
+    // After inserting a line, cursor is at end of new line
+    action.cursor_after.row = line_index;
+    action.cursor_after.column = u32str_length(content);
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
     add_undo_action(doc, action);
 }
 
@@ -659,10 +689,11 @@ void doc_delete_line(document* doc, u32 line_index) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = line_copy;
-    action.cursor_line_after_redo = line_index > 0 ? line_index - 1 : 0;
-    action.cursor_col_after_redo = 0;
-    action.cursor_line_after_undo = line_index;
-    action.cursor_col_after_undo = 0;
+    // After deleting a line, cursor moves to previous line or stays at 0
+    action.cursor_after.row = line_index > 0 ? line_index - 1 : 0;
+    action.cursor_after.column = 0;
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
 
     add_undo_action(doc, action);
 }
@@ -694,10 +725,11 @@ void doc_split_line(document* doc, u32 line, u32 col) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = nullptr;
-    action.cursor_line_after_redo = line + 1;
-    action.cursor_col_after_redo = 0;
-    action.cursor_line_after_undo = line;
-    action.cursor_col_after_undo = col;
+    // After splitting line, cursor is at start of new line
+    action.cursor_after.row = line + 1;
+    action.cursor_after.column = 0;
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
     add_undo_action(doc, action);
 }
 
@@ -720,10 +752,11 @@ void doc_join_lines(document* doc, u32 line) {
     action.end_col = 0;
     action.codepoint = 0;
     action.text = nullptr;
-    action.cursor_line_after_redo = line;
-    action.cursor_col_after_redo = join_pos;
-    action.cursor_line_after_undo = line + 1;
-    action.cursor_col_after_undo = 0;
+    // After joining lines, cursor is at join position
+    action.cursor_after.row = line;
+    action.cursor_after.column = join_pos;
+    action.selection_anchor_after = action.cursor_after;
+    action.had_selection_after = false;
     add_undo_action(doc, action);
 }
 
@@ -819,9 +852,14 @@ void doc_undo(document* doc) {
             break;
     }
 
-    // Set the last edit position for cursor positioning
-    doc->last_edit_line = action->cursor_line_after_undo;
-    doc->last_edit_col = action->cursor_col_after_undo;
+    // Restore cursor and selection state to before the action
+    doc->cursor = action->cursor_before;
+    doc->selection_anchor = action->selection_anchor_before;
+    doc->has_selection = action->had_selection_before;
+
+    // Also set last edit position for compatibility
+    doc->last_edit_line = action->cursor_before.row;
+    doc->last_edit_col = action->cursor_before.column;
     doc->has_edit_position = true;
 
     doc->in_undo_redo = false;  // Re-enable undo recording
@@ -882,9 +920,14 @@ void doc_redo(document* doc) {
             break;
     }
 
-    // Set the last edit position for cursor positioning
-    doc->last_edit_line = action->cursor_line_after_redo;
-    doc->last_edit_col = action->cursor_col_after_redo;
+    // Restore cursor and selection state to after the action
+    doc->cursor = action->cursor_after;
+    doc->selection_anchor = action->selection_anchor_after;
+    doc->has_selection = action->had_selection_after;
+
+    // Also set last edit position for compatibility
+    doc->last_edit_line = action->cursor_after.row;
+    doc->last_edit_col = action->cursor_after.column;
     doc->has_edit_position = true;
 
     doc->in_undo_redo = false;  // Re-enable undo recording
@@ -951,9 +994,121 @@ token_span* doc_get_line_tokens(document* doc, u32 line_index) {
 
 u32 doc_get_line_token_count(document* doc, u32 line_index) {
     if (!doc || line_index >= vec_docline_size(doc->lines)) return 0;
-    
+
     document_line* doc_line = vec_docline_get(doc->lines, line_index);
     if (!doc_line || docline_is_dirty(doc_line)) return 0;
-    
+
     return docline_get_token_count(doc_line);
+}
+
+// === Cursor and Selection Management Implementation ===
+
+document_cursor doc_get_cursor(document* doc) {
+    if (!doc) {
+        document_cursor empty = {0, 0};
+        return empty;
+    }
+    return doc->cursor;
+}
+
+void doc_set_cursor(document* doc, u32 row, u32 column) {
+    if (!doc) return;
+    doc->cursor.row = row;
+    doc->cursor.column = column;
+    doc_validate_cursor(doc);
+}
+
+u32 doc_get_cursor_line(document* doc) {
+    if (!doc) return 0;
+    return doc->cursor.row;
+}
+
+u32 doc_get_cursor_column(document* doc) {
+    if (!doc) return 0;
+    return doc->cursor.column;
+}
+
+void doc_set_cursor_line(document* doc, u32 line) {
+    if (!doc) return;
+    doc->cursor.row = line;
+    doc_validate_cursor(doc);
+}
+
+void doc_set_cursor_column(document* doc, u32 column) {
+    if (!doc) return;
+    doc->cursor.column = column;
+    doc_validate_cursor(doc);
+}
+
+document_cursor doc_get_selection_anchor(document* doc) {
+    if (!doc) {
+        document_cursor empty = {0, 0};
+        return empty;
+    }
+    return doc->selection_anchor;
+}
+
+void doc_set_selection_anchor(document* doc, u32 row, u32 column) {
+    if (!doc) return;
+    doc->selection_anchor.row = row;
+    doc->selection_anchor.column = column;
+
+    // Validate selection anchor to document bounds
+    u32 line_count = vec_docline_size(doc->lines);
+    if (doc->selection_anchor.row >= line_count) {
+        doc->selection_anchor.row = line_count > 0 ? line_count - 1 : 0;
+    }
+
+    u32 line_length = doc_get_line_length(doc, doc->selection_anchor.row);
+    if (doc->selection_anchor.column > line_length) {
+        doc->selection_anchor.column = line_length;
+    }
+}
+
+bool doc_has_selection(document* doc) {
+    if (!doc) return false;
+    return doc->has_selection;
+}
+
+void doc_set_has_selection(document* doc, bool has_selection) {
+    if (!doc) return;
+    doc->has_selection = has_selection;
+}
+
+void doc_clear_selection(document* doc) {
+    if (!doc) return;
+    doc->has_selection = false;
+}
+
+bool doc_get_selection_range(document* doc, document_cursor* start, document_cursor* end) {
+    if (!doc || !doc->has_selection || !start || !end) return false;
+
+    // Normalize selection so start is always before end
+    if (doc->cursor.row < doc->selection_anchor.row ||
+        (doc->cursor.row == doc->selection_anchor.row && doc->cursor.column < doc->selection_anchor.column)) {
+        *start = doc->cursor;
+        *end = doc->selection_anchor;
+    } else {
+        *start = doc->selection_anchor;
+        *end = doc->cursor;
+    }
+
+    return true;
+}
+
+void doc_validate_cursor(document* doc) {
+    if (!doc) return;
+
+    u32 line_count = vec_docline_size(doc->lines);
+
+    // Clamp row to valid range
+    if (doc->cursor.row >= line_count) {
+        doc->cursor.row = line_count > 0 ? line_count - 1 : 0;
+    }
+
+    // Clamp column to line length
+    u32 line_length = doc_get_line_length(doc, doc->cursor.row);
+    if (doc->cursor.column > line_length) {
+        doc->cursor.column = line_length;
+    }
 }

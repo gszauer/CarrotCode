@@ -11,11 +11,6 @@
 #include <cstdlib>
 #include <cstdio>
 
-struct document_cursor {
-    u32 row;
-    u32 column;
-};
-
 struct document_view {
     document* target;
     font* fnt;
@@ -30,10 +25,6 @@ struct document_view {
     u32 displayAreaY;
     u32 displayAreaW;
     u32 displayAreaH;
-
-    document_cursor cursor;
-    document_cursor selectionAnchor;
-    bool hasSelection;
 
     bool showLineNumbers;
     bool highlightSyntax;
@@ -132,21 +123,21 @@ document* document_view_get_document(document_view* view) {
 }
 
 u32 document_view_get_cursor_row(document_view* view) {
-    if (view) {
-        return view->cursor.row;
+    if (view && view->target) {
+        return doc_get_cursor_line(view->target);
     }
     return 0;
 }
 
 void document_view_set_cursor_row(document_view* view, u32 value) {
-    if (view) {
-        view->cursor.row = value;
+    if (view && view->target) {
+        doc_set_cursor_line(view->target, value);
     }
 }
 
 void document_view_set_cursor_col(document_view* view, u32 value) {
- if (view) {
-        view->cursor.column = value;
+ if (view && view->target) {
+        doc_set_cursor_column(view->target, value);
     }
 }
 
@@ -183,8 +174,8 @@ void document_view_set_path(document_view* view, u32_string* path) {
 }
 
 u32 document_view_get_cursor_col(document_view* view) {
-    if (view) {
-        return view->cursor.column;
+    if (view && view->target) {
+        return doc_get_cursor_column(view->target);
     }
     return 0;
 }
@@ -213,11 +204,7 @@ document_view* document_view_create(document* doc, font* fnt, u32_string* path) 
     view->displayAreaW = 800;
     view->displayAreaH = 600;
 
-    view->cursor.row = 0;
-    view->cursor.column = 0;
-    view->selectionAnchor.row = 0;
-    view->selectionAnchor.column = 0;
-    view->hasSelection = false;
+    // Cursor and selection are now managed by the document
 
     view->showLineNumbers = true;
     view->highlightSyntax = has_code_extension(path);  // Enable for code files
@@ -287,30 +274,13 @@ static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
 }
 
 static void clamp_cursor(document_view* view) {
-    u32 lineCount = doc_line_count(view->target);
-
-    if (view->cursor.row >= lineCount) {
-        u32 old_row = view->cursor.row;
-        view->cursor.row = lineCount > 0 ? lineCount - 1 : 0;
-    }
-
-    u32 lineLength = doc_get_line_length(view->target, view->cursor.row);
-
-    if (view->cursor.column > lineLength) {
-        u32 old_column = view->cursor.column;
-        view->cursor.column = lineLength;
-    }
+    // Cursor validation is now handled by the document itself
+    doc_validate_cursor(view->target);
 }
 
 static void normalize_selection(document_view* view, document_cursor* start, document_cursor* end) {
-    if (view->cursor.row < view->selectionAnchor.row ||
-        (view->cursor.row == view->selectionAnchor.row && view->cursor.column < view->selectionAnchor.column)) {
-        *start = view->cursor;
-        *end = view->selectionAnchor;
-    } else {
-        *start = view->selectionAnchor;
-        *end = view->cursor;
-    }
+    // Use the document's selection normalization
+    doc_get_selection_range(view->target, start, end);
 }
 
 void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualKey,
@@ -434,19 +404,15 @@ static void select_word_at_cursor(document_view* view, document_cursor cursor) {
         wordEnd++;
     }
 
-    view->selectionAnchor.row = cursor.row;
-    view->selectionAnchor.column = wordStart;
-    view->cursor.row = cursor.row;
-    view->cursor.column = wordEnd;
-    view->hasSelection = true;
+    doc_set_selection_anchor(view->target, cursor.row, wordStart);
+    doc_set_cursor(view->target, cursor.row, wordEnd);
+    doc_set_has_selection(view->target, true);
 }
 
 static void select_line(document_view* view, u32 row) {
-    view->selectionAnchor.row = row;
-    view->selectionAnchor.column = 0;
-    view->cursor.row = row;
-    view->cursor.column = doc_get_line_length(view->target, row);
-    view->hasSelection = true;
+    doc_set_selection_anchor(view->target, row, 0);
+    doc_set_cursor(view->target, row, doc_get_line_length(view->target, row));
+    doc_set_has_selection(view->target, true);
 }
 
 void document_view_mouse_input(document_view* view, u32 x, u32 y,
@@ -528,9 +494,9 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
             }
         } else {
             view->clickCount = 1;
-            view->cursor = clickedCursor;
-            view->selectionAnchor = clickedCursor;
-            view->hasSelection = false;
+            doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
+            doc_set_selection_anchor(view->target, clickedCursor.row, clickedCursor.column);
+            doc_set_has_selection(view->target, false);
         }
 
         view->lastClickTime = currentTime;
@@ -541,7 +507,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     if (rightDown && !wasRightDown) {
         bool insideSelection = false;
 
-        if (view->hasSelection) {
+        if (doc_has_selection(view->target)) {
             document_cursor start, end;
             normalize_selection(view, &start, &end);
 
@@ -557,8 +523,8 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
         }
 
         if (!insideSelection) {
-            view->cursor = clickedCursor;
-            view->hasSelection = false;
+            doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
+            doc_set_has_selection(view->target, false);
             clamp_cursor(view);
         }
 
@@ -619,12 +585,13 @@ void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown)
     }
 
     document_cursor newCursor = document_view_pixel_to_cursor(view, effectiveX, effectiveY);
-    view->cursor = newCursor;
+    doc_set_cursor(view->target, newCursor.row, newCursor.column);
     clamp_cursor(view);
 
-    if (view->cursor.row != view->selectionAnchor.row ||
-        view->cursor.column != view->selectionAnchor.column) {
-        view->hasSelection = true;
+    document_cursor cursor = doc_get_cursor(view->target);
+    document_cursor anchor = doc_get_selection_anchor(view->target);
+    if (cursor.row != anchor.row || cursor.column != anchor.column) {
+        doc_set_has_selection(view->target, true);
     }
 }
 
@@ -700,7 +667,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     lastVisibleLine = std::min(lastVisibleLine, lineCount);
 
     document_cursor selStart = {0, 0}, selEnd = {0, 0};
-    if (view->hasSelection) {
+    if (doc_has_selection(view->target)) {
         normalize_selection(view, &selStart, &selEnd);
     }
 
@@ -758,7 +725,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         u32 lineLength = u32str_length(line);
 
         // Draw selection background
-        if (view->hasSelection) {
+        if (doc_has_selection(view->target)) {
             u32 selStartCol = 0, selEndCol = lineLength;
 
             if (lineIdx == selStart.row && lineIdx == selEnd.row) {
@@ -935,8 +902,8 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         }
 
         // Draw cursor
-        if (view->cursor.row == lineIdx) {
-            u32 cursorVisualCol = get_visual_column(line, view->cursor.column, view->tabWidth);
+        if (doc_get_cursor_line(view->target) == lineIdx) {
+            u32 cursorVisualCol = get_visual_column(line, doc_get_cursor_column(view->target), view->tabWidth);
             u32 cursorX = (u32)(contentStartX + (cursorVisualCol * charWidth) - view->scrollX);
             canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 0xFF, 0xFF, 0xFF);  // SPECTRUM_DARKEST_GRAY_900 - bright cursor
         }
@@ -981,10 +948,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 }
 
 void document_view_set_cursor(document_view* view, u32 row, u32 column) {
-    view->cursor.row = row;
-    view->cursor.column = column;
+    doc_set_cursor(view->target, row, column);
     clamp_cursor(view);
-    view->hasSelection = false;
+    doc_set_has_selection(view->target, false);
 }
 
 void document_view_set_highlight_syntax(document_view* view, bool highlight) {
@@ -996,31 +962,28 @@ bool document_view_get_highlight_syntax(document_view* view) {
 }
 
 void document_view_select_all(document_view* view) {
-    view->selectionAnchor.row = 0;
-    view->selectionAnchor.column = 0;
+    doc_set_selection_anchor(view->target, 0, 0);
 
     u32 lastLine = doc_line_count(view->target);
     if (lastLine > 0) {
-        view->cursor.row = lastLine - 1;
-        view->cursor.column = doc_get_line_length(view->target, lastLine - 1);
+        doc_set_cursor(view->target, lastLine - 1, doc_get_line_length(view->target, lastLine - 1));
     } else {
-        view->cursor.row = 0;
-        view->cursor.column = 0;
+        doc_set_cursor(view->target, 0, 0);
     }
 
-    view->hasSelection = true;
+    doc_set_has_selection(view->target, true);
 }
 
 void document_view_clear_selection(document_view* view) {
-    view->hasSelection = false;
+    doc_set_has_selection(view->target, false);
 }
 
 bool document_view_has_selection(document_view* view) {
-    return view->hasSelection;
+    return doc_has_selection(view->target);
 }
 
 u32_string* document_view_get_selection(document_view* view) {
-    if (!view->hasSelection) return nullptr;
+    if (!doc_has_selection(view->target)) return nullptr;
 
     document_cursor start, end;
     normalize_selection(view, &start, &end);
@@ -1091,18 +1054,17 @@ u32_string* document_view_get_selection(document_view* view) {
 }
 
 void document_view_insert_text(document_view* view, const u32* text, u32 length) {
-    if (view->hasSelection) {
+    if (doc_has_selection(view->target)) {
         document_view_delete_selection(view);
     }
 
     for (u32 i = 0; i < length; i++) {
         if (text[i] == '\n') {
-            doc_split_line(view->target, view->cursor.row, view->cursor.column);
-            view->cursor.row++;
-            view->cursor.column = 0;
+            doc_split_line(view->target, doc_get_cursor_line(view->target), doc_get_cursor_column(view->target));
+            doc_set_cursor(view->target, doc_get_cursor_line(view->target) + 1, 0);
         } else {
-            doc_insert_char(view->target, view->cursor.row, view->cursor.column, text[i]);
-            view->cursor.column++;
+            doc_insert_char(view->target, doc_get_cursor_line(view->target), doc_get_cursor_column(view->target), text[i]);
+            doc_set_cursor_column(view->target, doc_get_cursor_column(view->target) + 1);
         }
     }
 
@@ -1111,7 +1073,7 @@ void document_view_insert_text(document_view* view, const u32* text, u32 length)
 }
 
 void document_view_delete_selection(document_view* view) {
-    if (!view->hasSelection) return;
+    if (!doc_has_selection(view->target)) return;
 
     document_cursor start, end;
     normalize_selection(view, &start, &end);
@@ -1138,39 +1100,44 @@ void document_view_delete_selection(document_view* view) {
         }
     }
 
-    view->cursor = start;
-    view->hasSelection = false;
+    doc_set_cursor(view->target, start.row, start.column);
+    doc_set_has_selection(view->target, false);
     clamp_cursor(view);
 }
 
 void document_view_delete_forward(document_view* view) {
-    if (view->hasSelection) {
+    if (doc_has_selection(view->target)) {
         document_view_delete_selection(view);
         return;
     }
 
-    u32 lineLength = doc_get_line_length(view->target, view->cursor.row);
+    u32 lineLength = doc_get_line_length(view->target, doc_get_cursor_line(view->target));
 
-    if (view->cursor.column < lineLength) {
-        doc_delete_range(view->target, view->cursor.row, view->cursor.column, view->cursor.row, view->cursor.column + 1);
-    } else if (view->cursor.row + 1 < doc_line_count(view->target)) {
-        doc_join_lines(view->target, view->cursor.row);
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    u32 cursor_col = doc_get_cursor_column(view->target);
+    if (cursor_col < lineLength) {
+        doc_delete_range(view->target, cursor_row, cursor_col, cursor_row, cursor_col + 1);
+    } else if (cursor_row + 1 < doc_line_count(view->target)) {
+        doc_join_lines(view->target, cursor_row);
     }
 }
 
 void document_view_delete_backward(document_view* view) {
-    if (view->hasSelection) {
+    if (doc_has_selection(view->target)) {
         document_view_delete_selection(view);
         return;
     }
 
-    if (view->cursor.column > 0) {
-        view->cursor.column--;
-        doc_delete_range(view->target, view->cursor.row, view->cursor.column, view->cursor.row, view->cursor.column + 1);
-    } else if (view->cursor.row > 0) {
-        view->cursor.row--;
-        view->cursor.column = doc_get_line_length(view->target, view->cursor.row);
-        doc_join_lines(view->target, view->cursor.row);
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    u32 cursor_col = doc_get_cursor_column(view->target);
+
+    if (cursor_col > 0) {
+        doc_set_cursor_column(view->target, cursor_col - 1);
+        doc_delete_range(view->target, cursor_row, cursor_col - 1, cursor_row, cursor_col);
+    } else if (cursor_row > 0) {
+        u32 prev_line_len = doc_get_line_length(view->target, cursor_row - 1);
+        doc_set_cursor(view->target, cursor_row - 1, prev_line_len);
+        doc_join_lines(view->target, cursor_row - 1);
     }
 }
 
@@ -1180,41 +1147,46 @@ void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, 
         doc_commit_pending_undo(view->target);
     }
 
-    if (!extend_selection && view->hasSelection) {
-        view->hasSelection = false;
+    if (!extend_selection && doc_has_selection(view->target)) {
+        doc_set_has_selection(view->target, false);
     }
 
-    if (extend_selection && !view->hasSelection) {
-        view->selectionAnchor = view->cursor;
-        view->hasSelection = true;
+    if (extend_selection && !doc_has_selection(view->target)) {
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_selection_anchor(view->target, cursor.row, cursor.column);
+        doc_set_has_selection(view->target, true);
     }
+
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    u32 cursor_col = doc_get_cursor_column(view->target);
 
     if (rowDelta != 0) {
-        i32 newRow = (i32)view->cursor.row + rowDelta;
+        i32 newRow = (i32)cursor_row + rowDelta;
         if (newRow < 0) newRow = 0;
-        view->cursor.row = (u32)newRow;
+        doc_set_cursor_line(view->target, (u32)newRow);
     }
 
     if (colDelta != 0) {
-        i32 newCol = (i32)view->cursor.column + colDelta;
+        i32 newCol = (i32)cursor_col + colDelta;
         if (newCol < 0) {
-            if (view->cursor.row > 0) {
-                view->cursor.row--;
-                view->cursor.column = doc_get_line_length(view->target, view->cursor.row);
+            u32 current_row = doc_get_cursor_line(view->target);
+            if (current_row > 0) {
+                u32 prev_line_len = doc_get_line_length(view->target, current_row - 1);
+                doc_set_cursor(view->target, current_row - 1, prev_line_len);
             } else {
-                view->cursor.column = 0;
+                doc_set_cursor_column(view->target, 0);
             }
         } else {
-            u32 lineLength = doc_get_line_length(view->target, view->cursor.row);
+            u32 current_row = doc_get_cursor_line(view->target);
+            u32 lineLength = doc_get_line_length(view->target, current_row);
             if ((u32)newCol > lineLength) {
-                if (view->cursor.row + 1 < doc_line_count(view->target)) {
-                    view->cursor.row++;
-                    view->cursor.column = 0;
+                if (current_row + 1 < doc_line_count(view->target)) {
+                    doc_set_cursor(view->target, current_row + 1, 0);
                 } else {
-                    view->cursor.column = lineLength;
+                    doc_set_cursor_column(view->target, lineLength);
                 }
             } else {
-                view->cursor.column = (u32)newCol;
+                doc_set_cursor_column(view->target, (u32)newCol);
             }
         }
     }
@@ -1224,28 +1196,31 @@ void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, 
 }
 
 void document_view_move_word_left(document_view* view, bool extend_selection) {
-    if (!extend_selection && view->hasSelection) {
+    if (!extend_selection && doc_has_selection(view->target)) {
         document_cursor start, end;
         normalize_selection(view, &start, &end);
-        view->cursor = start;
-        view->hasSelection = false;
+        doc_set_cursor(view->target, start.row, start.column);
+        doc_set_has_selection(view->target, false);
         return;
     }
 
-    if (extend_selection && !view->hasSelection) {
-        view->selectionAnchor = view->cursor;
-        view->hasSelection = true;
+    if (extend_selection && !doc_has_selection(view->target)) {
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_selection_anchor(view->target, cursor.row, cursor.column);
+        doc_set_has_selection(view->target, true);
     }
 
-    u32_string* line = doc_get_line(view->target, view->cursor.row);
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    u32 cursor_col = doc_get_cursor_column(view->target);
+    u32_string* line = doc_get_line(view->target, cursor_row);
 
-    if (view->cursor.column == 0) {
-        if (view->cursor.row > 0) {
-            view->cursor.row--;
-            view->cursor.column = doc_get_line_length(view->target, view->cursor.row);
+    if (cursor_col == 0) {
+        if (cursor_row > 0) {
+            u32 prev_line_len = doc_get_line_length(view->target, cursor_row - 1);
+            doc_set_cursor(view->target, cursor_row - 1, prev_line_len);
         }
     } else if (line) {
-        u32 pos = view->cursor.column - 1;
+        u32 pos = cursor_col - 1;
 
         while (pos > 0 && is_whitespace(u32str_get(line, pos))) {
             pos--;
@@ -1255,36 +1230,38 @@ void document_view_move_word_left(document_view* view, bool extend_selection) {
             pos--;
         }
 
-        view->cursor.column = pos;
+        doc_set_cursor_column(view->target, pos);
     }
 
     document_view_ensure_cursor_visible(view);
 }
 
 void document_view_move_word_right(document_view* view, bool extend_selection) {
-    if (!extend_selection && view->hasSelection) {
+    if (!extend_selection && doc_has_selection(view->target)) {
         document_cursor start, end;
         normalize_selection(view, &start, &end);
-        view->cursor = end;
-        view->hasSelection = false;
+        doc_set_cursor(view->target, end.row, end.column);
+        doc_set_has_selection(view->target, false);
         return;
     }
 
-    if (extend_selection && !view->hasSelection) {
-        view->selectionAnchor = view->cursor;
-        view->hasSelection = true;
+    if (extend_selection && !doc_has_selection(view->target)) {
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_selection_anchor(view->target, cursor.row, cursor.column);
+        doc_set_has_selection(view->target, true);
     }
 
-    u32_string* line = doc_get_line(view->target, view->cursor.row);
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    u32 cursor_col = doc_get_cursor_column(view->target);
+    u32_string* line = doc_get_line(view->target, cursor_row);
     u32 lineLength = line ? u32str_length(line) : 0;
 
-    if (view->cursor.column >= lineLength) {
-        if (view->cursor.row + 1 < doc_line_count(view->target)) {
-            view->cursor.row++;
-            view->cursor.column = 0;
+    if (cursor_col >= lineLength) {
+        if (cursor_row + 1 < doc_line_count(view->target)) {
+            doc_set_cursor(view->target, cursor_row + 1, 0);
         }
     } else if (line) {
-        u32 pos = view->cursor.column;
+        u32 pos = cursor_col;
 
         while (pos < lineLength && !is_whitespace(u32str_get(line, pos))) {
             pos++;
@@ -1294,37 +1271,40 @@ void document_view_move_word_right(document_view* view, bool extend_selection) {
             pos++;
         }
 
-        view->cursor.column = pos;
+        doc_set_cursor_column(view->target, pos);
     }
 
     document_view_ensure_cursor_visible(view);
 }
 
 void document_view_move_to_line_start(document_view* view, bool extend_selection) {
-    if (!extend_selection && view->hasSelection) {
-        view->hasSelection = false;
+    if (!extend_selection && doc_has_selection(view->target)) {
+        doc_set_has_selection(view->target, false);
     }
 
-    if (extend_selection && !view->hasSelection) {
-        view->selectionAnchor = view->cursor;
-        view->hasSelection = true;
+    if (extend_selection && !doc_has_selection(view->target)) {
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_selection_anchor(view->target, cursor.row, cursor.column);
+        doc_set_has_selection(view->target, true);
     }
 
-    view->cursor.column = 0;
+    doc_set_cursor_column(view->target, 0);
     document_view_ensure_cursor_visible(view);
 }
 
 void document_view_move_to_line_end(document_view* view, bool extend_selection) {
-    if (!extend_selection && view->hasSelection) {
-        view->hasSelection = false;
+    if (!extend_selection && doc_has_selection(view->target)) {
+        doc_set_has_selection(view->target, false);
     }
 
-    if (extend_selection && !view->hasSelection) {
-        view->selectionAnchor = view->cursor;
-        view->hasSelection = true;
+    if (extend_selection && !doc_has_selection(view->target)) {
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_selection_anchor(view->target, cursor.row, cursor.column);
+        doc_set_has_selection(view->target, true);
     }
 
-    view->cursor.column = doc_get_line_length(view->target, view->cursor.row);
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    doc_set_cursor_column(view->target, doc_get_line_length(view->target, cursor_row));
     document_view_ensure_cursor_visible(view);
 }
 
@@ -1333,14 +1313,16 @@ void document_view_ensure_cursor_visible(document_view* view) {
     f32 lineHeight = font_get_line_height(view->fnt);
 
     // Get visual column position for cursor
-    u32_string* line = doc_get_line(view->target, view->cursor.row);
+    u32 cursor_row = doc_get_cursor_line(view->target);
+    u32 cursor_col = doc_get_cursor_column(view->target);
+    u32_string* line = doc_get_line(view->target, cursor_row);
     u32 visualCol = 0;
     if (line) {
-        visualCol = get_visual_column(line, view->cursor.column, view->tabWidth);
+        visualCol = get_visual_column(line, cursor_col, view->tabWidth);
     }
 
     f32 cursorX = visualCol * charWidth;
-    f32 cursorY = view->cursor.row * lineHeight;
+    f32 cursorY = cursor_row * lineHeight;
 
     f32 viewWidth = view->displayAreaW;
     f32 viewHeight = view->displayAreaH;
@@ -1375,7 +1357,7 @@ void document_view_scroll_to(document_view* view, f32 x, f32 y) {
 
 void document_view_center_cursor(document_view* view) {
     f32 lineHeight = font_get_line_height(view->fnt);
-    f32 cursorY = view->cursor.row * lineHeight;
+    f32 cursorY = doc_get_cursor_line(view->target) * lineHeight;
     f32 viewHeight = view->displayAreaH;
 
     if (view->maxScrollY > 0) viewHeight -= SCROLLBAR_WIDTH;
@@ -1448,7 +1430,7 @@ u8* document_view_save_ascii(document_view* view, u32* out_size) {
 }
 
 void document_view_copy(document_view* view) {
-    if (!view->hasSelection) return;
+    if (!doc_has_selection(view->target)) return;
 
     u32_string* selection = document_view_get_selection(view);
     if (selection) {
@@ -1457,7 +1439,7 @@ void document_view_copy(document_view* view) {
 }
 
 void document_view_cut(document_view* view) {
-    if (!view->hasSelection) return;
+    if (!doc_has_selection(view->target)) return;
 
     document_view_copy(view);
     document_view_delete_selection(view);
@@ -1484,19 +1466,13 @@ void document_view_validate_cursor_and_selection(document_view* view) {
     clamp_cursor(view);
 
     // Validate selection anchor if selection exists
-    if (view->hasSelection) {
+    if (doc_has_selection(view->target)) {
         u32 line_count = doc_line_count(view->target);
 
-        // Clamp selection anchor
-        if (view->selectionAnchor.row >= line_count) {
-            view->selectionAnchor.row = line_count > 0 ? line_count - 1 : 0;
-        }
-        u32_string* anchor_line = doc_get_line(view->target, view->selectionAnchor.row);
-        if (anchor_line) {
-            u32 anchor_line_len = u32str_length(anchor_line);
-            if (view->selectionAnchor.column > anchor_line_len) {
-                view->selectionAnchor.column = anchor_line_len;
-            }
+        // Selection anchor validation is handled by the document
+        document_cursor anchor = doc_get_selection_anchor(view->target);
+        if (anchor.row >= line_count) {
+            doc_set_selection_anchor(view->target, line_count > 0 ? line_count - 1 : 0, anchor.column);
         }
     }
 }
@@ -1511,8 +1487,7 @@ void document_view_update_cursor_after_undo_redo(document_view* view) {
     u32 edit_line, edit_col;
     if (doc_get_last_edit_position(view->target, &edit_line, &edit_col)) {
         // Move cursor to the edit position
-        view->cursor.row = edit_line;
-        view->cursor.column = edit_col;
+        doc_set_cursor(view->target, edit_line, edit_col);
 
         // Clear the position so it doesn't affect other views
         doc_clear_last_edit_position(view->target);

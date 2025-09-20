@@ -7,6 +7,12 @@
 struct document;
 struct token_span;
 
+// Simple cursor position structure
+struct document_cursor {
+    u32 row;
+    u32 column;
+};
+
 // Document creation and destruction
 
 // Creates an empty document with no lines
@@ -145,5 +151,35 @@ token_span* doc_get_line_tokens(document* doc, u32 line_index);
 
 // Returns the number of tokens for a line (0 if line is dirty or invalid)
 u32 doc_get_line_token_count(document* doc, u32 line_index);
+
+// === Cursor and Selection Management ===
+
+// Get the current cursor position
+document_cursor doc_get_cursor(document* doc);
+
+// Set the cursor position (validates and clamps to document bounds)
+void doc_set_cursor(document* doc, u32 row, u32 column);
+
+// Get individual cursor components
+u32 doc_get_cursor_line(document* doc);
+u32 doc_get_cursor_column(document* doc);
+
+// Set individual cursor components (validates and clamps to document bounds)
+void doc_set_cursor_line(document* doc, u32 line);
+void doc_set_cursor_column(document* doc, u32 column);
+
+// Selection management
+document_cursor doc_get_selection_anchor(document* doc);
+void doc_set_selection_anchor(document* doc, u32 row, u32 column);
+bool doc_has_selection(document* doc);
+void doc_set_has_selection(document* doc, bool has_selection);
+void doc_clear_selection(document* doc);
+
+// Get normalized selection range (start is always before end)
+// Returns false if no selection, true if selection exists
+bool doc_get_selection_range(document* doc, document_cursor* start, document_cursor* end);
+
+// Validate and clamp cursor to document bounds
+void doc_validate_cursor(document* doc);
 
 #endif
