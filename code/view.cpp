@@ -4,11 +4,7 @@
 #include "strings.h"
 #include "renderer.h"
 #include "imgui.h"
-
-#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
-#undef CARROT_INCLUDE_SYNTAX_DEFS
-
 #include <cstring>
 #include <algorithm>
 #include <cmath>

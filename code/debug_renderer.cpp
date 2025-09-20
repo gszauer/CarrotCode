@@ -1,7 +1,5 @@
 #include "renderer.h"
-#define CARROT_INCLUDE_STRING_DEFS
 #include "strings.h"
-#undef CARROT_INCLUDE_STRING_DEFS
 #include "document.h"
 #include "syntax.h"
 #include <cstdlib>

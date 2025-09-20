@@ -24,9 +24,7 @@ void docline_mark_dirty(document_line* line); // TODO: If we don't allow direct 
 void docline_tokenize(document_line* line);
 void docline_clear_tokens(document_line* line);
 
-#ifdef CARROT_INCLUDE_SYNTAX_DEFS
 void docline_add_token(document_line* line, u32 start, u32 end, token_type type);
-#endif
 
 u32_string* docline_access_text(document_line* lineNum);
 token_span* docline_access_tokens(document_line* line);

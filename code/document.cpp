@@ -1,8 +1,6 @@
 #include "document.h"
 #include "strings.h"
-#define CARROT_INCLUDE_SYNTAX_DEFS
 #include "syntax.h"
-#undef CARROT_INCLUDE_SYNTAX_DEFS
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
