@@ -33,69 +33,11 @@ struct edit_action {
     bool had_selection_after;
 };
 
-/**
- * Simple dynamic array for edit actions
- */
-struct vector_edit {
-    edit_action* data;
-    u32 size;
-    u32 capacity;
-};
-
-// === Vector Edit Helper Functions ===
-
-static vector_edit* vec_edit_create() {
-    vector_edit* vec = (vector_edit*)malloc(sizeof(vector_edit));
-    vec->data = nullptr;
-    vec->size = 0;
-    vec->capacity = 0;
-    return vec;
-}
-
-static void vec_edit_destroy(vector_edit* vec) {
-    if (!vec) return;
-    if (vec->data) {
-        // Free text in each action
-        for (u32 i = 0; i < vec->size; i++) {
-            if (vec->data[i].text) {
-                u32str_destroy(vec->data[i].text);
-            }
-        }
-        free(vec->data);
+static void free_action_text(edit_action* action) {
+    if (action && action->text) {
+        u32str_destroy(action->text);
+        action->text = nullptr;
     }
-    free(vec);
-}
-
-static void vec_edit_push(vector_edit* vec, edit_action action) {
-    if (vec->size >= vec->capacity) {
-        u32 new_capacity = vec->capacity == 0 ? 8 : vec->capacity * 2;
-        vec->data = (edit_action*)realloc(vec->data, new_capacity * sizeof(edit_action));
-        vec->capacity = new_capacity;
-    }
-    vec->data[vec->size++] = action;
-}
-
-static edit_action vec_edit_pop(vector_edit* vec) {
-    if (vec->size == 0) {
-        edit_action empty = {};
-        return empty;
-    }
-    return vec->data[--vec->size];
-}
-
-static void vec_edit_clear(vector_edit* vec) {
-    // Free text in each action
-    for (u32 i = 0; i < vec->size; i++) {
-        if (vec->data[i].text) {
-            u32str_destroy(vec->data[i].text);
-        }
-    }
-    vec->size = 0;
-}
-
-static edit_action* vec_edit_last(vector_edit* vec) {
-    if (vec->size == 0) return nullptr;
-    return &vec->data[vec->size - 1];
 }
 
 static void debug_print_text(const char* label, u32_string* text) {
@@ -156,8 +98,10 @@ struct document {
     bool modified;               // True if document has unsaved changes
 
     // === Simplified Undo/Redo System (Lite-style) ===
-    vector_edit* undo_stack;    // Stack of undo operations
-    vector_edit* redo_stack;    // Stack of redo operations
+    edit_action* undo_stack;    // Fixed-size array of undo operations
+    edit_action* redo_stack;    // Fixed-size array of redo operations
+    u32 undo_count;             // Current size of undo stack
+    u32 redo_count;             // Current size of redo stack
     u32 max_undo_levels;        // Maximum number of undo levels
     bool in_undo_redo;          // Prevent recording during undo/redo
     u64 last_action_time;       // Timestamp of last action for merging
@@ -167,6 +111,95 @@ struct document {
     document_cursor selection_anchor; // Anchor point for selection
     bool has_selection;              // True if there's an active selection
 };
+
+static edit_action* undo_last(document* doc) {
+    if (!doc || doc->undo_count == 0) return nullptr;
+    return &doc->undo_stack[doc->undo_count - 1];
+}
+
+static void clear_stack(edit_action* stack, u32* count) {
+    if (!stack || !count) return;
+    for (u32 i = 0; i < *count; ++i) {
+        free_action_text(&stack[i]);
+        stack[i] = {};
+    }
+    *count = 0;
+}
+
+static void ensure_stack_capacity(document* doc) {
+    if (!doc || doc->max_undo_levels == 0) return;
+    if (!doc->undo_stack) {
+        doc->undo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
+        doc->undo_count = 0;
+    }
+    if (!doc->redo_stack) {
+        doc->redo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
+        doc->redo_count = 0;
+    }
+}
+
+static void push_undo(document* doc, edit_action action) {
+    if (!doc || doc->max_undo_levels == 0) {
+        if (action.text) u32str_destroy(action.text);
+        return;
+    }
+
+    ensure_stack_capacity(doc);
+
+    if (doc->undo_count >= doc->max_undo_levels) {
+        free_action_text(&doc->undo_stack[0]);
+        if (doc->undo_count > 1) {
+            memmove(&doc->undo_stack[0], &doc->undo_stack[1], sizeof(edit_action) * (doc->undo_count - 1));
+        }
+        doc->undo_count--;
+        doc->undo_stack[doc->undo_count] = {};
+    }
+
+    doc->undo_stack[doc->undo_count++] = action;
+}
+
+static void push_redo(document* doc, edit_action action) {
+    if (!doc || doc->max_undo_levels == 0) {
+        if (action.text) u32str_destroy(action.text);
+        return;
+    }
+
+    ensure_stack_capacity(doc);
+
+    if (doc->redo_count >= doc->max_undo_levels) {
+        free_action_text(&doc->redo_stack[0]);
+        if (doc->redo_count > 1) {
+            memmove(&doc->redo_stack[0], &doc->redo_stack[1], sizeof(edit_action) * (doc->redo_count - 1));
+        }
+        doc->redo_count--;
+        doc->redo_stack[doc->redo_count] = {};
+    }
+
+    doc->redo_stack[doc->redo_count++] = action;
+}
+
+static edit_action pop_undo(document* doc) {
+    edit_action empty = {};
+    if (!doc || doc->undo_count == 0) return empty;
+    doc->undo_count--;
+    edit_action action = doc->undo_stack[doc->undo_count];
+    doc->undo_stack[doc->undo_count] = {};
+    return action;
+}
+
+static edit_action pop_redo(document* doc) {
+    edit_action empty = {};
+    if (!doc || doc->redo_count == 0) return empty;
+    doc->redo_count--;
+    edit_action action = doc->redo_stack[doc->redo_count];
+    doc->redo_stack[doc->redo_count] = {};
+    return action;
+}
+
+static void clear_redo_stack(document* doc) {
+    if (!doc) return;
+    clear_stack(doc->redo_stack, &doc->redo_count);
+}
 
 /**
  * Records an edit action for undo/redo.
@@ -195,9 +228,11 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
     u64 current_time = (u64)GetTimeInMilliseconds();
 
     // Check if we should merge with the previous action
-    edit_action* last = vec_edit_last(doc->undo_stack);
+    ensure_stack_capacity(doc);
+
+    edit_action* last = undo_last(doc);
     bool should_merge = false;
-    printf("[UNDO] Undo stack size=%u, last action exists=%d\n", doc->undo_stack->size, last != nullptr);
+    printf("[UNDO] Undo stack size=%u, last action exists=%d\n", doc->undo_count, last != nullptr);
 
     if (last && last->type == type && !doc->has_selection) {
         // Merge if within 500ms and adjacent
@@ -252,8 +287,8 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
     } else {
         printf("[UNDO] Adding new action (not merging)\n");
         // Clear redo stack when adding new action
-        printf("[UNDO] Clearing redo stack (had %u items)\n", doc->redo_stack->size);
-        vec_edit_clear(doc->redo_stack);
+        printf("[UNDO] Clearing redo stack (had %u items)\n", doc->redo_count);
+        clear_redo_stack(doc);
 
         // Create new action
         edit_action action;
@@ -266,20 +301,8 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
         action.had_selection_after = doc->has_selection;
 
         // Enforce max undo levels by removing oldest (at index 0)
-        while (doc->undo_stack->size >= doc->max_undo_levels) {
-            // Remove the oldest action (at index 0)
-            edit_action old = doc->undo_stack->data[0];
-            if (old.text) u32str_destroy(old.text);
-
-            // Shift remaining elements down
-            for (u32 i = 0; i < doc->undo_stack->size - 1; i++) {
-                doc->undo_stack->data[i] = doc->undo_stack->data[i + 1];
-            }
-            doc->undo_stack->size--;
-        }
-
-        vec_edit_push(doc->undo_stack, action);
-        printf("[UNDO] Added action to undo stack, new size=%u\n", doc->undo_stack->size);
+        push_undo(doc, action);
+        printf("[UNDO] Added action to undo stack, new size=%u\n", doc->undo_count);
         debug_print_text("[UNDO] Recorded text: ", action.text);
     }
 
@@ -294,8 +317,15 @@ document* doc_create(u32 undo_levels) {
     doc->max_undo_levels = undo_levels;
 
     // Create dual stacks for undo/redo
-    doc->undo_stack = vec_edit_create();
-    doc->redo_stack = vec_edit_create();
+    if (doc->max_undo_levels > 0) {
+        doc->undo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
+        doc->redo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
+    } else {
+        doc->undo_stack = nullptr;
+        doc->redo_stack = nullptr;
+    }
+    doc->undo_count = 0;
+    doc->redo_count = 0;
     doc->in_undo_redo = false;
     doc->last_action_time = 0;
 
@@ -313,8 +343,18 @@ void doc_destroy(document* doc) {
     if (!doc) return;
 
     vec_docline_destroy(doc->lines);
-    vec_edit_destroy(doc->undo_stack);
-    vec_edit_destroy(doc->redo_stack);
+    if (doc->undo_stack) {
+        for (u32 i = 0; i < doc->max_undo_levels; ++i) {
+            free_action_text(&doc->undo_stack[i]);
+        }
+        free(doc->undo_stack);
+    }
+    if (doc->redo_stack) {
+        for (u32 i = 0; i < doc->max_undo_levels; ++i) {
+            free_action_text(&doc->redo_stack[i]);
+        }
+        free(doc->redo_stack);
+    }
     free(doc);
 }
 
@@ -776,16 +816,16 @@ void doc_join_lines(document* doc, u32 line) {
 }
 
 void doc_undo(document* doc) {
-    printf("[UNDO] doc_undo called, stack size=%u\n", doc ? doc->undo_stack->size : 0);
-    if (!doc || doc->undo_stack->size == 0) {
-        printf("[UNDO] Cannot undo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->undo_stack->size : 0);
+    printf("[UNDO] doc_undo called, stack size=%u\n", doc ? doc->undo_count : 0);
+    if (!doc || doc->undo_count == 0) {
+        printf("[UNDO] Cannot undo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->undo_count : 0);
         return;
     }
 
     doc->in_undo_redo = true;
 
     // Pop action from undo stack
-    edit_action action = vec_edit_pop(doc->undo_stack);
+    edit_action action = pop_undo(doc);
     printf("[UNDO] Popped action: type=%s, line=%u, col=%u, text_len=%u\n",
            action.type == edit_action::INSERT ? "INSERT" : "REMOVE",
            action.line, action.col, action.text ? u32str_length(action.text) : 0);
@@ -817,7 +857,7 @@ void doc_undo(document* doc) {
     redo_action.timestamp = action.timestamp;
     redo_action.cursor_after = action.cursor_after;
     redo_action.had_selection_after = action.had_selection_after;
-    vec_edit_push(doc->redo_stack, redo_action);
+    push_redo(doc, redo_action);
 
     // Clean up the original action's text since we made a copy
     if (action.text) u32str_destroy(action.text);
@@ -826,16 +866,16 @@ void doc_undo(document* doc) {
 }
 
 void doc_redo(document* doc) {
-    printf("[REDO] doc_redo called, stack size=%u\n", doc ? doc->redo_stack->size : 0);
-    if (!doc || doc->redo_stack->size == 0) {
-        printf("[REDO] Cannot redo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->redo_stack->size : 0);
+    printf("[REDO] doc_redo called, stack size=%u\n", doc ? doc->redo_count : 0);
+    if (!doc || doc->redo_count == 0) {
+        printf("[REDO] Cannot redo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->redo_count : 0);
         return;
     }
 
     doc->in_undo_redo = true;
 
     // Pop action from redo stack
-    edit_action action = vec_edit_pop(doc->redo_stack);
+    edit_action action = pop_redo(doc);
 
     // Apply inverse operation (redo stack has inverted types)
     if (action.type == edit_action::INSERT) {
@@ -864,7 +904,7 @@ void doc_redo(document* doc) {
     undo_action.timestamp = action.timestamp;
     undo_action.cursor_after = action.cursor_after;
     undo_action.had_selection_after = action.had_selection_after;
-    vec_edit_push(doc->undo_stack, undo_action);
+    push_undo(doc, undo_action);
 
     // Clean up the original action's text since we made a copy
     if (action.text) u32str_destroy(action.text);
@@ -873,11 +913,11 @@ void doc_redo(document* doc) {
 }
 
 bool doc_can_undo(document* doc) {
-    return doc && doc->undo_stack && doc->undo_stack->size > 0;
+    return doc && doc->undo_count > 0;
 }
 
 bool doc_can_redo(document* doc) {
-    return doc && doc->redo_stack && doc->redo_stack->size > 0;
+    return doc && doc->redo_count > 0;
 }
 
 bool doc_get_last_edit_position(document* doc, u32* out_line, u32* out_col) {

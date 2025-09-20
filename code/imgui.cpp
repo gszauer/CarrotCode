@@ -1179,7 +1179,7 @@ bool ImGuiTab(ImGui* context, const char* text, bool saved) {
     // Close button background
     if (isCloseHovered) {
         canvas_draw_rect(context->cnvs, closeX, closeY, closeButtonSize, closeButtonSize,
-                        Colors::CONTROL_HOVER_R, Colors::CONTROL_HOVER_G, Colors::CONTROL_HOVER_B);
+                        Colors::PRIMARY_HOVER_R, Colors::PRIMARY_HOVER_G, Colors::PRIMARY_HOVER_B);
     }
 
     // Draw X using a single 'x' character
