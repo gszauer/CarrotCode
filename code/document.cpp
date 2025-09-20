@@ -5,42 +5,98 @@
 #include <cstring>
 #include <cstdio>
 
+// Forward declaration for GetTimeInMilliseconds
+extern long long GetTimeInMilliseconds();
+
 /**
- * Represents a single edit operation that can be undone/redone.
- * Each action stores enough information to both apply and reverse the operation.
+ * Simplified edit action for Lite-style undo system.
+ * Only two operations: INSERT and REMOVE.
  */
 struct edit_action {
     enum action_type {
-        INSERT_CHAR,    // Single character insertion
-        DELETE_CHAR,    // Single character deletion
-        INSERT_TEXT,    // Multi-character text insertion (includes word-based undo)
-        DELETE_RANGE,   // Range deletion (selection delete)
-        INSERT_LINE,    // Full line insertion
-        DELETE_LINE,    // Full line deletion
-        SPLIT_LINE,     // Line split (Enter key)
-        JOIN_LINE       // Line join (Delete at end of line)
+        INSERT,    // Text was inserted
+        REMOVE     // Text was removed
     } type;
 
     // Position where the action occurred
-    u32 line;           // Starting line number
-    u32 col;            // Starting column number
-    u32 end_line;       // Ending line (for range operations)
-    u32 end_col;        // Ending column (for range operations)
+    u32 line;
+    u32 col;
 
-    // Data for the action
-    u32_string* text;   // Text content (for INSERT_TEXT, DELETE_RANGE, INSERT_LINE, DELETE_LINE)
-    u32 codepoint;      // Single character (for INSERT_CHAR, DELETE_CHAR)
+    // The text that was inserted or removed
+    u32_string* text;
 
-    // Complete cursor and selection state before the action
-    document_cursor cursor_before;           // Cursor position before action
-    document_cursor selection_anchor_before; // Selection anchor before action
-    bool had_selection_before;               // Whether there was a selection before
+    // Timestamp for merging consecutive edits
+    u64 timestamp;
 
-    // Complete cursor and selection state after the action
-    document_cursor cursor_after;            // Cursor position after action
-    document_cursor selection_anchor_after;  // Selection anchor after action
-    bool had_selection_after;                // Whether there should be a selection after
+    // Cursor state after the action
+    document_cursor cursor_after;
+    bool had_selection_after;
 };
+
+/**
+ * Simple dynamic array for edit actions
+ */
+struct vector_edit {
+    edit_action* data;
+    u32 size;
+    u32 capacity;
+};
+
+// === Vector Edit Helper Functions ===
+
+static vector_edit* vec_edit_create() {
+    vector_edit* vec = (vector_edit*)malloc(sizeof(vector_edit));
+    vec->data = nullptr;
+    vec->size = 0;
+    vec->capacity = 0;
+    return vec;
+}
+
+static void vec_edit_destroy(vector_edit* vec) {
+    if (!vec) return;
+    if (vec->data) {
+        // Free text in each action
+        for (u32 i = 0; i < vec->size; i++) {
+            if (vec->data[i].text) {
+                u32str_destroy(vec->data[i].text);
+            }
+        }
+        free(vec->data);
+    }
+    free(vec);
+}
+
+static void vec_edit_push(vector_edit* vec, edit_action action) {
+    if (vec->size >= vec->capacity) {
+        u32 new_capacity = vec->capacity == 0 ? 8 : vec->capacity * 2;
+        vec->data = (edit_action*)realloc(vec->data, new_capacity * sizeof(edit_action));
+        vec->capacity = new_capacity;
+    }
+    vec->data[vec->size++] = action;
+}
+
+static edit_action vec_edit_pop(vector_edit* vec) {
+    if (vec->size == 0) {
+        edit_action empty = {};
+        return empty;
+    }
+    return vec->data[--vec->size];
+}
+
+static void vec_edit_clear(vector_edit* vec) {
+    // Free text in each action
+    for (u32 i = 0; i < vec->size; i++) {
+        if (vec->data[i].text) {
+            u32str_destroy(vec->data[i].text);
+        }
+    }
+    vec->size = 0;
+}
+
+static edit_action* vec_edit_last(vector_edit* vec) {
+    if (vec->size == 0) return nullptr;
+    return &vec->data[vec->size - 1];
+}
 
 /**
  * Main document structure that manages text content and edit history.
@@ -48,26 +104,15 @@ struct edit_action {
  */
 struct document {
     // === Document Content ===
-    vector_docline* lines;      // Dynamic array of text lines (each line is a document_line)
+    vector_docline* lines;      // Dynamic array of text lines
     bool modified;               // True if document has unsaved changes
 
-    // === Undo/Redo System ===
-    edit_action* undo_stack;    // Array of edit actions for undo/redo
-    u32 undo_stack_size;        // Number of actions currently in the stack
-    u32 undo_position;          // Current position in undo stack (0 = nothing to undo)
-    u32 max_undo_levels;        // Maximum number of undo levels (0 = undo disabled)
-    bool in_undo_redo;          // Flag to prevent recording actions during undo/redo operations
-
-    // === Cursor Positioning After Undo/Redo ===
-    u32 last_edit_line;         // Line where last undo/redo occurred
-    u32 last_edit_col;          // Column where last undo/redo occurred
-    bool has_edit_position;     // True if last_edit_line/col contains valid position
-
-    // === Word-Based Undo System ===
-    bool building_word;         // True if currently accumulating characters into a word
-    u32 word_start_line;        // Line where current word started
-    u32 word_start_col;         // Column where current word started
-    u32_string* current_word;   // Buffer holding characters of word being built
+    // === Simplified Undo/Redo System (Lite-style) ===
+    vector_edit* undo_stack;    // Stack of undo operations
+    vector_edit* redo_stack;    // Stack of redo operations
+    u32 max_undo_levels;        // Maximum number of undo levels
+    bool in_undo_redo;          // Prevent recording during undo/redo
+    u64 last_action_time;       // Timestamp of last action for merging
 
     // === Cursor and Selection ===
     document_cursor cursor;          // Current cursor position
@@ -76,56 +121,120 @@ struct document {
 };
 
 /**
- * Adds an edit action to the undo stack.
- * Handles stack overflow by removing oldest action.
- * Clears redo stack if we're in the middle of it.
- * Automatically captures current cursor/selection state as "before" state.
+ * Records an edit action for undo/redo.
+ * Automatically merges consecutive edits if they're close in time.
+ * Much simpler than the old system!
  */
-static void add_undo_action(document* doc, edit_action action) {
-    if (doc->max_undo_levels == 0 || doc->in_undo_redo) {
-        doc->modified = true;
-        // If there's text in the action that was allocated, free it
-        if (action.text) {
-            u32str_destroy(action.text);
-        }
+static void record_action(document* doc, edit_action::action_type type, u32 line, u32 col, u32_string* text) {
+    printf("[UNDO] record_action: type=%s, line=%u, col=%u, text_len=%u\n",
+           type == edit_action::INSERT ? "INSERT" : "REMOVE",
+           line, col, text ? u32str_length(text) : 0);
+
+    if (!doc) {
+        printf("[UNDO] ERROR: doc is NULL\n");
+        if (text) u32str_destroy(text);
         return;
     }
 
-    // Capture current cursor/selection state as the "before" state
-    action.cursor_before = doc->cursor;
-    action.selection_anchor_before = doc->selection_anchor;
-    action.had_selection_before = doc->has_selection;
-    
-    // If we're in the middle of the undo stack (after undoing), 
-    // we need to clear the redo portion
-    if (doc->undo_position < doc->undo_stack_size) {
-        // Free any text in the actions we're about to overwrite
-        for (u32 i = doc->undo_position; i < doc->undo_stack_size; i++) {
-            if (doc->undo_stack[i].text) {
-                u32str_destroy(doc->undo_stack[i].text);
+    if (doc->max_undo_levels == 0 || doc->in_undo_redo) {
+        printf("[UNDO] Skipping: max_undo_levels=%u, in_undo_redo=%d\n",
+               doc->max_undo_levels, doc->in_undo_redo);
+        doc->modified = true;
+        if (text) u32str_destroy(text);
+        return;
+    }
+
+    u64 current_time = (u64)GetTimeInMilliseconds();
+
+    // Check if we should merge with the previous action
+    edit_action* last = vec_edit_last(doc->undo_stack);
+    bool should_merge = false;
+    printf("[UNDO] Undo stack size=%u, last action exists=%d\n", doc->undo_stack->size, last != nullptr);
+
+    if (last && last->type == type && !doc->has_selection) {
+        // Merge if within 500ms and adjacent
+        if (current_time - doc->last_action_time < 500) {
+            if (type == edit_action::INSERT) {
+                // Merge if inserting at the end of previous insertion
+                u32 text_len = last->text ? u32str_length(last->text) : 0;
+                should_merge = (line == last->line && col == last->col + text_len);
+            } else {  // REMOVE
+                // Merge if removing at the same position or one before
+                should_merge = (line == last->line && (col == last->col || col == last->col - 1));
             }
         }
-        doc->undo_stack_size = doc->undo_position;
     }
-    
-    // If we're at max capacity, shift everything down and overwrite the oldest
-    if (doc->undo_stack_size >= doc->max_undo_levels) {
-        // Free the oldest action's text if it exists
-        if (doc->undo_stack[0].text) {
-            u32str_destroy(doc->undo_stack[0].text);
+
+    if (should_merge && last) {
+        printf("[UNDO] Merging with previous action\n");
+        // Merge with previous action
+        if (type == edit_action::INSERT) {
+            // Append text
+            u32_string* combined = u32str_create();
+            if (last->text) {
+                u32str_insert(combined, last->text, 0, 0, u32str_length(last->text));
+            }
+            u32str_insert(combined, text, u32str_length(combined), 0, u32str_length(text));
+            if (last->text) u32str_destroy(last->text);
+            u32str_destroy(text);
+            last->text = combined;
+        } else {  // REMOVE
+            // Prepend or append based on position
+            u32_string* combined = u32str_create();
+            if (col < last->col) {
+                // Prepending (backspace)
+                u32str_insert(combined, text, 0, 0, u32str_length(text));
+                if (last->text) {
+                    u32str_insert(combined, last->text, u32str_length(combined), 0, u32str_length(last->text));
+                }
+                last->col = col;
+            } else {
+                // Appending (delete)
+                if (last->text) {
+                    u32str_insert(combined, last->text, 0, 0, u32str_length(last->text));
+                }
+                u32str_insert(combined, text, u32str_length(combined), 0, u32str_length(text));
+            }
+            if (last->text) u32str_destroy(last->text);
+            u32str_destroy(text);
+            last->text = combined;
         }
-        
-        // Shift all actions down by one
-        for (u32 i = 0; i < doc->undo_stack_size - 1; i++) {
-            doc->undo_stack[i] = doc->undo_stack[i + 1];
+        last->cursor_after = doc->cursor;
+        last->timestamp = current_time;
+    } else {
+        printf("[UNDO] Adding new action (not merging)\n");
+        // Clear redo stack when adding new action
+        printf("[UNDO] Clearing redo stack (had %u items)\n", doc->redo_stack->size);
+        vec_edit_clear(doc->redo_stack);
+
+        // Create new action
+        edit_action action;
+        action.type = type;
+        action.line = line;
+        action.col = col;
+        action.text = text;
+        action.timestamp = current_time;
+        action.cursor_after = doc->cursor;
+        action.had_selection_after = doc->has_selection;
+
+        // Enforce max undo levels by removing oldest (at index 0)
+        while (doc->undo_stack->size >= doc->max_undo_levels) {
+            // Remove the oldest action (at index 0)
+            edit_action old = doc->undo_stack->data[0];
+            if (old.text) u32str_destroy(old.text);
+
+            // Shift remaining elements down
+            for (u32 i = 0; i < doc->undo_stack->size - 1; i++) {
+                doc->undo_stack->data[i] = doc->undo_stack->data[i + 1];
+            }
+            doc->undo_stack->size--;
         }
-        doc->undo_stack_size--;
-        if (doc->undo_position > 0) doc->undo_position--;
+
+        vec_edit_push(doc->undo_stack, action);
+        printf("[UNDO] Added action to undo stack, new size=%u\n", doc->undo_stack->size);
     }
-    
-    doc->undo_stack[doc->undo_stack_size] = action;
-    doc->undo_stack_size++;
-    doc->undo_position = doc->undo_stack_size;
+
+    doc->last_action_time = current_time;
     doc->modified = true;
 }
 
@@ -134,23 +243,12 @@ document* doc_create(u32 undo_levels) {
     doc->lines = vec_docline_create();
     doc->modified = false;
     doc->max_undo_levels = undo_levels;
-    
-    if (undo_levels > 0) {
-        doc->undo_stack = (edit_action*)malloc(undo_levels * sizeof(edit_action));
-    } else {
-        doc->undo_stack = nullptr;
-    }
-    
-    doc->undo_stack_size = 0;
-    doc->undo_position = 0;
+
+    // Create dual stacks for undo/redo
+    doc->undo_stack = vec_edit_create();
+    doc->redo_stack = vec_edit_create();
     doc->in_undo_redo = false;
-    doc->last_edit_line = 0;
-    doc->last_edit_col = 0;
-    doc->has_edit_position = false;
-    doc->building_word = false;
-    doc->word_start_line = 0;
-    doc->word_start_col = 0;
-    doc->current_word = u32str_create();
+    doc->last_action_time = 0;
 
     // Initialize cursor and selection
     doc->cursor.row = 0;
@@ -166,19 +264,8 @@ void doc_destroy(document* doc) {
     if (!doc) return;
 
     vec_docline_destroy(doc->lines);
-
-    if (doc->current_word) {
-        u32str_destroy(doc->current_word);
-    }
-
-    if (doc->undo_stack) {
-        for (u32 i = 0; i < doc->undo_stack_size; i++) {
-            if (doc->undo_stack[i].text) {
-                u32str_destroy(doc->undo_stack[i].text);
-            }
-        }
-        free(doc->undo_stack);
-    }
+    vec_edit_destroy(doc->undo_stack);
+    vec_edit_destroy(doc->redo_stack);
     free(doc);
 }
 
@@ -270,16 +357,17 @@ u32_string* doc_get_line(document* doc, u32 line_index) {
 
 u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_line, u32 end_col) {
     if (!doc) return u32str_create();
-    
+
     u32 line_count = vec_docline_size(doc->lines);
     if (start_line >= line_count) return u32str_create();
-    
+
     if (end_line >= line_count) {
         end_line = line_count - 1;
         document_line* last_line = vec_docline_get(doc->lines, end_line);
         end_col = docline_get_text_length(last_line);
     }
-    
+
+
     u32_string* result = u32str_create();
     
     if (start_line == end_line) {
@@ -295,22 +383,15 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
         u32str_insert(result, first_substr, 0, 0, u32str_length(first_substr));
         u32str_destroy(first_substr);
         
-        u32 newline = '\n';
-        u32_string* newline_str = u32str_create();
-        u32str_reserve(newline_str, 4);
-        u32str_set(newline_str, 0, newline);
-        u32str_insert(result, newline_str, u32str_length(result), 0, 1);
-        u32str_destroy(newline_str);
+        // Insert newline character
+        u32str_insert_char(result, u32str_length(result), '\n');
         
         for (u32 i = start_line + 1; i < end_line; i++) {
             document_line* line = vec_docline_get(doc->lines, i);
             u32str_insert(result, docline_access_text(line), u32str_length(result), 0, docline_get_text_length(line));
             
-            u32_string* nl = u32str_create();
-            u32str_reserve(nl, 4);
-            u32str_set(nl, 0, newline);
-            u32str_insert(result, nl, u32str_length(result), 0, 1);
-            u32str_destroy(nl);
+            // Insert newline after each middle line
+            u32str_insert_char(result, u32str_length(result), '\n');
         }
         
         document_line* last_line = vec_docline_get(doc->lines, end_line);
@@ -322,133 +403,54 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
     return result;
 }
 
-/**
- * Determines if a character should break word grouping for undo.
- * Word boundaries include spaces, punctuation, and special characters.
- * @param codepoint Unicode character to check
- * @return true if character is a word boundary
- */
-static bool is_word_boundary(u32 codepoint) {
-    // Word boundaries: space, tab, newline, and common punctuation
-    return codepoint == ' ' || codepoint == '\t' || codepoint == '\n' ||
-           codepoint == '.' || codepoint == ',' || codepoint == ';' ||
-           codepoint == ':' || codepoint == '!' || codepoint == '?' ||
-           codepoint == '(' || codepoint == ')' || codepoint == '[' ||
-           codepoint == ']' || codepoint == '{' || codepoint == '}' ||
-           codepoint == '"' || codepoint == '\'' || codepoint == '/' ||
-           codepoint == '\\' || codepoint == '<' || codepoint == '>' ||
-           codepoint == '=' || codepoint == '+' || codepoint == '-' ||
-           codepoint == '*' || codepoint == '&' || codepoint == '|' ||
-           codepoint == '^' || codepoint == '%' || codepoint == '#';
-}
-
-/**
- * Commits the accumulated word buffer as a single INSERT_TEXT undo action.
- * Called when word boundary is reached or cursor moves.
- * Resets the word building state after committing.
- */
-static void commit_word_undo(document* doc) {
-    if (!doc->building_word || u32str_length(doc->current_word) == 0) {
-        return;
-    }
-
-    edit_action action;
-    action.type = edit_action::INSERT_TEXT;
-    action.line = doc->word_start_line;
-    action.col = doc->word_start_col;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = 0;
-    action.text = u32str_substr(doc->current_word, 0, u32str_length(doc->current_word));
-
-    // Calculate cursor position after text insertion
-    u32 final_line = doc->word_start_line;
-    u32 final_col = doc->word_start_col + u32str_length(doc->current_word);
-
-    // After inserting text, cursor is at the end
-    action.cursor_after.row = final_line;
-    action.cursor_after.column = final_col;
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
-
-    add_undo_action(doc, action);
-
-    // Reset word building state
-    doc->building_word = false;
-    u32str_clear(doc->current_word);
-}
+// Removed word-building functions - no longer needed in simplified system
 
 void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
-    if (!doc || line >= vec_docline_size(doc->lines)) {
-        return;
-    }
+    printf("[EDIT] doc_insert_char: line=%u, col=%u, char=%c\n", line, col, codepoint < 128 ? (char)codepoint : '?');
+    if (!doc || line >= vec_docline_size(doc->lines)) return;
 
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > docline_get_text_length(doc_line)) {
         col = docline_get_text_length(doc_line);
     }
 
-    // Insert the character into the document
+    // Record for undo BEFORE modifying anything
+    u32_string* text = u32str_create();
+    u32str_reserve(text, 1);
+    u32str_insert_char(text, 0, codepoint);
+    record_action(doc, edit_action::INSERT, line, col, text);
+
+    // Insert the character
     docline_text_insert_char(doc_line, col, codepoint);
     docline_mark_dirty(doc_line);
 
-    // Check if we need to start a new word or continue building one
-    bool is_boundary = is_word_boundary(codepoint);
-
-    if (doc->building_word) {
-        // Check if we're still typing at the expected position
-        u32 expected_col = doc->word_start_col + u32str_length(doc->current_word);
-        bool position_matches = (line == doc->word_start_line && col == expected_col);
-
-        if (!position_matches || is_boundary) {
-            // Position changed or hit a boundary - commit the current word
-            commit_word_undo(doc);
-        }
-    }
-
-    if (is_boundary) {
-        // Word boundary characters get their own undo action
-        edit_action action;
-        action.type = edit_action::INSERT_CHAR;
-        action.line = line;
-        action.col = col;
-        action.end_line = 0;
-        action.end_col = 0;
-        action.codepoint = codepoint;
-        action.text = nullptr;
-        // After inserting a char, cursor moves forward by 1
-        action.cursor_after.row = line;
-        action.cursor_after.column = col + 1;
-        action.selection_anchor_after = action.cursor_after;
-        action.had_selection_after = false;
-        add_undo_action(doc, action);
-    } else {
-        // Regular character - add to current word
-        if (!doc->building_word) {
-            // Start a new word
-            doc->building_word = true;
-            doc->word_start_line = line;
-            doc->word_start_col = col;
-            u32str_clear(doc->current_word);
-        }
-        // Add character to current word
-        u32str_insert_char(doc->current_word, u32str_length(doc->current_word), codepoint);
-    }
+    // Don't update cursor here - let the caller do it
+    // This avoids double-incrementing the cursor
+    doc->has_selection = false;
 }
 
 void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
     if (!doc || !text || line >= vec_docline_size(doc->lines)) return;
 
-    // Commit any pending word before inserting text
-    commit_word_undo(doc);
-    
+    printf("[DEBUG] doc_insert_str32: line=%u, col=%u, text_len=%u\n", line, col, u32str_length(text));
+
+    // Count newlines in text to insert
+    u32 newline_count = 0;
+    for (u32 i = 0; i < u32str_length(text); i++) {
+        if (u32str_get(text, i) == '\n') newline_count++;
+    }
+    printf("[DEBUG] doc_insert_str32: newlines in text=%u, last char=0x%X\n",
+           newline_count,
+           u32str_length(text) > 0 ? u32str_get(text, u32str_length(text) - 1) : 0);
+
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > docline_get_text_length(doc_line)) {
         col = docline_get_text_length(doc_line);
     }
-    
+
     i32 newline_pos = u32str_indexOf(text, '\n');
-    
+    printf("[DEBUG] doc_insert_str32: first newline at position %d\n", newline_pos);
+
     if (newline_pos == -1) {
         docline_text_insert(doc_line, text, col, 0, u32str_length(text));
         docline_mark_dirty(doc_line);
@@ -493,6 +495,7 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
                     current_line++;
                     document_line* new_line = docline_create();
                     vec_docline_insert(doc->lines, current_line, new_line);
+                    printf("[DEBUG] Created new line at index %u\n", current_line);
                 } else {
                     u32_string* new_text = u32str_create();
                     u32str_insert(new_text, part, 0, 0, u32str_length(part));
@@ -512,18 +515,10 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
         docline_mark_dirty(last_line);
         u32str_destroy(remainder);
     }
-    
-    edit_action action;
-    action.type = edit_action::INSERT_TEXT;
-    action.line = line;
-    action.col = col;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = 0;
-    action.text = u32str_substr(text, 0, u32str_length(text));
-    // Calculate cursor position after text insertion
+
+    // Calculate final cursor position
     u32 final_line = line;
-    u32 final_col = col + u32str_length(text);
+    u32 final_col = col;
     for (u32 i = 0; i < u32str_length(text); i++) {
         if (u32str_get(text, i) == '\n') {
             final_line++;
@@ -532,72 +527,87 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
             final_col++;
         }
     }
-    // After inserting text, cursor is at the end of inserted text
-    action.cursor_after.row = final_line;
-    action.cursor_after.column = final_col;
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
-    add_undo_action(doc, action);
+
+    // Update cursor
+    doc->cursor.row = final_line;
+    doc->cursor.column = final_col;
+    doc->has_selection = false;
+
+    // Record for undo (copy the text)
+    u32_string* text_copy = u32str_substr(text, 0, u32str_length(text));
+    record_action(doc, edit_action::INSERT, line, col, text_copy);
 }
 
 void doc_delete_char(document* doc, u32 line, u32 col) {
+    printf("[EDIT] doc_delete_char: line=%u, col=%u\n", line, col);
     if (!doc || line >= vec_docline_size(doc->lines)) return;
 
-    // Commit any pending word before deleting
-    commit_word_undo(doc);
-    
     document_line* doc_line = vec_docline_get(doc->lines, line);
-    
+
     if (col < docline_get_text_length(doc_line)) {
+        // Delete character at position
         u32 deleted_char = u32str_get(docline_access_text(doc_line), col);
+
+        // Record for undo
+        u32_string* text = u32str_create();
+        u32str_reserve(text, 1);
+        u32str_insert_char(text, 0, deleted_char);
+        record_action(doc, edit_action::REMOVE, line, col, text);
+
+        // Delete the character
         u32str_remove(docline_access_text(doc_line), col, 1);
         docline_mark_dirty(doc_line);
-        
-        edit_action action;
-        action.type = edit_action::DELETE_CHAR;
-        action.line = line;
-        action.col = col;
-        action.end_line = 0;
-        action.end_col = 0;
-        action.codepoint = deleted_char;
-        action.text = nullptr;
-        // After deleting a char, cursor stays at same position
-        action.cursor_after.row = line;
-        action.cursor_after.column = col;
-        action.selection_anchor_after = action.cursor_after;
-        action.had_selection_after = false;
-        add_undo_action(doc, action);
+
+        // Cursor stays at same position
+        doc->cursor.row = line;
+        doc->cursor.column = col;
+        doc->has_selection = false;
     } else if (col == docline_get_text_length(doc_line) && line + 1 < vec_docline_size(doc->lines)) {
+        // Join lines - record newline as removed
+        u32_string* text = u32str_create();
+        u32str_reserve(text, 1);
+        u32str_insert_char(text, 0, '\n');
+        record_action(doc, edit_action::REMOVE, line, col, text);
+
+        // Join the lines
         document_line* next_line = vec_docline_get(doc->lines, line + 1);
         docline_text_insert(doc_line, docline_access_text(next_line), docline_get_text_length(doc_line), 0, docline_get_text_length(next_line));
         docline_mark_dirty(doc_line);
         vec_docline_remove(doc->lines, line + 1);
-        
-        edit_action action;
-        action.type = edit_action::JOIN_LINE;
-        action.line = line;
-        action.col = col;
-        action.end_line = 0;
-        action.end_col = 0;
-        action.codepoint = 0;
-        action.text = nullptr;
-        // After joining lines, cursor stays at join position
-        action.cursor_after.row = line;
-        action.cursor_after.column = col;
-        action.selection_anchor_after = action.cursor_after;
-        action.had_selection_after = false;
-        add_undo_action(doc, action);
+
+        // Cursor stays at join position
+        doc->cursor.row = line;
+        doc->cursor.column = col;
+        doc->has_selection = false;
     }
 }
 
 void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line, u32 end_col) {
     if (!doc || start_line >= vec_docline_size(doc->lines)) return;
 
-    // Commit any pending word before deleting range
-    commit_word_undo(doc);
-    
+    // Save text for undo
     u32_string* deleted_text = doc_get_range(doc, start_line, start_col, end_line, end_col);
-    
+
+    printf("[DEBUG] doc_delete_range: start=%u:%u, end=%u:%u\n",
+           start_line, start_col, end_line, end_col);
+    printf("[DEBUG] doc_delete_range: captured text length=%u, last char=0x%X\n",
+           deleted_text ? u32str_length(deleted_text) : 0,
+           deleted_text && u32str_length(deleted_text) > 0 ?
+           u32str_get(deleted_text, u32str_length(deleted_text) - 1) : 0);
+
+    // Count newlines in captured text
+    if (deleted_text) {
+        u32 newline_count = 0;
+        for (u32 i = 0; i < u32str_length(deleted_text); i++) {
+            if (u32str_get(deleted_text, i) == '\n') newline_count++;
+        }
+        printf("[DEBUG] doc_delete_range: newlines in captured text=%u\n", newline_count);
+    }
+
+    // Record for undo
+    record_action(doc, edit_action::REMOVE, start_line, start_col, deleted_text);
+
+    // Perform deletion
     if (start_line == end_line) {
         document_line* line = vec_docline_get(doc->lines, start_line);
         u32str_remove(docline_access_text(line), start_col, end_col - start_col);
@@ -605,33 +615,23 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
     } else {
         document_line* first_line = vec_docline_get(doc->lines, start_line);
         document_line* last_line = vec_docline_get(doc->lines, end_line);
-        
+
         u32_string* remainder = docline_text_substr(last_line, end_col, docline_get_text_length(last_line) - end_col);
-        
+
         u32str_remove(docline_access_text(first_line), start_col, docline_get_text_length(first_line) - start_col);
         u32str_insert(docline_access_text(first_line), remainder, docline_get_text_length(first_line), 0, u32str_length(remainder));
         docline_mark_dirty(first_line);
         u32str_destroy(remainder);
-        
+
         for (u32 i = end_line; i > start_line; i--) {
             vec_docline_remove(doc->lines, i);
         }
     }
-    
-    edit_action action;
-    action.type = edit_action::DELETE_RANGE;
-    action.line = start_line;
-    action.col = start_col;
-    action.end_line = end_line;
-    action.end_col = end_col;
-    action.codepoint = 0;
-    action.text = deleted_text;
-    // After deleting range, cursor is at start position
-    action.cursor_after.row = start_line;
-    action.cursor_after.column = start_col;
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
-    add_undo_action(doc, action);
+
+    // Update cursor
+    doc->cursor.row = start_line;
+    doc->cursor.column = start_col;
+    doc->has_selection = false;
 }
 
 void doc_insert_line_str32(document* doc, u32 line_index, u32_string* content) {
@@ -644,20 +644,16 @@ void doc_insert_line_str32(document* doc, u32 line_index, u32_string* content) {
     document_line* new_line = docline_create_with_text(content);
     vec_docline_insert(doc->lines, line_index, new_line);
     
-    edit_action action;
-    action.type = edit_action::INSERT_LINE;
-    action.line = line_index;
-    action.col = 0;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = 0;
-    action.text = u32str_substr(content, 0, u32str_length(content));
-    // After inserting a line, cursor is at end of new line
-    action.cursor_after.row = line_index;
-    action.cursor_after.column = u32str_length(content);
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
-    add_undo_action(doc, action);
+    // Create text with newline for undo
+    u32_string* text_with_newline = u32str_substr(content, 0, u32str_length(content));
+
+    // Record for undo - treating line as text followed by newline
+    record_action(doc, edit_action::INSERT, line_index, 0, text_with_newline);
+
+    // Update cursor
+    doc->cursor.row = line_index;
+    doc->cursor.column = u32str_length(content);
+    doc->has_selection = false;
 }
 
 void doc_append_line_str32(document* doc, u32_string* content) {
@@ -677,60 +673,56 @@ void doc_delete_line(document* doc, u32 line_index) {
         return;
     }
 
-    u32_string* line_copy = docline_text_substr(deleted_line, 0, docline_get_text_length(deleted_line));
+    u32 line_length = docline_get_text_length(deleted_line);
+    printf("[DEBUG] doc_delete_line: line_index=%u, line_length=%u\n", line_index, line_length);
+
+    // Capture the line text AND a newline (unless it's the last line)
+    u32_string* line_copy = docline_text_substr(deleted_line, 0, line_length);
+    printf("[DEBUG] doc_delete_line: copied text length=%u\n", line_copy ? u32str_length(line_copy) : 0);
+
+    // Only add newline if this isn't the last line in the document
+    // OR if there's a line after this one (meaning this line has a line break)
+    if (line_index < vec_docline_size(doc->lines) - 1) {
+        u32str_insert_char(line_copy, u32str_length(line_copy), '\n');
+    }
+
+    // Record for undo
+    record_action(doc, edit_action::REMOVE, line_index, 0, line_copy);
 
     vec_docline_remove(doc->lines, line_index);
-    
-    edit_action action;
-    action.type = edit_action::DELETE_LINE;
-    action.line = line_index;
-    action.col = 0;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = 0;
-    action.text = line_copy;
-    // After deleting a line, cursor moves to previous line or stays at 0
-    action.cursor_after.row = line_index > 0 ? line_index - 1 : 0;
-    action.cursor_after.column = 0;
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
 
-    add_undo_action(doc, action);
+    // Update cursor
+    doc->cursor.row = line_index > 0 ? line_index - 1 : 0;
+    doc->cursor.column = 0;
+    doc->has_selection = false;
 }
 
 void doc_split_line(document* doc, u32 line, u32 col) {
     if (!doc || line >= vec_docline_size(doc->lines)) return;
 
-    // Commit any pending word before splitting line
-    commit_word_undo(doc);
-    
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > docline_get_text_length(doc_line)) {
         col = docline_get_text_length(doc_line);
     }
-    
+
+    // Record newline insertion for undo
+    u32_string* newline = u32str_create();
+    u32str_insert_char(newline, 0, '\n');
+    record_action(doc, edit_action::INSERT, line, col, newline);
+
+    // Perform the split
     u32_string* new_text = docline_text_substr(doc_line, col, docline_get_text_length(doc_line) - col);
     docline_text_remove(doc_line, col, docline_get_text_length(doc_line) - col);
     docline_mark_dirty(doc_line);
-    
+
     document_line* new_line = docline_create_with_text(new_text);
     vec_docline_insert(doc->lines, line + 1, new_line);
     u32str_destroy(new_text);
-    
-    edit_action action;
-    action.type = edit_action::SPLIT_LINE;
-    action.line = line;
-    action.col = col;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = 0;
-    action.text = nullptr;
-    // After splitting line, cursor is at start of new line
-    action.cursor_after.row = line + 1;
-    action.cursor_after.column = 0;
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
-    add_undo_action(doc, action);
+
+    // Update cursor
+    doc->cursor.row = line + 1;
+    doc->cursor.column = 0;
+    doc->has_selection = false;
 }
 
 void doc_join_lines(document* doc, u32 line) {
@@ -744,218 +736,122 @@ void doc_join_lines(document* doc, u32 line) {
     docline_mark_dirty(doc_line);
     vec_docline_remove(doc->lines, line + 1);
     
-    edit_action action;
-    action.type = edit_action::JOIN_LINE;
-    action.line = line;
-    action.col = join_pos;
-    action.end_line = 0;
-    action.end_col = 0;
-    action.codepoint = 0;
-    action.text = nullptr;
-    // After joining lines, cursor is at join position
-    action.cursor_after.row = line;
-    action.cursor_after.column = join_pos;
-    action.selection_anchor_after = action.cursor_after;
-    action.had_selection_after = false;
-    add_undo_action(doc, action);
+    // Record newline removal for undo
+    u32_string* newline = u32str_create();
+    u32str_insert_char(newline, 0, '\n');
+    record_action(doc, edit_action::REMOVE, line, join_pos, newline);
+
+    // Update cursor
+    doc->cursor.row = line;
+    doc->cursor.column = join_pos;
+    doc->has_selection = false;
 }
 
 void doc_undo(document* doc) {
-    if (!doc || doc->max_undo_levels == 0 || doc->undo_position == 0) return;
-
-    // Commit any pending word before undoing
-    commit_word_undo(doc);
-
-    doc->in_undo_redo = true;  // Prevent recording undo actions
-    doc->undo_position--;
-    edit_action* action = &doc->undo_stack[doc->undo_position];
-    
-    switch (action->type) {
-        case edit_action::INSERT_CHAR:
-            {
-                document_line* line = vec_docline_get(doc->lines, action->line);
-                docline_text_remove(line, action->col, 1);
-                docline_mark_dirty(line);
-            }
-            break;
-            
-        case edit_action::DELETE_CHAR:
-            {
-                document_line* line = vec_docline_get(doc->lines, action->line);
-                docline_text_insert_char(line, action->col, action->codepoint);
-                docline_mark_dirty(line);
-            }
-            break;
-            
-        case edit_action::INSERT_TEXT:
-            {
-                i32 newline_count = 0;
-                for (u32 i = 0; i < u32str_length(action->text); i++) {
-                    if (u32str_get(action->text, i) == '\n') {
-                        newline_count++;
-                    }
-                }
-                
-                if (newline_count == 0) {
-                    document_line* line = vec_docline_get(doc->lines, action->line);
-                    docline_text_remove(line, action->col, u32str_length(action->text));
-                    docline_mark_dirty(line);
-                } else {
-                    document_line* first_line = vec_docline_get(doc->lines, action->line);
-                    document_line* last_line = vec_docline_get(doc->lines, action->line + newline_count);
-                    
-                    i32 last_newline = -1;
-                    for (i32 i = u32str_length(action->text) - 1; i >= 0; i--) {
-                        if (u32str_get(action->text, i) == '\n') {
-                            last_newline = i;
-                            break;
-                        }
-                    }
-                    
-                    u32 text_after_last_newline = u32str_length(action->text) - last_newline - 1;
-                    u32_string* remainder = docline_text_substr(last_line, text_after_last_newline, 
-                                                         docline_get_text_length(last_line) - text_after_last_newline);
-                    
-                    docline_text_remove(first_line, action->col, docline_get_text_length(first_line) - action->col);
-                    docline_text_insert(first_line, remainder, docline_get_text_length(first_line), 0, u32str_length(remainder));
-                    docline_mark_dirty(first_line);
-                    u32str_destroy(remainder);
-                    
-                    for (i32 i = 0; i < newline_count; i++) {
-                        vec_docline_remove(doc->lines, action->line + 1);
-                    }
-                }
-            }
-            break;
-            
-        case edit_action::DELETE_RANGE:
-            doc_insert_str32(doc, action->line, action->col, action->text);
-            break;
-            
-        case edit_action::INSERT_LINE:
-            vec_docline_remove(doc->lines, action->line);
-            break;
-            
-        case edit_action::DELETE_LINE:
-            {
-                document_line* new_line = docline_create_with_text(action->text);
-                vec_docline_insert(doc->lines, action->line, new_line);
-            }
-            break;
-            
-        case edit_action::SPLIT_LINE:
-            doc_join_lines(doc, action->line);
-            break;
-
-        case edit_action::JOIN_LINE:
-            doc_split_line(doc, action->line, action->col);
-            break;
+    printf("[UNDO] doc_undo called, stack size=%u\n", doc ? doc->undo_stack->size : 0);
+    if (!doc || doc->undo_stack->size == 0) {
+        printf("[UNDO] Cannot undo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->undo_stack->size : 0);
+        return;
     }
 
-    // Restore cursor and selection state to before the action
-    doc->cursor = action->cursor_before;
-    doc->selection_anchor = action->selection_anchor_before;
-    doc->has_selection = action->had_selection_before;
+    doc->in_undo_redo = true;
 
-    // Also set last edit position for compatibility
-    doc->last_edit_line = action->cursor_before.row;
-    doc->last_edit_col = action->cursor_before.column;
-    doc->has_edit_position = true;
+    // Pop action from undo stack
+    edit_action action = vec_edit_pop(doc->undo_stack);
+    printf("[UNDO] Popped action: type=%s, line=%u, col=%u, text_len=%u\n",
+           action.type == edit_action::INSERT ? "INSERT" : "REMOVE",
+           action.line, action.col, action.text ? u32str_length(action.text) : 0);
 
-    doc->in_undo_redo = false;  // Re-enable undo recording
+    // Apply inverse operation
+    if (action.type == edit_action::INSERT) {
+        // Was inserted, so remove it
+        doc_delete_range(doc, action.line, action.col,
+                        action.line, action.col + u32str_length(action.text));
+    } else {  // REMOVE
+        // Was removed, so insert it back
+        doc_insert_str32(doc, action.line, action.col, action.text);
+    }
+
+    // Move to redo stack (swap type for redo)
+    // IMPORTANT: We need to copy the text, not reuse the same pointer
+    edit_action redo_action;
+    redo_action.type = (action.type == edit_action::INSERT) ?
+                       edit_action::REMOVE : edit_action::INSERT;
+    redo_action.line = action.line;
+    redo_action.col = action.col;
+    redo_action.text = action.text ? u32str_substr(action.text, 0, u32str_length(action.text)) : nullptr;
+    redo_action.timestamp = action.timestamp;
+    redo_action.cursor_after = action.cursor_after;
+    redo_action.had_selection_after = action.had_selection_after;
+    vec_edit_push(doc->redo_stack, redo_action);
+
+    // Clean up the original action's text since we made a copy
+    if (action.text) u32str_destroy(action.text);
+
+    doc->in_undo_redo = false;
 }
 
 void doc_redo(document* doc) {
-    if (!doc || doc->max_undo_levels == 0 || doc->undo_position >= doc->undo_stack_size) return;
-
-    // Commit any pending word before redoing
-    commit_word_undo(doc);
-
-    doc->in_undo_redo = true;  // Prevent recording undo actions
-    edit_action* action = &doc->undo_stack[doc->undo_position];
-    doc->undo_position++;
-    
-    switch (action->type) {
-        case edit_action::INSERT_CHAR:
-            {
-                document_line* line = vec_docline_get(doc->lines, action->line);
-                docline_text_insert_char(line, action->col, action->codepoint);
-                docline_mark_dirty(line);
-            }
-            break;
-            
-        case edit_action::DELETE_CHAR:
-            {
-                document_line* line = vec_docline_get(doc->lines, action->line);
-                docline_text_remove(line, action->col, 1);
-                docline_mark_dirty(line);
-            }
-            break;
-            
-        case edit_action::INSERT_TEXT:
-            doc_insert_str32(doc, action->line, action->col, action->text);
-            break;
-
-        case edit_action::DELETE_RANGE:
-            doc_delete_range(doc, action->line, action->col, action->end_line, action->end_col);
-            break;
-            
-        case edit_action::INSERT_LINE:
-            {
-                document_line* new_line = docline_create_with_text(action->text);
-                vec_docline_insert(doc->lines, action->line, new_line);
-            }
-            break;
-            
-        case edit_action::DELETE_LINE:
-            vec_docline_remove(doc->lines, action->line);
-            break;
-            
-        case edit_action::SPLIT_LINE:
-            doc_split_line(doc, action->line, action->col);
-            break;
-
-        case edit_action::JOIN_LINE:
-            doc_join_lines(doc, action->line);
-            break;
+    printf("[REDO] doc_redo called, stack size=%u\n", doc ? doc->redo_stack->size : 0);
+    if (!doc || doc->redo_stack->size == 0) {
+        printf("[REDO] Cannot redo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->redo_stack->size : 0);
+        return;
     }
 
-    // Restore cursor and selection state to after the action
-    doc->cursor = action->cursor_after;
-    doc->selection_anchor = action->selection_anchor_after;
-    doc->has_selection = action->had_selection_after;
+    doc->in_undo_redo = true;
 
-    // Also set last edit position for compatibility
-    doc->last_edit_line = action->cursor_after.row;
-    doc->last_edit_col = action->cursor_after.column;
-    doc->has_edit_position = true;
+    // Pop action from redo stack
+    edit_action action = vec_edit_pop(doc->redo_stack);
 
-    doc->in_undo_redo = false;  // Re-enable undo recording
+    // Apply inverse operation (redo stack has inverted types)
+    if (action.type == edit_action::INSERT) {
+        // Was removed in undo, so remove it again
+        doc_delete_range(doc, action.line, action.col,
+                        action.line, action.col + u32str_length(action.text));
+    } else {  // REMOVE
+        // Was inserted in undo, so insert it again
+        doc_insert_str32(doc, action.line, action.col, action.text);
+    }
+
+    // Move back to undo stack (swap type back)
+    // IMPORTANT: We need to copy the text, not reuse the same pointer
+    edit_action undo_action;
+    undo_action.type = (action.type == edit_action::INSERT) ?
+                       edit_action::REMOVE : edit_action::INSERT;
+    undo_action.line = action.line;
+    undo_action.col = action.col;
+    undo_action.text = action.text ? u32str_substr(action.text, 0, u32str_length(action.text)) : nullptr;
+    undo_action.timestamp = action.timestamp;
+    undo_action.cursor_after = action.cursor_after;
+    undo_action.had_selection_after = action.had_selection_after;
+    vec_edit_push(doc->undo_stack, undo_action);
+
+    // Clean up the original action's text since we made a copy
+    if (action.text) u32str_destroy(action.text);
+
+    doc->in_undo_redo = false;
 }
 
 bool doc_can_undo(document* doc) {
-    return doc && doc->max_undo_levels > 0 && doc->undo_position > 0;
+    return doc && doc->undo_stack && doc->undo_stack->size > 0;
 }
 
 bool doc_can_redo(document* doc) {
-    return doc && doc->max_undo_levels > 0 && doc->undo_position < doc->undo_stack_size;
+    return doc && doc->redo_stack && doc->redo_stack->size > 0;
 }
 
 bool doc_get_last_edit_position(document* doc, u32* out_line, u32* out_col) {
-    if (!doc || !doc->has_edit_position) return false;
-    if (out_line) *out_line = doc->last_edit_line;
-    if (out_col) *out_col = doc->last_edit_col;
-    return true;
+    // Simplified system doesn't track this separately
+    // Could look at last action on undo stack if needed
+    return false;
 }
 
 void doc_clear_last_edit_position(document* doc) {
-    if (!doc) return;
-    doc->has_edit_position = false;
+    // No-op in simplified system
 }
 
 void doc_commit_pending_undo(document* doc) {
-    if (!doc) return;
-    commit_word_undo(doc);
+    // No-op in simplified system - no word building to commit
 }
 
 void doc_mark_line_dirty(document* doc, u32 line) {

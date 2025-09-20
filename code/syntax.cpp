@@ -94,9 +94,9 @@ void docline_text_remove(document_line* line, u32 startIndex, u32 length) {
 
 u32_string* docline_text_substr(document_line* line, u32 startIndex, u32 length) {
     if (line) {
-        u32str_substr(line->text, startIndex, length);
+        return u32str_substr(line->text, startIndex, length);
     }
-    return 0;
+    return nullptr;
 }
 
 void docline_text_insert(document_line* line, const u32_string* source, u32 targetStart, u32 sourceStart, u32 length) {

@@ -1078,27 +1078,9 @@ void document_view_delete_selection(document_view* view) {
     document_cursor start, end;
     normalize_selection(view, &start, &end);
 
-    if (start.row == end.row) {
-        doc_delete_range(view->target, start.row, start.column, end.row, end.column);
-    } else {
-        for (u32 row = end.row; row > start.row; row--) {
-            if (row == end.row) {
-                doc_delete_range(view->target, row, 0, row, end.column);
-                doc_delete_line(view->target, row);
-            } else {
-                doc_delete_line(view->target, row);
-            }
-        }
-
-        u32 remainingLength = doc_get_line_length(view->target, start.row);
-        if (start.column < remainingLength) {
-            doc_delete_range(view->target, start.row, start.column, start.row, remainingLength);
-        }
-
-        if (start.row + 1 < doc_line_count(view->target)) {
-            doc_join_lines(view->target, start.row);
-        }
-    }
+    // Use doc_delete_range for both single-line and multi-line selections
+    // This creates a single undo action for the entire delete operation
+    doc_delete_range(view->target, start.row, start.column, end.row, end.column);
 
     doc_set_cursor(view->target, start.row, start.column);
     doc_set_has_selection(view->target, false);
