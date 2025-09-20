@@ -13,18 +13,15 @@ typedef unsigned int u32;
 typedef float f32;
 typedef double d64;
 
-// Forward declarations for string types
 struct u8_string;
 struct u16_string;
 struct u32_string;
-
-// Forward declaration for vector types
-// vectors own the strings they contain!
-struct vector_docline;
 
 struct canvas;
 struct font;
 
 struct document;
+struct document_cursor;
+struct vector_docline;
 
 #endif
