@@ -160,10 +160,6 @@ document_cursor doc_get_cursor(document* doc);
 // Set the cursor position (validates and clamps to document bounds)
 void doc_set_cursor(document* doc, u32 row, u32 column);
 
-// Get individual cursor components
-u32 doc_get_cursor_line(document* doc);
-u32 doc_get_cursor_column(document* doc);
-
 // Set individual cursor components (validates and clamps to document bounds)
 void doc_set_cursor_line(document* doc, u32 line);
 void doc_set_cursor_column(document* doc, u32 column);
@@ -184,9 +180,11 @@ void doc_validate_cursor(document* doc);
 
 // Clipboard-style helpers
 // Returns newly allocated text for current selection or line (with trailing newline for lines)
+// Free resulting string!
 u32_string* doc_copy(document* doc);
 
 // Cuts current selection or line and returns the removed text
+// Free resulting string!
 u32_string* doc_cut(document* doc);
 
 // Pastes the provided UTF-32 text at the cursor, replacing any active selection

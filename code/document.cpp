@@ -713,7 +713,7 @@ u32_string* doc_copy(document* doc) {
         return nullptr;
     }
 
-    u32 line_index = doc_get_cursor_line(doc);
+    u32 line_index = doc_get_cursor(doc).row;
     if (line_index >= doc_line_count(doc)) {
         return nullptr;
     }
@@ -752,7 +752,7 @@ u32_string* doc_cut(document* doc) {
         return extracted;
     }
 
-    u32 line_index = doc_get_cursor_line(doc);
+    u32 line_index = doc_get_cursor(doc).row;
     if (line_index >= doc_line_count(doc)) {
         return nullptr;
     }
@@ -1105,16 +1105,6 @@ void doc_set_cursor(document* doc, u32 row, u32 column) {
     doc->cursor.row = row;
     doc->cursor.column = column;
     doc_validate_cursor(doc);
-}
-
-u32 doc_get_cursor_line(document* doc) {
-    if (!doc) return 0;
-    return doc->cursor.row;
-}
-
-u32 doc_get_cursor_column(document* doc) {
-    if (!doc) return 0;
-    return doc->cursor.column;
 }
 
 void doc_set_cursor_line(document* doc, u32 line) {
