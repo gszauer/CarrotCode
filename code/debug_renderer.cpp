@@ -31,8 +31,6 @@ static const u32 CHAR_WIDTH = 16;  // Display width (2x original)
 static const u32 CHAR_HEIGHT = 32; // Display height (2x original)
 static const u32 TAB_WIDTH = 4 * CHAR_WIDTH; // Tab is 4 spaces wide
 
-// Removed old bitmap_font array - now using font8x16
-
 canvas* canvas_create(u32 width, u32 height) {
     canvas* cnvs = (canvas*)malloc(sizeof(canvas));
     cnvs->width = width;

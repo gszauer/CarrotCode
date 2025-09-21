@@ -873,90 +873,6 @@ f32 ImGuiVerticalScrollBarEx(ImGui* context, u32 x, u32 y, u32 w, u32 h, f32 scr
     return scrollPos;
 }
 
-bool ImGuiCollapsableHeader(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text, bool* isOpen) {
-    u32 id = GenerateId(context);
-    bool isDisabled = context->disabledDepth > 0;
-    bool isHovered = !context->mouseInputConsumed && IsMouseInRect(context, x, y, w, h) && !isDisabled;
-    bool isActive = context->activeItem == id;
-    bool clicked = false;
-
-    // Handle mouse interaction
-    if (isHovered && (context->activeItem == 0 || context->activeItem == id)) {
-        context->hotItem = id;
-        if (context->mouseLeftPressed) {
-            context->activeItem = id;
-        }
-        if (context->mouseLeftReleased && isActive) {
-            clicked = true;
-            if (isOpen) *isOpen = !(*isOpen);
-        }
-    }
-
-    // Draw header background
-    bool canShowHover = (context->activeItem == 0 || context->activeItem == id);
-    u8 bgR, bgG, bgB;
-    if (isDisabled) {
-        bgR = Colors::SURFACE_R;
-        bgG = Colors::SURFACE_G;
-        bgB = Colors::SURFACE_B;
-    } else if (isActive && isHovered) {
-        bgR = Colors::CONTROL_ACTIVE_R;
-        bgG = Colors::CONTROL_ACTIVE_G;
-        bgB = Colors::CONTROL_ACTIVE_B;
-    } else if (isHovered && canShowHover) {
-        bgR = Colors::CONTROL_HOVER_R;
-        bgG = Colors::CONTROL_HOVER_G;
-        bgB = Colors::CONTROL_HOVER_B;
-    } else {
-        bgR = Colors::CONTROL_R;
-        bgG = Colors::CONTROL_G;
-        bgB = Colors::CONTROL_B;
-    }
-
-    canvas_draw_rect(context->cnvs, x, y, w, h, bgR, bgG, bgB);
-
-    // Draw border
-    canvas_draw_rect(context->cnvs, x, y, w, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, x, y + h - 1, w, 1, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, x, y, 1, h, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-    canvas_draw_rect(context->cnvs, x + w - 1, y, 1, h, Colors::BORDER_R, Colors::BORDER_G, Colors::BORDER_B);
-
-    // Draw arrow indicator
-    const u32 arrowSize = 8;
-    const u32 arrowPadding = (h - arrowSize) / 2;
-    u32 arrowX = x + arrowPadding;
-    u32 arrowY = y + arrowPadding;
-
-    if (isOpen && *isOpen) {
-        // Draw down arrow (open state)
-        for (u32 i = 0; i < arrowSize / 2; ++i) {
-            canvas_draw_rect(context->cnvs, arrowX + i, arrowY + i, arrowSize - i * 2, 1,
-                           Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
-        }
-    } else {
-        // Draw right arrow (closed state)
-        for (u32 i = 0; i < arrowSize / 2; ++i) {
-            canvas_draw_rect(context->cnvs, arrowX + i, arrowY + i, 1, arrowSize - i * 2,
-                           Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
-        }
-    }
-
-    // Draw text
-    if (text) {
-        u32 textX = x + arrowSize + arrowPadding * 2;
-        u32 textHeight = font_get_line_height(context->fnt);
-        u32 textY = GetCenteredTextY(y, h, textHeight);
-
-        u8 textR = isDisabled ? Colors::TEXT_DISABLED_R : Colors::TEXT_R;
-        u8 textG = isDisabled ? Colors::TEXT_DISABLED_G : Colors::TEXT_G;
-        u8 textB = isDisabled ? Colors::TEXT_DISABLED_B : Colors::TEXT_B;
-
-        canvas_draw_text_cstr(context->cnvs, context->fnt, text, textX, textY, textR, textG, textB);
-    }
-
-    return clicked;
-}
-
 // Tab bar implementation
 void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u32 activeTab) {
     // Initialize tab bar state
@@ -1012,18 +928,16 @@ bool ImGuiTab(ImGui* context, const char* text, bool saved) {
     u32 tabIndex = context->tabBar.currentTabIndex++;
     bool isActiveTab = (tabIndex == context->tabBar.activeTab);
 
-    // Build the display text with asterisk if not saved
-    char displayText[512];
-    if (!saved && text) {
-        snprintf(displayText, sizeof(displayText), "%s*", text);
-    } else if (text) {
-        snprintf(displayText, sizeof(displayText), "%s", text);
-    } else {
-        displayText[0] = '\0';
-    }
+    const char* baseText = text ? text : "";
+    bool hasBaseText = baseText[0] != '\0';
 
-    // Calculate tab dimensions using display text
-    u32 textWidth = displayText[0] ? font_get_width_cstr(context->fnt, displayText) : 40;
+    u32 baseTextWidth = hasBaseText ? font_get_width_cstr(context->fnt, baseText) : 0;
+    u32 starWidth = saved ? 0 : font_get_char_width(context->fnt, '*');
+    const u32 starPadding = saved ? 0 : 4;
+
+    u32 textWidth = baseTextWidth + starWidth + starPadding;
+    if (textWidth == 0) textWidth = 40;
+
     const u32 padding = 10;
     const u32 closeButtonSize = 32;
     const u32 closeButtonPadding = 5;
@@ -1191,16 +1105,36 @@ bool ImGuiTab(ImGui* context, const char* text, bool saved) {
     }
 
     // Draw tab text with asterisk if unsaved
-    if (displayText[0]) {
-        u32 textHeight = font_get_line_height(context->fnt);
-        u32 textY = GetCenteredTextY(tabY, tabH, textHeight);
-        // Use drawX for text position so it's properly clipped along with the tab
-        canvas_draw_text_cstr(context->cnvs, context->fnt, displayText, drawX + padding, textY,
-                        Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
+    u32 textHeight = font_get_line_height(context->fnt);
+    u32 textY = GetCenteredTextY(tabY, tabH, textHeight);
+    u32 textX = drawX + padding;
+
+    u32 textClipWidth = tabWidth - closeButtonSize - closeButtonPadding - padding;
+    if (!saved) {
+        if (textClipWidth > starWidth + starPadding) {
+            textClipWidth -= (starWidth + starPadding);
+        } else {
+            textClipWidth = 0;
+        }
+    }
+
+    if (textClipWidth > 0) {
+        canvas_set_clip(context->cnvs, textX, tabY, textClipWidth, tabH);
+        if (hasBaseText) {
+            canvas_draw_text_cstr(context->cnvs, context->fnt, baseText, textX, textY,
+                                  Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
+        }
+        canvas_set_clip(context->cnvs, 0, 0, 0, 0);
+    }
+
+    u32 closeX = drawX + tabWidth - closeButtonSize - closeButtonPadding;
+    if (!saved) {
+        u32 starX = (closeX > starWidth + starPadding) ? closeX - starWidth - starPadding : drawX + padding;
+        canvas_draw_text_cstr(context->cnvs, context->fnt, "*", starX, textY,
+                              Colors::TEXT_R, Colors::TEXT_G, Colors::TEXT_B);
     }
 
     // Draw close button
-    u32 closeX = drawX + tabWidth - closeButtonSize - closeButtonPadding;
     u32 closeY = tabY + (tabH - closeButtonSize) / 2;
 
     // Close button background
@@ -1216,7 +1150,6 @@ bool ImGuiTab(ImGui* context, const char* text, bool saved) {
     u8 xB = isCloseHovered ? Colors::TEXT_BRIGHT_B : 0x99;
 
     // Calculate position to center the 'x' in the close button
-    u32 textHeight = font_get_line_height(context->fnt);
     u32 xPosX = closeX + (closeButtonSize - font_get_width_cstr(context->fnt, "x")) / 2;
     u32 xPosY = closeY + (closeButtonSize - textHeight) / 2;
 
