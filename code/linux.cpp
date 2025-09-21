@@ -707,6 +707,13 @@ int main(int argc, char** argv) {
                             rightDown = (event.xmotion.state & Button3Mask) != 0;
                         }
 
+                        bool shiftDown = false;
+                        if (event.type == ButtonPress || event.type == ButtonRelease) {
+                            shiftDown = (event.xbutton.state & ShiftMask) != 0;
+                        } else if (event.type == MotionNotify) {
+                            shiftDown = (event.xmotion.state & ShiftMask) != 0;
+                        }
+
                         ImGuiMouseInput(user->imgui_context, mouseX, mouseY, normX, normY,
                                       scrollDir, leftDown, middleDown, rightDown);
 
@@ -739,7 +746,8 @@ int main(int argc, char** argv) {
                                 if (view) {
                                     if (event.type == ButtonPress || event.type == ButtonRelease) {
                                         document_view_mouse_input(view, mouseX, mouseY, scrollDir,
-                                                                leftDown, middleDown, rightDown);
+                                                                leftDown, middleDown, rightDown,
+                                                                shiftDown);
                                     } else if (event.type == MotionNotify && leftDown) {
                                         // Only send mouse move if left button is down (for selection)
                                         document_view_mouse_moved(view, mouseX, mouseY, leftDown);

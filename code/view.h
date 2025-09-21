@@ -28,7 +28,8 @@ void document_view_set_display_size(document_view* view, u32 w, u32 h);
 void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualKey,
                                   bool isDown, bool alt, bool ctrl, bool shift);
 void document_view_mouse_input(document_view* view, u32 x, u32 y,
-                               f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown);
+                               f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown,
+                               bool shiftDown);
 void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown);
 
 void document_view_update(document_view* view, f32 deltaTime);

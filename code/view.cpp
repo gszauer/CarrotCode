@@ -416,7 +416,8 @@ static void select_line(document_view* view, u32 row) {
 }
 
 void document_view_mouse_input(document_view* view, u32 x, u32 y,
-                              f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown) {
+                              f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown,
+                              bool shiftDown) {
     static bool wasLeftDown = false;
     static bool wasRightDown = false;
 
@@ -481,22 +482,37 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     if (leftDown && !wasLeftDown) {
         u32 currentTime = 0;
 
-        if (clickedCursor.row == view->lastClickPosition.row &&
-            clickedCursor.column == view->lastClickPosition.column &&
-            currentTime - view->lastClickTime < DOUBLE_CLICK_TIME) {
-
-            view->clickCount++;
-
-            if (view->clickCount == 2) {
-                select_word_at_cursor(view, clickedCursor);
-            } else if (view->clickCount >= 3) {
-                select_line(view, clickedCursor.row);
+        if (shiftDown) {
+            document_cursor currentCursor = doc_get_cursor(view->target);
+            if (!doc_has_selection(view->target)) {
+                doc_set_selection_anchor(view->target, currentCursor.row, currentCursor.column);
             }
-        } else {
-            view->clickCount = 1;
+
             doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
-            doc_set_selection_anchor(view->target, clickedCursor.row, clickedCursor.column);
-            doc_set_has_selection(view->target, false);
+
+            document_cursor anchor = doc_get_selection_anchor(view->target);
+            document_cursor cursor = doc_get_cursor(view->target);
+            bool hasSelection = (anchor.row != cursor.row) || (anchor.column != cursor.column);
+            doc_set_has_selection(view->target, hasSelection);
+            view->clickCount = 1;
+        } else {
+            if (clickedCursor.row == view->lastClickPosition.row &&
+                clickedCursor.column == view->lastClickPosition.column &&
+                currentTime - view->lastClickTime < DOUBLE_CLICK_TIME) {
+
+                view->clickCount++;
+
+                if (view->clickCount == 2) {
+                    select_word_at_cursor(view, clickedCursor);
+                } else if (view->clickCount >= 3) {
+                    select_line(view, clickedCursor.row);
+                }
+            } else {
+                view->clickCount = 1;
+                doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
+                doc_set_selection_anchor(view->target, clickedCursor.row, clickedCursor.column);
+                doc_set_has_selection(view->target, false);
+            }
         }
 
         view->lastClickTime = currentTime;
