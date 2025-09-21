@@ -702,6 +702,119 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
     doc->has_selection = false;
 }
 
+u32_string* doc_copy(document* doc) {
+    if (!doc) return nullptr;
+
+    if (doc_has_selection(doc)) {
+        document_cursor start, end;
+        if (doc_get_selection_range(doc, &start, &end)) {
+            return doc_get_range(doc, start.row, start.column, end.row, end.column);
+        }
+        return nullptr;
+    }
+
+    u32 line_index = doc_get_cursor_line(doc);
+    if (line_index >= doc_line_count(doc)) {
+        return nullptr;
+    }
+
+    u32_string* line = doc_get_line(doc, line_index);
+    if (!line) {
+        return nullptr;
+    }
+
+    u32_string* result = u32str_create();
+    u32 line_length = u32str_length(line);
+    if (line_length > 0) {
+        u32str_insert(result, line, 0, 0, line_length);
+    }
+    u32str_insert_char(result, u32str_length(result), '\n');
+    return result;
+}
+
+u32_string* doc_cut(document* doc) {
+    if (!doc) return nullptr;
+
+    if (doc_has_selection(doc)) {
+        document_cursor start, end;
+        if (!doc_get_selection_range(doc, &start, &end)) {
+            return nullptr;
+        }
+
+        u32_string* extracted = doc_get_range(doc, start.row, start.column, end.row, end.column);
+        if (!extracted) {
+            return nullptr;
+        }
+
+        doc_delete_range(doc, start.row, start.column, end.row, end.column);
+        doc_set_cursor(doc, start.row, start.column);
+        doc_set_has_selection(doc, false);
+        return extracted;
+    }
+
+    u32 line_index = doc_get_cursor_line(doc);
+    if (line_index >= doc_line_count(doc)) {
+        return nullptr;
+    }
+
+    u32_string* line = doc_get_line(doc, line_index);
+    if (!line) {
+        return nullptr;
+    }
+
+    u32_string* extracted = u32str_create();
+    u32 line_length = u32str_length(line);
+    if (line_length > 0) {
+        u32str_insert(extracted, line, 0, 0, line_length);
+    }
+    u32str_insert_char(extracted, u32str_length(extracted), '\n');
+
+    u32 total_lines_before = doc_line_count(doc);
+    bool deleting_last_line = total_lines_before > 0 && line_index >= total_lines_before - 1;
+    doc_delete_line(doc, line_index);
+
+    u32 remaining_lines = doc_line_count(doc);
+    if (remaining_lines == 0) {
+        doc_set_cursor(doc, 0, 0);
+    } else if (deleting_last_line) {
+        doc_set_cursor(doc, remaining_lines - 1, 0);
+    } else {
+        doc_set_cursor(doc, line_index < remaining_lines ? line_index : remaining_lines - 1, 0);
+    }
+
+    doc_set_has_selection(doc, false);
+    return extracted;
+}
+
+void doc_paste(document* doc, const u32* text, u32 length) {
+    if (!doc || !text || length == 0) return;
+
+    if (doc_line_count(doc) == 0) {
+        u32_string* empty = u32str_create();
+        doc_append_line_str32(doc, empty);
+        u32str_destroy(empty);
+        doc_set_cursor(doc, 0, 0);
+    }
+
+    document_cursor insert_at = doc_get_cursor(doc);
+    if (doc_has_selection(doc)) {
+        document_cursor start, end;
+        if (doc_get_selection_range(doc, &start, &end)) {
+            doc_delete_range(doc, start.row, start.column, end.row, end.column);
+            insert_at = start;
+        }
+    }
+
+    u32_string* buffer = u32str_create();
+    u32str_reserve(buffer, length);
+    for (u32 i = 0; i < length; ++i) {
+        u32str_insert_char(buffer, u32str_length(buffer), text[i]);
+    }
+
+    doc_insert_str32(doc, insert_at.row, insert_at.column, buffer);
+    u32str_destroy(buffer);
+}
+
 void doc_insert_line_str32(document* doc, u32 line_index, u32_string* content) {
     if (!doc || !content) return;
     

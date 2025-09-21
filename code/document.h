@@ -182,4 +182,14 @@ bool doc_get_selection_range(document* doc, document_cursor* start, document_cur
 // Validate and clamp cursor to document bounds
 void doc_validate_cursor(document* doc);
 
+// Clipboard-style helpers
+// Returns newly allocated text for current selection or line (with trailing newline for lines)
+u32_string* doc_copy(document* doc);
+
+// Cuts current selection or line and returns the removed text
+u32_string* doc_cut(document* doc);
+
+// Pastes the provided UTF-32 text at the cursor, replacing any active selection
+void doc_paste(document* doc, const u32* text, u32 length);
+
 #endif

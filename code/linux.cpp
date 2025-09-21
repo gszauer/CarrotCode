@@ -497,97 +497,28 @@ int main(int argc, char** argv) {
                                 if (view) {
                                     if (keysym == XK_x || keysym == XK_X) {  // Ctrl+X (Cut)
                                         // Get selected text or whole line
-                                        u32_string* text_to_cut = document_view_get_selection(view);
-                                        bool has_selection = (text_to_cut && u32str_length(text_to_cut) > 0);
-
-                                        if (!has_selection && text_to_cut) {
-                                            u32str_destroy(text_to_cut);
-                                            text_to_cut = nullptr;
-                                        }
-
-                                        // If no selection, get the current line
-                                        if (!has_selection) {
-                                            document* doc = document_view_get_document(view);
-                                            u32 line_row = document_view_get_cursor_row(view);
-                                            // Make sure the line exists
-                                            if (line_row < doc_line_count(doc)) {
-                                                u32_string* line = doc_get_line(doc, line_row);
-                                                if (line) {
-                                                // Create a copy with newline appended
-                                                u32 line_len = u32str_length(line);
-                                                u32* line_data = (u32*)malloc((line_len + 2) * sizeof(u32));
-                                                for (u32 i = 0; i < line_len; i++) {
-                                                    line_data[i] = u32str_get(line, i);
-                                                }
-                                                line_data[line_len] = '\n';
-                                                line_data[line_len + 1] = 0;
-                                                text_to_cut = u32str_init(line_data);
-                                                free(line_data);
-                                                // DO NOT destroy line - it's owned by the document!
-                                                }
+                                        document* doc = document_view_get_document(view);
+                                        if (doc) {
+                                            u32_string* text_to_cut = doc_cut(doc);
+                                            if (text_to_cut) {
+                                                user->pending_clipboard_text = text_to_cut;
+                                                user->waiting_for_operation = true;
+                                                platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
+                                                document_view_validate_cursor_and_selection(view);
+                                                document_view_ensure_cursor_visible(view);
                                             }
-                                        }
-
-                                        if (text_to_cut) {
-                                            // Copy to clipboard
-                                            user->waiting_for_operation = true;
-                                            platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
-
-                                            if (has_selection) {
-                                                // Delete the selected text
-                                                document_view_delete_selection(view);
-                                            } else {
-                                                // Defer the whole line deletion until after rendering
-                                                u32 current_line = document_view_get_cursor_row(view);
-
-                                                // Mark for deferred deletion
-                                                user->has_deferred_line_delete = true;
-                                                user->deferred_delete_view = user->active_view;
-                                                user->deferred_delete_line = current_line;
-                                            }
-
-                                            u32str_destroy(text_to_cut);
                                         }
                                         handled = true;
                                     }
                                     else if (keysym == XK_c || keysym == XK_C) {  // Ctrl+C (Copy)
-                                        // Get selected text or whole line
-                                        u32_string* text_to_copy = document_view_get_selection(view);
-                                        bool has_selection = (text_to_copy && u32str_length(text_to_copy) > 0);
-
-                                        if (!has_selection && text_to_copy) {
-                                            u32str_destroy(text_to_copy);
-                                            text_to_copy = nullptr;
-                                        }
-
-                                        // If no selection, get the current line
-                                        if (!has_selection) {
-                                            document* doc = document_view_get_document(view);
-                                            u32 line_row = document_view_get_cursor_row(view);
-                                            // Make sure the line exists
-                                            if (line_row < doc_line_count(doc)) {
-                                                u32_string* line = doc_get_line(doc, line_row);
-                                                if (line) {
-                                                // Create a copy with newline appended
-                                                u32 line_len = u32str_length(line);
-                                                u32* line_data = (u32*)malloc((line_len + 2) * sizeof(u32));
-                                                for (u32 i = 0; i < line_len; i++) {
-                                                    line_data[i] = u32str_get(line, i);
-                                                }
-                                                line_data[line_len] = '\n';
-                                                line_data[line_len + 1] = 0;
-                                                text_to_copy = u32str_init(line_data);
-                                                free(line_data);
-                                                // DO NOT destroy line - it's owned by the document!
-                                                }
+                                        document* doc = document_view_get_document(view);
+                                        if (doc) {
+                                            u32_string* text_to_copy = doc_copy(doc);
+                                            if (text_to_copy) {
+                                                user->pending_clipboard_text = text_to_copy;
+                                                user->waiting_for_operation = true;
+                                                platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
                                             }
-                                        }
-
-                                        if (text_to_copy) {
-                                            // Copy to clipboard
-                                            user->waiting_for_operation = true;
-                                            platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
-                                            u32str_destroy(text_to_copy);
                                         }
                                         handled = true;
                                     }

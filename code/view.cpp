@@ -1061,7 +1061,6 @@ void document_view_insert_text(document_view* view, const u32* text, u32 length)
     for (u32 i = 0; i < length; i++) {
         if (text[i] == '\n') {
             doc_split_line(view->target, doc_get_cursor_line(view->target), doc_get_cursor_column(view->target));
-            doc_set_cursor(view->target, doc_get_cursor_line(view->target) + 1, 0);
         } else {
             doc_insert_char(view->target, doc_get_cursor_line(view->target), doc_get_cursor_column(view->target), text[i]);
             doc_set_cursor_column(view->target, doc_get_cursor_column(view->target) + 1);
@@ -1428,7 +1427,11 @@ void document_view_cut(document_view* view) {
 }
 
 void document_view_paste(document_view* view, const u32* text, u32 length) {
-    document_view_insert_text(view, text, length);
+    if (!view || !view->target || !text || length == 0) return;
+
+    doc_paste(view->target, text, length);
+    document_view_validate_cursor_and_selection(view);
+    document_view_ensure_cursor_visible(view);
 }
 
 void document_view_undo(document_view* view) {

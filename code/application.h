@@ -23,11 +23,8 @@ struct UserData {
 
     // Async operation state
     bool waiting_for_operation;
+    u32_string* pending_clipboard_text;
 
-    // Deferred operations
-    bool has_deferred_line_delete;
-    u32 deferred_delete_view;
-    u32 deferred_delete_line;
 };
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight);
