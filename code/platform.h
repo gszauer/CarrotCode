@@ -28,5 +28,7 @@ typedef void (*platform_write_file_callback)(bool result, void* userData);
 void platform_write_file(u32_string* filePath, void* fileData, u32 fileSizeBytes, platform_write_file_callback callback, void* userData);
 
 void platform_get_window_size(u32* width, u32* height);
+u64 platform_get_milliseconds();
+
 
 #endif

@@ -1,12 +1,10 @@
 #include "document.h"
 #include "strings.h"
 #include "syntax.h"
+#include "platform.h"
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
-
-// Forward declaration for GetTimeInMilliseconds
-extern long long GetTimeInMilliseconds();
 
 /**
  * Simplified edit action for Lite-style undo system.
@@ -38,32 +36,6 @@ static void free_action_text(edit_action* action) {
         u32str_destroy(action->text);
         action->text = nullptr;
     }
-}
-
-static void debug_print_text(const char* label, u32_string* text) {
-    if (!label) label = "";
-    if (!text) {
-        printf("%s<null>\n", label);
-        return;
-    }
-
-    u32 length = u32str_length(text);
-    printf("%slen=%u \"", label, length);
-    for (u32 i = 0; i < length; ++i) {
-        u32 ch = u32str_get(text, i);
-        if (ch == '\n') {
-            printf("\\n");
-        } else if (ch == '\r') {
-            printf("\\r");
-        } else if (ch == '\t') {
-            printf("\\t");
-        } else if (ch >= 32 && ch < 127) {
-            putchar((char)ch);
-        } else {
-            printf("?%02X", ch & 0xFF);
-        }
-    }
-    printf("\"\n");
 }
 
 static void compute_text_extent(u32 line, u32 col, u32_string* text,
@@ -117,34 +89,17 @@ static edit_action* undo_last(document* doc) {
     return &doc->undo_stack[doc->undo_count - 1];
 }
 
-static void clear_stack(edit_action* stack, u32* count) {
-    if (!stack || !count) return;
-    for (u32 i = 0; i < *count; ++i) {
-        free_action_text(&stack[i]);
-        stack[i] = {};
-    }
-    *count = 0;
-}
-
-static void ensure_stack_capacity(document* doc) {
-    if (!doc || doc->max_undo_levels == 0) return;
-    if (!doc->undo_stack) {
-        doc->undo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
-        doc->undo_count = 0;
-    }
-    if (!doc->redo_stack) {
-        doc->redo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
-        doc->redo_count = 0;
-    }
-}
-
 static void push_undo(document* doc, edit_action action) {
     if (!doc || doc->max_undo_levels == 0) {
         if (action.text) u32str_destroy(action.text);
         return;
     }
 
-    ensure_stack_capacity(doc);
+    if (!doc->undo_stack) {
+        // Should not happen because stacks are allocated in doc_create(). Safeguard anyway.
+        doc->undo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
+        doc->undo_count = 0;
+    }
 
     if (doc->undo_count >= doc->max_undo_levels) {
         free_action_text(&doc->undo_stack[0]);
@@ -164,7 +119,10 @@ static void push_redo(document* doc, edit_action action) {
         return;
     }
 
-    ensure_stack_capacity(doc);
+    if (!doc->redo_stack) {
+        doc->redo_stack = (edit_action*)calloc(doc->max_undo_levels, sizeof(edit_action));
+        doc->redo_count = 0;
+    }
 
     if (doc->redo_count >= doc->max_undo_levels) {
         free_action_text(&doc->redo_stack[0]);
@@ -197,8 +155,12 @@ static edit_action pop_redo(document* doc) {
 }
 
 static void clear_redo_stack(document* doc) {
-    if (!doc) return;
-    clear_stack(doc->redo_stack, &doc->redo_count);
+    if (!doc || !doc->redo_stack) return;
+    for (u32 i = 0; i < doc->redo_count; ++i) {
+        free_action_text(&doc->redo_stack[i]);
+        doc->redo_stack[i] = {};
+    }
+    doc->redo_count = 0;
 }
 
 /**
@@ -207,32 +169,22 @@ static void clear_redo_stack(document* doc) {
  * Much simpler than the old system!
  */
 static void record_action(document* doc, edit_action::action_type type, u32 line, u32 col, u32_string* text) {
-    printf("[UNDO] record_action: type=%s, line=%u, col=%u, text_len=%u\n",
-           type == edit_action::INSERT ? "INSERT" : "REMOVE",
-           line, col, text ? u32str_length(text) : 0);
-
     if (!doc) {
-        printf("[UNDO] ERROR: doc is NULL\n");
         if (text) u32str_destroy(text);
         return;
     }
 
     if (doc->max_undo_levels == 0 || doc->in_undo_redo) {
-        printf("[UNDO] Skipping: max_undo_levels=%u, in_undo_redo=%d\n",
-               doc->max_undo_levels, doc->in_undo_redo);
         doc->modified = true;
         if (text) u32str_destroy(text);
         return;
     }
 
-    u64 current_time = (u64)GetTimeInMilliseconds();
+    u64 current_time = (u64)platform_get_milliseconds();
 
     // Check if we should merge with the previous action
-    ensure_stack_capacity(doc);
-
     edit_action* last = undo_last(doc);
     bool should_merge = false;
-    printf("[UNDO] Undo stack size=%u, last action exists=%d\n", doc->undo_count, last != nullptr);
 
     if (last && last->type == type && !doc->has_selection) {
         // Merge if within 500ms and adjacent
@@ -249,7 +201,6 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
     }
 
     if (should_merge && last) {
-        printf("[UNDO] Merging with previous action\n");
         // Merge with previous action
         if (type == edit_action::INSERT) {
             // Append text
@@ -285,9 +236,7 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
         last->cursor_after = doc->cursor;
         last->timestamp = current_time;
     } else {
-        printf("[UNDO] Adding new action (not merging)\n");
         // Clear redo stack when adding new action
-        printf("[UNDO] Clearing redo stack (had %u items)\n", doc->redo_count);
         clear_redo_stack(doc);
 
         // Create new action
@@ -302,8 +251,6 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
 
         // Enforce max undo levels by removing oldest (at index 0)
         push_undo(doc, action);
-        printf("[UNDO] Added action to undo stack, new size=%u\n", doc->undo_count);
-        debug_print_text("[UNDO] Recorded text: ", action.text);
     }
 
     doc->last_action_time = current_time;
@@ -492,10 +439,7 @@ u32_string* doc_get_range(document* doc, u32 start_line, u32 start_col, u32 end_
     return result;
 }
 
-// Removed word-building functions - no longer needed in simplified system
-
 void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
-    printf("[EDIT] doc_insert_char: line=%u, col=%u, char=%c\n", line, col, codepoint < 128 ? (char)codepoint : '?');
     if (!doc || line >= vec_docline_size(doc->lines)) return;
 
     document_line* doc_line = vec_docline_get(doc->lines, line);
@@ -521,24 +465,18 @@ void doc_insert_char(document* doc, u32 line, u32 col, u32 codepoint) {
 void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
     if (!doc || !text || line >= vec_docline_size(doc->lines)) return;
 
-    printf("[DEBUG] doc_insert_str32: line=%u, col=%u, text_len=%u\n", line, col, u32str_length(text));
-
     // Count newlines in text to insert
     u32 newline_count = 0;
     for (u32 i = 0; i < u32str_length(text); i++) {
         if (u32str_get(text, i) == '\n') newline_count++;
     }
-    printf("[DEBUG] doc_insert_str32: newlines in text=%u, last char=0x%X\n",
-           newline_count,
-           u32str_length(text) > 0 ? u32str_get(text, u32str_length(text) - 1) : 0);
-
+    
     document_line* doc_line = vec_docline_get(doc->lines, line);
     if (col > docline_get_text_length(doc_line)) {
         col = docline_get_text_length(doc_line);
     }
 
     i32 newline_pos = u32str_indexOf(text, '\n');
-    printf("[DEBUG] doc_insert_str32: first newline at position %d\n", newline_pos);
 
     if (newline_pos == -1) {
         docline_text_insert(doc_line, text, col, 0, u32str_length(text));
@@ -578,7 +516,6 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
 
             document_line* new_line = docline_create();
             vec_docline_insert(doc->lines, current_line_index + 1, new_line);
-            printf("[DEBUG] Created new line at index %u\n", current_line_index + 1);
             current_line_index++;
             current_line_ptr = new_line;
             segment_start = (u32)next_newline + 1;
@@ -605,7 +542,6 @@ void doc_insert_str32(document* doc, u32 line, u32 col, u32_string* text) {
 }
 
 void doc_delete_char(document* doc, u32 line, u32 col) {
-    printf("[EDIT] doc_delete_char: line=%u, col=%u\n", line, col);
     if (!doc || line >= vec_docline_size(doc->lines)) return;
 
     document_line* doc_line = vec_docline_get(doc->lines, line);
@@ -654,23 +590,13 @@ void doc_delete_range(document* doc, u32 start_line, u32 start_col, u32 end_line
     // Save text for undo
     u32_string* deleted_text = doc_get_range(doc, start_line, start_col, end_line, end_col);
 
-    printf("[DEBUG] doc_delete_range: start=%u:%u, end=%u:%u\n",
-           start_line, start_col, end_line, end_col);
-    printf("[DEBUG] doc_delete_range: captured text length=%u, last char=0x%X\n",
-           deleted_text ? u32str_length(deleted_text) : 0,
-           deleted_text && u32str_length(deleted_text) > 0 ?
-           u32str_get(deleted_text, u32str_length(deleted_text) - 1) : 0);
-
     // Count newlines in captured text
     if (deleted_text) {
         u32 newline_count = 0;
         for (u32 i = 0; i < u32str_length(deleted_text); i++) {
             if (u32str_get(deleted_text, i) == '\n') newline_count++;
         }
-        printf("[DEBUG] doc_delete_range: newlines in captured text=%u\n", newline_count);
     }
-
-    debug_print_text("[DELETE_RANGE] captured: ", deleted_text);
 
     // Record for undo (takes ownership of deleted_text)
     record_action(doc, edit_action::REMOVE, start_line, start_col, deleted_text);
@@ -855,11 +781,9 @@ void doc_delete_line(document* doc, u32 line_index) {
     }
 
     u32 line_length = docline_get_text_length(deleted_line);
-    printf("[DEBUG] doc_delete_line: line_index=%u, line_length=%u\n", line_index, line_length);
 
     // Capture the line text AND a newline (unless it's the last line)
     u32_string* line_copy = docline_text_substr(deleted_line, 0, line_length);
-    printf("[DEBUG] doc_delete_line: copied text length=%u\n", line_copy ? u32str_length(line_copy) : 0);
 
     // Only add newline if this isn't the last line in the document
     // OR if there's a line after this one (meaning this line has a line break)
@@ -929,9 +853,7 @@ void doc_join_lines(document* doc, u32 line) {
 }
 
 void doc_undo(document* doc) {
-    printf("[UNDO] doc_undo called, stack size=%u\n", doc ? doc->undo_count : 0);
     if (!doc || doc->undo_count == 0) {
-        printf("[UNDO] Cannot undo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->undo_count : 0);
         return;
     }
 
@@ -939,23 +861,16 @@ void doc_undo(document* doc) {
 
     // Pop action from undo stack
     edit_action action = pop_undo(doc);
-    printf("[UNDO] Popped action: type=%s, line=%u, col=%u, text_len=%u\n",
-           action.type == edit_action::INSERT ? "INSERT" : "REMOVE",
-           action.line, action.col, action.text ? u32str_length(action.text) : 0);
-
+   
     // Apply inverse operation
     if (action.type == edit_action::INSERT) {
         // Was inserted, so remove it
         u32 end_line = action.line;
         u32 end_col = action.col;
         compute_text_extent(action.line, action.col, action.text, &end_line, &end_col);
-        printf("[UNDO] Removing range %u:%u -> %u:%u\n", action.line, action.col, end_line, end_col);
-        debug_print_text("[UNDO] Text to remove: ", action.text);
         doc_delete_range(doc, action.line, action.col, end_line, end_col);
     } else {  // REMOVE
         // Was removed, so insert it back
-        printf("[UNDO] Reinserting at %u:%u\n", action.line, action.col);
-        debug_print_text("[UNDO] Text to insert: ", action.text);
         doc_insert_str32(doc, action.line, action.col, action.text);
     }
 
@@ -979,9 +894,7 @@ void doc_undo(document* doc) {
 }
 
 void doc_redo(document* doc) {
-    printf("[REDO] doc_redo called, stack size=%u\n", doc ? doc->redo_count : 0);
     if (!doc || doc->redo_count == 0) {
-        printf("[REDO] Cannot redo: doc=%p, stack_size=%u\n", (void*)doc, doc ? doc->redo_count : 0);
         return;
     }
 
@@ -996,13 +909,9 @@ void doc_redo(document* doc) {
         u32 end_line = action.line;
         u32 end_col = action.col;
         compute_text_extent(action.line, action.col, action.text, &end_line, &end_col);
-        printf("[REDO] Removing range %u:%u -> %u:%u\n", action.line, action.col, end_line, end_col);
-        debug_print_text("[REDO] Text to remove: ", action.text);
         doc_delete_range(doc, action.line, action.col, end_line, end_col);
     } else {  // REMOVE
         // Was inserted in undo, so insert it again
-        printf("[REDO] Reinserting at %u:%u\n", action.line, action.col);
-        debug_print_text("[REDO] Text to insert: ", action.text);
         doc_insert_str32(doc, action.line, action.col, action.text);
     }
 
@@ -1103,18 +1012,6 @@ document_cursor doc_get_cursor(document* doc) {
 void doc_set_cursor(document* doc, u32 row, u32 column) {
     if (!doc) return;
     doc->cursor.row = row;
-    doc->cursor.column = column;
-    doc_validate_cursor(doc);
-}
-
-void doc_set_cursor_line(document* doc, u32 line) {
-    if (!doc) return;
-    doc->cursor.row = line;
-    doc_validate_cursor(doc);
-}
-
-void doc_set_cursor_column(document* doc, u32 column) {
-    if (!doc) return;
     doc->cursor.column = column;
     doc_validate_cursor(doc);
 }

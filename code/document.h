@@ -160,10 +160,6 @@ document_cursor doc_get_cursor(document* doc);
 // Set the cursor position (validates and clamps to document bounds)
 void doc_set_cursor(document* doc, u32 row, u32 column);
 
-// Set individual cursor components (validates and clamps to document bounds)
-void doc_set_cursor_line(document* doc, u32 line);
-void doc_set_cursor_column(document* doc, u32 column);
-
 // Selection management
 document_cursor doc_get_selection_anchor(document* doc);
 void doc_set_selection_anchor(document* doc, u32 row, u32 column);

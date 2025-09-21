@@ -59,6 +59,10 @@ long long GetTimeInMilliseconds() {
     return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
+u64 platform_get_milliseconds() {
+    return (u64)GetTimeInMilliseconds();
+}
+
 int main(int argc, char** argv) {
     WindowData windowData = {};
     g_windowData = &windowData;  // Set global pointer for platform_exit

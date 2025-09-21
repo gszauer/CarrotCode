@@ -131,13 +131,15 @@ u32 document_view_get_cursor_row(document_view* view) {
 
 void document_view_set_cursor_row(document_view* view, u32 value) {
     if (view && view->target) {
-        doc_set_cursor_line(view->target, value);
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_cursor(view->target, value, cursor.column);
     }
 }
 
 void document_view_set_cursor_col(document_view* view, u32 value) {
- if (view && view->target) {
-        doc_set_cursor_column(view->target, value);
+    if (view && view->target) {
+        document_cursor cursor = doc_get_cursor(view->target);
+        doc_set_cursor(view->target, cursor.row, value);
     }
 }
 
@@ -1084,7 +1086,7 @@ void document_view_insert_text(document_view* view, const u32* text, u32 length)
             document_cursor cursor = doc_get_cursor(view->target);
             doc_insert_char(view->target, cursor.row, cursor.column, text[i]);
             document_cursor updated = doc_get_cursor(view->target);
-            doc_set_cursor_column(view->target, updated.column + 1);
+            doc_set_cursor(view->target, updated.row, updated.column + 1);
         }
     }
 
@@ -1135,7 +1137,7 @@ void document_view_delete_backward(document_view* view) {
     u32 cursor_col = cursor.column;
 
     if (cursor_col > 0) {
-        doc_set_cursor_column(view->target, cursor_col - 1);
+        doc_set_cursor(view->target, cursor_row, cursor_col - 1);
         doc_delete_range(view->target, cursor_row, cursor_col - 1, cursor_row, cursor_col);
     } else if (cursor_row > 0) {
         u32 prev_line_len = doc_get_line_length(view->target, cursor_row - 1);
@@ -1167,7 +1169,7 @@ void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, 
     if (rowDelta != 0) {
         i32 newRow = (i32)cursor_row + rowDelta;
         if (newRow < 0) newRow = 0;
-        doc_set_cursor_line(view->target, (u32)newRow);
+        doc_set_cursor(view->target, (u32)newRow, cursor_col);
         cursor = doc_get_cursor(view->target);
         cursor_row = cursor.row;
         cursor_col = cursor.column;
@@ -1182,7 +1184,7 @@ void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, 
                 u32 prev_line_len = doc_get_line_length(view->target, current_row - 1);
                 doc_set_cursor(view->target, current_row - 1, prev_line_len);
             } else {
-                doc_set_cursor_column(view->target, 0);
+                doc_set_cursor(view->target, current_row, 0);
             }
         } else {
             cursor = doc_get_cursor(view->target);
@@ -1192,10 +1194,10 @@ void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, 
                 if (current_row + 1 < doc_line_count(view->target)) {
                     doc_set_cursor(view->target, current_row + 1, 0);
                 } else {
-                    doc_set_cursor_column(view->target, lineLength);
+                    doc_set_cursor(view->target, current_row, lineLength);
                 }
             } else {
-                doc_set_cursor_column(view->target, (u32)newCol);
+                doc_set_cursor(view->target, current_row, (u32)newCol);
             }
         }
     }
@@ -1240,7 +1242,7 @@ void document_view_move_word_left(document_view* view, bool extend_selection) {
             pos--;
         }
 
-        doc_set_cursor_column(view->target, pos);
+        doc_set_cursor(view->target, cursor_row, pos);
     }
 
     document_view_ensure_cursor_visible(view);
@@ -1282,7 +1284,7 @@ void document_view_move_word_right(document_view* view, bool extend_selection) {
             pos++;
         }
 
-        doc_set_cursor_column(view->target, pos);
+        doc_set_cursor(view->target, cursor_row, pos);
     }
 
     document_view_ensure_cursor_visible(view);
@@ -1299,7 +1301,8 @@ void document_view_move_to_line_start(document_view* view, bool extend_selection
         doc_set_has_selection(view->target, true);
     }
 
-    doc_set_cursor_column(view->target, 0);
+    document_cursor cursor = doc_get_cursor(view->target);
+    doc_set_cursor(view->target, cursor.row, 0);
     document_view_ensure_cursor_visible(view);
 }
 
@@ -1315,7 +1318,7 @@ void document_view_move_to_line_end(document_view* view, bool extend_selection) 
     }
 
     document_cursor cursor = doc_get_cursor(view->target);
-    doc_set_cursor_column(view->target, doc_get_line_length(view->target, cursor.row));
+    doc_set_cursor(view->target, cursor.row, doc_get_line_length(view->target, cursor.row));
     document_view_ensure_cursor_visible(view);
 }
 
