@@ -45,6 +45,59 @@ void clipboard_paste_callback(u32_string* content, void* userData) {
     }
 }
 
+static document_view* GetActiveView(UserData* user) {
+    if (!user) return nullptr;
+    if (user->views.empty()) return nullptr;
+    if (user->active_view >= user->views.size()) return nullptr;
+    return user->views[user->active_view];
+}
+
+static document* GetActiveDocument(UserData* user) {
+    document_view* view = GetActiveView(user);
+    return view ? document_view_get_document(view) : nullptr;
+}
+
+void ApplicationCut(UserData* user) {
+    if (!user || user->waiting_for_operation) return;
+
+    document_view* view = GetActiveView(user);
+    document* doc = GetActiveDocument(user);
+    if (!view || !doc) return;
+
+    u32_string* text_to_cut = doc_cut(doc);
+    if (!text_to_cut) return;
+
+    user->pending_clipboard_text = text_to_cut;
+    user->waiting_for_operation = true;
+    platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
+
+    document_view_validate_cursor_and_selection(view);
+    document_view_ensure_cursor_visible(view);
+}
+
+void ApplicationCopy(UserData* user) {
+    if (!user || user->waiting_for_operation) return;
+
+    document* doc = GetActiveDocument(user);
+    if (!doc) return;
+
+    u32_string* text_to_copy = doc_copy(doc);
+    if (!text_to_copy) return;
+
+    user->pending_clipboard_text = text_to_copy;
+    user->waiting_for_operation = true;
+    platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
+}
+
+void ApplicationPaste(UserData* user) {
+    if (!user || user->waiting_for_operation) return;
+
+    if (!GetActiveDocument(user)) return;
+
+    user->waiting_for_operation = true;
+    platform_clipboard_paste_text(clipboard_paste_callback, user);
+}
+
 // Structure to hold data for the close confirmation callback
 struct CloseConfirmData {
     UserData* user;
@@ -430,6 +483,9 @@ UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     // Initialize async operation state
     user->waiting_for_operation = false;
     user->pending_clipboard_text = nullptr;
+    user->show_context_menu = false;
+    user->context_menu_x = 0;
+    user->context_menu_y = 0;
 
     return user;
 }
@@ -787,32 +843,13 @@ canvas* Render(UserData* user) {
                         }
                     }
                     else if (clickedItem == 2) {  // Cut
-                        document* doc = document_view_get_document(view);
-                        if (doc) {
-                            u32_string* text_to_cut = doc_cut(doc);
-                            if (text_to_cut) {
-                                user->pending_clipboard_text = text_to_cut;
-                                user->waiting_for_operation = true;
-                                platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
-                                document_view_validate_cursor_and_selection(view);
-                                document_view_ensure_cursor_visible(view);
-                            }
-                        }
+                        ApplicationCut(user);
                     }
                     else if (clickedItem == 3) {  // Copy
-                        document* doc = document_view_get_document(view);
-                        if (doc) {
-                            u32_string* text_to_copy = doc_copy(doc);
-                            if (text_to_copy) {
-                                user->pending_clipboard_text = text_to_copy;
-                                user->waiting_for_operation = true;
-                                platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
-                            }
-                        }
+                        ApplicationCopy(user);
                     }
                     else if (clickedItem == 4) {  // Paste
-                        user->waiting_for_operation = true;
-                        platform_clipboard_paste_text(clipboard_paste_callback, user);
+                        ApplicationPaste(user);
                     }
                     else if (clickedItem == 5) {  // Export
                         // Create a new document for the export
@@ -1295,6 +1332,70 @@ canvas* Render(UserData* user) {
         }
 
         ImGuiRenderEndMenu(user->imgui_context);
+    }
+
+    if (user->views.empty()) {
+        user->show_context_menu = false;
+    }
+
+    if (user->show_context_menu) {
+        document* doc = GetActiveDocument(user);
+        if (!doc) {
+            user->show_context_menu = false;
+        } else {
+            const u32 itemCount = 3;
+            const u32 menuWidth = 220;
+            const u32 itemHeight = 50;
+
+            u32 menuX = user->context_menu_x;
+            u32 menuY = user->context_menu_y;
+            u32 canvasWidth = canvas_get_width(user->cnvs);
+            u32 canvasHeight = canvas_get_height(user->cnvs);
+
+            if (menuX + menuWidth > canvasWidth) {
+                menuX = (canvasWidth > menuWidth) ? (canvasWidth - menuWidth) : 0;
+            }
+            u32 totalHeight = itemCount * itemHeight;
+            if (menuY + totalHeight > canvasHeight) {
+                menuY = (canvasHeight > totalHeight) ? (canvasHeight - totalHeight) : 0;
+            }
+
+            user->context_menu_x = menuX;
+            user->context_menu_y = menuY;
+
+            ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, itemCount, menuWidth);
+
+            int contextSelection = -1;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) contextSelection = 0;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) contextSelection = 1;
+            if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) contextSelection = 2;
+
+            ImGuiRenderBeginMenu(user->imgui_context, menuX, menuY, itemCount);
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 0, "Cut");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 1, "Copy");
+            ImGuiRenderMenuItem(user->imgui_context, menuX, menuY, 2, "Paste");
+            ImGuiRenderEndMenu(user->imgui_context);
+
+            if (contextSelection == 0) {
+                ApplicationCut(user);
+                user->show_context_menu = false;
+            } else if (contextSelection == 1) {
+                ApplicationCopy(user);
+                user->show_context_menu = false;
+            } else if (contextSelection == 2) {
+                ApplicationPaste(user);
+                user->show_context_menu = false;
+            } else {
+                u32 mouseX = 0, mouseY = 0;
+                ImGuiGetMousePosition(user->imgui_context, &mouseX, &mouseY);
+                bool insideMenu = mouseX >= menuX && mouseX < menuX + menuWidth &&
+                                   mouseY >= menuY && mouseY < menuY + totalHeight;
+                bool clickedOutside = ImGuiMouseLeftPressed(user->imgui_context) && !insideMenu;
+                if (clickedOutside) {
+                    user->show_context_menu = false;
+                }
+            }
+        }
     }
 
     // Pop disabled state if we pushed it

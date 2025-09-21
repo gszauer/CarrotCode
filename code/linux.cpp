@@ -496,35 +496,15 @@ int main(int argc, char** argv) {
                                 document_view* view = user->views[user->active_view];
                                 if (view) {
                                     if (keysym == XK_x || keysym == XK_X) {  // Ctrl+X (Cut)
-                                        // Get selected text or whole line
-                                        document* doc = document_view_get_document(view);
-                                        if (doc) {
-                                            u32_string* text_to_cut = doc_cut(doc);
-                                            if (text_to_cut) {
-                                                user->pending_clipboard_text = text_to_cut;
-                                                user->waiting_for_operation = true;
-                                                platform_clipboard_copy_text(text_to_cut, clipboard_copy_callback, user);
-                                                document_view_validate_cursor_and_selection(view);
-                                                document_view_ensure_cursor_visible(view);
-                                            }
-                                        }
+                                        ApplicationCut(user);
                                         handled = true;
                                     }
                                     else if (keysym == XK_c || keysym == XK_C) {  // Ctrl+C (Copy)
-                                        document* doc = document_view_get_document(view);
-                                        if (doc) {
-                                            u32_string* text_to_copy = doc_copy(doc);
-                                            if (text_to_copy) {
-                                                user->pending_clipboard_text = text_to_copy;
-                                                user->waiting_for_operation = true;
-                                                platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
-                                            }
-                                        }
+                                        ApplicationCopy(user);
                                         handled = true;
                                     }
                                     else if (keysym == XK_v || keysym == XK_V) {  // Ctrl+V (Paste)
-                                        user->waiting_for_operation = true;
-                                        platform_clipboard_paste_text(clipboard_paste_callback, user);
+                                        ApplicationPaste(user);
                                         handled = true;
                                     }
                                     else if (keysym == XK_a || keysym == XK_A) {  // Ctrl+A (Select All)
@@ -737,6 +717,18 @@ int main(int argc, char** argv) {
                             // Don't forward scroll input if over tab bar
                             if (scrollDir != 0) {
                                 scrollDir = 0;
+                            }
+                        }
+
+                        if (event.type == ButtonPress && event.xbutton.button == Button3) {
+                            bool hasDocument = !user->views.empty();
+                            bool inDocumentArea = mouseY >= 51;
+                            if (hasDocument && inDocumentArea && !overTabBar && !ImGuiIsMouseConsumed(user->imgui_context)) {
+                                user->show_context_menu = true;
+                                user->context_menu_x = mouseX;
+                                user->context_menu_y = mouseY;
+                            } else {
+                                user->show_context_menu = false;
                             }
                         }
 

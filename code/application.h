@@ -25,6 +25,11 @@ struct UserData {
     bool waiting_for_operation;
     u32_string* pending_clipboard_text;
 
+    // Context menu state
+    bool show_context_menu;
+    u32 context_menu_x;
+    u32 context_menu_y;
+
 };
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight);
@@ -32,5 +37,9 @@ void Update(UserData* userData, float deltaTime);
 canvas* Render(UserData* userData); // Returns canvas to blit
 void Shutdown(void* userData);
 void AddDocumentView(UserData* user, document* doc, const char* path);
+
+void ApplicationCut(UserData* user);
+void ApplicationCopy(UserData* user);
+void ApplicationPaste(UserData* user);
 
 #endif

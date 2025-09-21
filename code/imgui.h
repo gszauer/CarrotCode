@@ -23,6 +23,11 @@ font* ImGuiGetFont(ImGui* context);
 void ImGuiPushDisabled(ImGui* context);
 void ImGuiPopDisabled(ImGui* context);
 bool ImGuiIsMouseConsumed(ImGui* context);
+void ImGuiGetMousePosition(ImGui* context, u32* outX, u32* outY);
+bool ImGuiMouseLeftPressed(ImGui* context);
+bool ImGuiMouseLeftReleased(ImGui* context);
+bool ImGuiMouseRightPressed(ImGui* context);
+bool ImGuiMouseRightReleased(ImGui* context);
 
 // Control functions
 bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text);

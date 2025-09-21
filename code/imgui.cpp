@@ -60,10 +60,12 @@ struct ImGui {
     bool mouseLeftDown, mouseMiddleDown, mouseRightDown;
     bool mouseLeftPressed, mouseLeftReleased;
     bool mouseMiddlePressed;
+    bool mouseRightPressed, mouseRightReleased;
 
     // Previous frame mouse state
     bool prevMouseLeftDown;
     bool prevMouseMiddleDown;
+    bool prevMouseRightDown;
 
     // Keyboard state
     u32 lastChar;
@@ -174,6 +176,8 @@ void ImGuiBeginFrame(ImGui* context) {
     context->mouseLeftPressed = context->mouseLeftDown && !context->prevMouseLeftDown;
     context->mouseLeftReleased = !context->mouseLeftDown && context->prevMouseLeftDown;
     context->mouseMiddlePressed = context->mouseMiddleDown && !context->prevMouseMiddleDown;
+    context->mouseRightPressed = context->mouseRightDown && !context->prevMouseRightDown;
+    context->mouseRightReleased = !context->mouseRightDown && context->prevMouseRightDown;
 
     // Clear the canvas
     canvas_clear(context->cnvs, Colors::BACKGROUND_R, Colors::BACKGROUND_G, Colors::BACKGROUND_B);
@@ -220,6 +224,7 @@ void ImGuiEndFrame(ImGui* context) {
     // Update previous mouse state
     context->prevMouseLeftDown = context->mouseLeftDown;
     context->prevMouseMiddleDown = context->mouseMiddleDown;
+    context->prevMouseRightDown = context->mouseRightDown;
 
     // Reset hot item if mouse is not pressed
     if (!context->mouseLeftDown) {
@@ -248,6 +253,28 @@ void ImGuiPopDisabled(ImGui* context) {
 
 bool ImGuiIsMouseConsumed(ImGui* context) {
     return context->mouseInputConsumed;
+}
+
+void ImGuiGetMousePosition(ImGui* context, u32* outX, u32* outY) {
+    if (!context) return;
+    if (outX) *outX = context->mouseX;
+    if (outY) *outY = context->mouseY;
+}
+
+bool ImGuiMouseLeftPressed(ImGui* context) {
+    return context ? context->mouseLeftPressed : false;
+}
+
+bool ImGuiMouseLeftReleased(ImGui* context) {
+    return context ? context->mouseLeftReleased : false;
+}
+
+bool ImGuiMouseRightPressed(ImGui* context) {
+    return context ? context->mouseRightPressed : false;
+}
+
+bool ImGuiMouseRightReleased(ImGui* context) {
+    return context ? context->mouseRightReleased : false;
 }
 
 bool ImGuiButton(ImGui* context, u32 x, u32 y, u32 w, u32 h, const char* text) {
