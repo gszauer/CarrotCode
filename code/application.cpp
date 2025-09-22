@@ -717,12 +717,10 @@ UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     user->context_menu_x = 0;
     user->context_menu_y = 0;
     user->should_quit = false;
+    user->menu_index = -1;
 
     return user;
 }
-
-// Global menu state - needs to be accessible from AddDocumentView
-static i32 menuIndex = -1;
 
 void Update(UserData* userData, float deltaTime) {
     // Update active document view
@@ -793,7 +791,7 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
     user->active_view = user->views.size() - 1;
 
     // Close any open menu when a new document is opened
-    menuIndex = -1;
+    user->menu_index = -1;
 }
 
 canvas* Render(UserData* user) {
@@ -809,14 +807,14 @@ canvas* Render(UserData* user) {
     u32 canvasWidth = canvas_get_width(user->cnvs);
     u32 canvasHeight = canvas_get_height(user->cnvs);
 
-    // menuIndex is now global static
+    // Keep track of menu state per user instance
     i32 clickedItem = -1;
     i32 clickedTabItem = -1;
 
     // Process tab menu if open
     u32 tabMenuW = 400;
     u32 tabMenuX = canvasWidth - tabMenuW;
-    if (menuIndex == 4 && !user->views.empty()) {
+    if (user->menu_index == 4 && !user->views.empty()) {
         u32 tabMenuY = 50;
 
         ImGuiConsumePopupMenuInput(user->imgui_context, tabMenuX, tabMenuY, user->views.size(), tabMenuW);
@@ -825,7 +823,7 @@ canvas* Render(UserData* user) {
             bool clicked = ImGuiProcessMenuItem(user->imgui_context, tabMenuX, tabMenuY, i);
             if (clicked) {
                 user->active_view = i;
-                menuIndex = -1;
+                user->menu_index = -1;
                 break;
             }
         }
@@ -834,7 +832,7 @@ canvas* Render(UserData* user) {
     // Process main menu
     u32 menuY = 50;
     u32 menuX = 0;
-    if (menuIndex == 0) {
+    if (user->menu_index == 0) {
         menuX = 0;
         ImGuiConsumePopupMenuInput(user->imgui_context, 0, menuY, 5, 220);
 
@@ -912,7 +910,7 @@ canvas* Render(UserData* user) {
                     }
                 }
             }
-            menuIndex = -1;
+            user->menu_index = -1;
         }
 
         if (!hasDocument) {
@@ -922,7 +920,7 @@ canvas* Render(UserData* user) {
         if (ImGuiProcessMenuItem(user->imgui_context, 0, menuY, 4)) clickedItem = 4;
 
         if (clickedItem >= 0) {
-            menuIndex = -1;
+            user->menu_index = -1;
 
             // Handle File menu items
             if (clickedItem == 0) {  // New
@@ -1002,7 +1000,7 @@ canvas* Render(UserData* user) {
             }
         }
     }
-    else if (menuIndex == 1) {
+    else if (user->menu_index == 1) {
         menuX = 90;
         ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 6, 220);
 
@@ -1052,7 +1050,7 @@ canvas* Render(UserData* user) {
         }
 
         if (clickedItem >= 0) {
-            menuIndex = -1;
+            user->menu_index = -1;
 
             // Handle edit menu operations
             if (!user->views.empty() && user->active_view < user->views.size()) {
@@ -1162,7 +1160,7 @@ canvas* Render(UserData* user) {
             }
         }
     }
-    else if (menuIndex == 2) {
+    else if (user->menu_index == 2) {
         menuX = 175;
         ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 5, 220);
 
@@ -1185,7 +1183,7 @@ canvas* Render(UserData* user) {
         }
 
         if (clickedItem >= 0) {
-            menuIndex = -1;
+            user->menu_index = -1;
 
             // Handle zoom level changes
             if (clickedItem >= 0 && clickedItem <= 2) {
@@ -1229,7 +1227,7 @@ canvas* Render(UserData* user) {
             }
         }
     }
-    else if (menuIndex == 3) {
+    else if (user->menu_index == 3) {
         menuX = 265;
         ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 2, 220);
 
@@ -1237,7 +1235,7 @@ canvas* Render(UserData* user) {
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
 
         if (clickedItem >= 0) {
-            menuIndex = -1;
+            user->menu_index = -1;
 
             // Handle Help menu items
             if (clickedItem == 1) {  // Github
@@ -1247,12 +1245,12 @@ canvas* Render(UserData* user) {
     }
 
     // Render menu bar
-    ImGuiBeginMenuBar(user->imgui_context, 0, 0, 360, 50, menuIndex);
+    ImGuiBeginMenuBar(user->imgui_context, 0, 0, 360, 50, user->menu_index);
     ImGuiMenuBarItem(user->imgui_context, "FILE");
     ImGuiMenuBarItem(user->imgui_context, "EDIT");
     ImGuiMenuBarItem(user->imgui_context, "VIEW");
     ImGuiMenuBarItem(user->imgui_context, "HELP");
-    menuIndex = ImGuiEndMenuBar(user->imgui_context);
+    user->menu_index = ImGuiEndMenuBar(user->imgui_context);
 
     // Always render tab bar area as part of the header (even with no tabs)
     if (canvasWidth > 360) {
@@ -1364,10 +1362,10 @@ canvas* Render(UserData* user) {
             }
 
             if (ImGuiTabBarMoreButtonClicked(user->imgui_context)) {
-                if (menuIndex == 4) {
-                    menuIndex = -1;
+                if (user->menu_index == 4) {
+                    user->menu_index = -1;
                 } else {
-                    menuIndex = 4;
+                    user->menu_index = 4;
                 }
             }
         }  // End of if (!user->views.empty())
@@ -1404,7 +1402,7 @@ canvas* Render(UserData* user) {
     }
 
     // Render popup menus on top
-    if (menuIndex == 0) {
+    if (user->menu_index == 0) {
         ImGuiRenderBeginMenu(user->imgui_context, 0, menuY, 5);
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 0, "New");
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 1, "Open");
@@ -1425,7 +1423,7 @@ canvas* Render(UserData* user) {
         ImGuiRenderMenuItem(user->imgui_context, 0, menuY, 4, "Exit");
         ImGuiRenderEndMenu(user->imgui_context);
     }
-    else if (menuIndex == 1) {
+    else if (user->menu_index == 1) {
         ImGuiRenderBeginMenu(user->imgui_context, 90, menuY, 6);
 
         // Check if we can undo/redo
@@ -1475,7 +1473,7 @@ canvas* Render(UserData* user) {
 
         ImGuiRenderEndMenu(user->imgui_context);
     }
-    else if (menuIndex == 2) {
+    else if (user->menu_index == 2) {
         ImGuiRenderBeginMenu(user->imgui_context, 175, menuY, 5);
 
         // Dynamic zoom menu items with indicator for active zoom level
@@ -1521,13 +1519,13 @@ canvas* Render(UserData* user) {
         }
         ImGuiRenderEndMenu(user->imgui_context);
     }
-    else if (menuIndex == 3) {
+    else if (user->menu_index == 3) {
         ImGuiRenderBeginMenu(user->imgui_context, 265, menuY, 2);
         ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 0, "About");
         ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 1, "Github");
         ImGuiRenderEndMenu(user->imgui_context);
     }
-    else if (menuIndex == 4 && !user->views.empty()) {
+    else if (user->menu_index == 4 && !user->views.empty()) {
         u32 tabMenuY = 50;
 
         ImGuiRenderBeginMenu(user->imgui_context, tabMenuX, tabMenuY, user->views.size());

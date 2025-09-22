@@ -19,6 +19,9 @@ struct UserData {
     std::vector<document_view*> views;
     u32 active_view;
 
+    // Menu state
+    i32 menu_index;
+
     // Zoom level (0=50%, 1=100%, 2=200%)
     u32 zoom_level;
 
