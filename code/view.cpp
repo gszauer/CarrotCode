@@ -182,7 +182,9 @@ document_view* document_view_create(document* doc, font* fnt, u32_string* path) 
 
     view->target = doc;
     view->fnt = fnt;
-    view->path = path ? u32str_substr(path, 0, u32str_length(path)) : nullptr;
+    
+    //view->path = path ? u32str_substr(path, 0, u32str_length(path)) : nullptr;
+    view->path = path ? u32str_init(u32str_getBuffer(path)) : nullptr;
 
     view->scrollX = 0;
     view->scrollY = 0;
@@ -262,11 +264,6 @@ static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
     }
 
     return lineLength;
-}
-
-static void clamp_cursor(document_view* view) {
-    // Cursor validation is now handled by the document itself
-    doc_validate_cursor(view->target);
 }
 
 static void normalize_selection(document_view* view, document_cursor* start, document_cursor* end) {
@@ -517,7 +514,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
 
         view->lastClickTime = currentTime;
         view->lastClickPosition = clickedCursor;
-        clamp_cursor(view);
+        doc_validate_cursor(view->target);
     }
 
     if (rightDown && !wasRightDown) {
@@ -541,7 +538,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
         if (!insideSelection) {
             doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
             doc_set_has_selection(view->target, false);
-            clamp_cursor(view);
+            doc_validate_cursor(view->target);
         }
 
         // TODO: Show context menu
@@ -602,7 +599,7 @@ void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown)
 
     document_cursor newCursor = document_view_pixel_to_cursor(view, effectiveX, effectiveY);
     doc_set_cursor(view->target, newCursor.row, newCursor.column);
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
 
     document_cursor cursor = doc_get_cursor(view->target);
     document_cursor anchor = doc_get_selection_anchor(view->target);
@@ -967,7 +964,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 
 void document_view_set_cursor(document_view* view, u32 row, u32 column) {
     doc_set_cursor(view->target, row, column);
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
     doc_set_has_selection(view->target, false);
 }
 
@@ -1088,7 +1085,7 @@ void document_view_insert_text(document_view* view, const u32* text, u32 length)
         }
     }
 
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
     document_view_ensure_cursor_visible(view);
 }
 
@@ -1104,7 +1101,7 @@ void document_view_delete_selection(document_view* view) {
 
     doc_set_cursor(view->target, start.row, start.column);
     doc_set_has_selection(view->target, false);
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
 }
 
 void document_view_delete_forward(document_view* view) {
@@ -1200,7 +1197,7 @@ void document_view_move_cursor(document_view* view, i32 rowDelta, i32 colDelta, 
         }
     }
 
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
     document_view_ensure_cursor_visible(view);
 }
 
@@ -1481,7 +1478,7 @@ void document_view_validate_cursor_and_selection(document_view* view) {
     if (!view || !view->target) return;
 
     // Validate cursor
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
 
     // Validate selection anchor if selection exists
     if (doc_has_selection(view->target)) {
@@ -1512,7 +1509,7 @@ void document_view_update_cursor_after_undo_redo(document_view* view) {
     }
 
     // Ensure cursor is within valid bounds
-    clamp_cursor(view);
+    doc_validate_cursor(view->target);
 
     // Make sure the cursor is visible
     document_view_ensure_cursor_visible(view);
