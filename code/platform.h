@@ -30,5 +30,19 @@ void platform_write_file(u32_string* filePath, void* fileData, u32 fileSizeBytes
 void platform_get_window_size(u32* width, u32* height);
 u64 platform_get_milliseconds();
 
+enum class PlatformKey : u32 {
+    Unknown = 0,
+    Backspace,
+    Tab,
+    Return,
+    Delete,
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+};
+
 
 #endif

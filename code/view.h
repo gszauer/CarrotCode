@@ -2,6 +2,7 @@
 #define _H_VIEW__CARROT_ 
 
 #include "types.h"
+#include "platform.h"
 
 struct document;
 struct u32_string;
@@ -25,7 +26,7 @@ void document_view_set_path(document_view* view, u32_string* path); // Creates a
 void document_view_set_display_area(document_view* view, u32 x, u32 y, u32 w, u32 h);
 void document_view_set_display_size(document_view* view, u32 w, u32 h);
 
-void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualKey,
+void document_view_keyboard_input(document_view* view, u32 unicode, PlatformKey virtualKey,
                                   bool isDown, bool alt, bool ctrl, bool shift);
 void document_view_mouse_input(document_view* view, u32 x, u32 y,
                                f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown,

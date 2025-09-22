@@ -182,7 +182,7 @@ void docline_add_token(document_line* line, u32 start, u32 end, token_type type)
 }
 
 static bool is_keyword(const char* word, u32 len) {
-    const char* keywords[] = {
+    static const char* keywords[] = {
         "auto", "break", "case", "char", "const", "continue", "default", "do",
         "double", "else", "enum", "extern", "float", "for", "goto", "if",
         "inline", "int", "long", "register", "restrict", "return", "short",
@@ -194,9 +194,20 @@ static bool is_keyword(const char* word, u32 len) {
         "i8", "i16", "i32", "u8", "u16", "u32", "f32", "d64", "size_t", "ptrdiff_t",
         "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t"
     };
-    
-    for (const char* kw : keywords) {
-        if (strlen(kw) == len && memcmp(word, kw, len) == 0) {
+    static const u8 keyword_lengths[] = {
+        4, 5, 4, 4, 5, 8, 7, 2, 6, 4, 4, 6, 5, 3, 4, 2,
+        6, 3, 4, 8, 8, 6, 5, 6, 6, 6, 6, 6, 7, 5, 8, 4,
+        8, 5, 5, 8, 10, 4, 4, 5, 7, 5, 9, 8, 8, 4, 3, 6,
+        3, 5, 5, 7, 8, 5, 6, 7, 9, 6, 5, 2, 3, 3, 2, 3,
+        3, 3, 3, 6, 9, 6, 7, 7, 7, 7, 8, 8, 8
+    };
+
+    static_assert(sizeof(keywords) / sizeof(keywords[0]) == sizeof(keyword_lengths) / sizeof(keyword_lengths[0]), "keyword length mismatch");
+
+    const size_t keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+    for (size_t i = 0; i < keyword_count; ++i) {
+        const char* kw = keywords[i];
+        if (keyword_lengths[i] == len && memcmp(word, kw, len) == 0) {
             return true;
         }
     }

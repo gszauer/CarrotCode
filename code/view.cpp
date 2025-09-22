@@ -36,18 +36,6 @@ struct document_view {
     document_cursor lastClickPosition;
 };
 
-// Use X11 keysym values instead of Windows VK codes
-#define VK_BACK 0xff08     // XK_BackSpace
-#define VK_TAB 0xff09      // XK_Tab
-#define VK_RETURN 0xff0d   // XK_Return
-#define VK_DELETE 0xffff   // XK_Delete
-#define VK_LEFT 0xff51     // XK_Left
-#define VK_UP 0xff52       // XK_Up
-#define VK_RIGHT 0xff53    // XK_Right
-#define VK_DOWN 0xff54     // XK_Down
-#define VK_HOME 0xff50     // XK_Home
-#define VK_END 0xff57      // XK_End
-
 static const u32 DOUBLE_CLICK_TIME = 500;
 static const u32 TRIPLE_CLICK_TIME = 500;
 // Font metrics are now queried dynamically from the font object
@@ -285,7 +273,7 @@ static void normalize_selection(document_view* view, document_cursor* start, doc
     doc_get_selection_range(view->target, start, end);
 }
 
-void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualKey,
+void document_view_keyboard_input(document_view* view, u32 unicode, PlatformKey virtualKey,
                                  bool isDown, bool alt, bool ctrl, bool shift) {
     if (!isDown) return;
 
@@ -322,7 +310,7 @@ void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualK
     }
 
     switch (virtualKey) {
-        case VK_LEFT:
+        case PlatformKey::Left:
             if (ctrl) {
                 document_view_move_word_left(view, shift);
             } else {
@@ -330,7 +318,7 @@ void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualK
             }
             break;
 
-        case VK_RIGHT:
+        case PlatformKey::Right:
             if (ctrl) {
                 document_view_move_word_right(view, shift);
             } else {
@@ -338,38 +326,38 @@ void document_view_keyboard_input(document_view* view, u32 unicode, u32 virtualK
             }
             break;
 
-        case VK_UP:
+        case PlatformKey::Up:
             document_view_move_cursor(view, -1, 0, shift);
             break;
 
-        case VK_DOWN:
+        case PlatformKey::Down:
             document_view_move_cursor(view, 1, 0, shift);
             break;
 
-        case VK_HOME:
+        case PlatformKey::Home:
             document_view_move_to_line_start(view, shift);
             break;
 
-        case VK_END:
+        case PlatformKey::End:
             document_view_move_to_line_end(view, shift);
             break;
 
-        case VK_BACK:
+        case PlatformKey::Backspace:
             document_view_delete_backward(view);
             break;
 
-        case VK_DELETE:
+        case PlatformKey::Delete:
             document_view_delete_forward(view);
             break;
 
-        case VK_RETURN:
+        case PlatformKey::Return:
             {
                 u32 newline = '\n';
                 document_view_insert_text(view, &newline, 1);
             }
             break;
 
-        case VK_TAB:
+        case PlatformKey::Tab:
             {
                 u32 tab = '\t';
                 document_view_insert_text(view, &tab, 1);

@@ -63,6 +63,45 @@ u64 platform_get_milliseconds() {
     return (u64)GetTimeInMilliseconds();
 }
 
+static PlatformKey TranslateKeySym(KeySym keysym) {
+    switch (keysym) {
+        case XK_BackSpace:
+#ifdef XK_KP_BackSpace
+        case XK_KP_BackSpace:
+#endif
+            return PlatformKey::Backspace;
+        case XK_Tab:
+        case XK_ISO_Left_Tab:
+            return PlatformKey::Tab;
+        case XK_Return:
+        case XK_KP_Enter:
+            return PlatformKey::Return;
+        case XK_Delete:
+        case XK_KP_Delete:
+            return PlatformKey::Delete;
+        case XK_Left:
+        case XK_KP_Left:
+            return PlatformKey::Left;
+        case XK_Right:
+        case XK_KP_Right:
+            return PlatformKey::Right;
+        case XK_Up:
+        case XK_KP_Up:
+            return PlatformKey::Up;
+        case XK_Down:
+        case XK_KP_Down:
+            return PlatformKey::Down;
+        case XK_Home:
+        case XK_KP_Home:
+            return PlatformKey::Home;
+        case XK_End:
+        case XK_KP_End:
+            return PlatformKey::End;
+        default:
+            return PlatformKey::Unknown;
+    }
+}
+
 int main(int argc, char** argv) {
     WindowData windowData = {};
     g_windowData = &windowData;  // Set global pointer for platform_exit
@@ -463,6 +502,7 @@ int main(int argc, char** argv) {
                         }
 
                         // Pass keyboard input to ImGui
+                        PlatformKey platformKey = TranslateKeySym(keysym);
                         u32 virtualKeyCode = (u32)keysym;
                         u32 characterCode = 0;
 
@@ -666,7 +706,7 @@ int main(int argc, char** argv) {
                             if (!user->views.empty() && user->active_view < user->views.size()) {
                                 document_view* view = user->views[user->active_view];
                                 if (view) {
-                                    document_view_keyboard_input(view, characterCode, virtualKeyCode,
+                                    document_view_keyboard_input(view, characterCode, platformKey,
                                                                 isKeyDown, altDown, ctrlDown, shiftDown);
                                 }
                             }
