@@ -42,25 +42,13 @@ struct WindowData {
 #define WINDOW_HEIGHT 1200
 #define WINDOW_TITLE "Carrot Code"
 
-// External callback functions from application.cpp
-extern void clipboard_copy_callback(void* userData);
-extern void clipboard_paste_callback(u32_string* content, void* userData);
-extern void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, void* userData);
-extern void save_file_callback(bool success, void* userData);
-extern void save_as_callback(u32_string* filePath, void* userData);
-extern void AddDocumentView(UserData* user, document* doc, const char* path);
-
 // Global window data for platform_exit
 static WindowData* g_windowData = nullptr;
 
-long long GetTimeInMilliseconds() {
+u64 platform_get_milliseconds() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
-u64 platform_get_milliseconds() {
-    return (u64)GetTimeInMilliseconds();
+    return (u64)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
 static PlatformKey TranslateKeySym(KeySym keysym) {
@@ -97,9 +85,23 @@ static PlatformKey TranslateKeySym(KeySym keysym) {
         case XK_End:
         case XK_KP_End:
             return PlatformKey::End;
+        case XK_Escape:
+            return PlatformKey::Escape;
         default:
-            return PlatformKey::Unknown;
+            break;
     }
+
+    if ((keysym >= XK_a && keysym <= XK_z) || (keysym >= XK_A && keysym <= XK_Z)) {
+        int index = 0;
+        if (keysym >= XK_a && keysym <= XK_z) {
+            index = static_cast<int>(keysym - XK_a);
+        } else {
+            index = static_cast<int>(keysym - XK_A);
+        }
+        return static_cast<PlatformKey>(static_cast<u32>(PlatformKey::KeyA) + index);
+    }
+
+    return PlatformKey::Unknown;
 }
 
 int main(int argc, char** argv) {
@@ -273,8 +275,11 @@ int main(int argc, char** argv) {
     // Main loop
     XEvent event;
     bool running = true;
-    long long lastTime = GetTimeInMilliseconds();
+    long long lastTime = (long long)platform_get_milliseconds();
     Window xdndSourceWindow = None;  // Track the drag source window
+    bool leftButtonDown = false;
+    bool middleButtonDown = false;
+    bool rightButtonDown = false;
     
     while (running && !windowData.closeWindow) {
         // Process events
@@ -491,225 +496,27 @@ int main(int argc, char** argv) {
                     {
                         bool isKeyDown = (event.type == KeyPress);
 
-                        // Use XLookupString to get the properly shifted character
                         char buffer[32];
                         KeySym keysym;
                         int len = XLookupString(&event.xkey, buffer, sizeof(buffer), &keysym, nullptr);
 
-                        // Exit on Escape key
-                        if (isKeyDown && keysym == XK_Escape) {
-                            windowData.closeWindow = true;
-                        }
-
-                        // Pass keyboard input to ImGui
                         PlatformKey platformKey = TranslateKeySym(keysym);
-                        u32 virtualKeyCode = (u32)keysym;
                         u32 characterCode = 0;
-
-                        // Get the actual character with shift/caps lock applied
                         if (isKeyDown && len > 0) {
-                            // XLookupString returns the properly shifted character
-                            characterCode = (unsigned char)buffer[0];
+                            characterCode = static_cast<unsigned char>(buffer[0]);
                         }
 
                         bool altDown = (event.xkey.state & Mod1Mask) != 0;
                         bool ctrlDown = (event.xkey.state & ControlMask) != 0;
                         bool shiftDown = (event.xkey.state & ShiftMask) != 0;
 
-                        // Check for clipboard shortcuts before passing to ImGui/document
-                        bool handled = false;
-                        if (isKeyDown && ctrlDown && !user->waiting_for_operation) {
-                            // Handle Ctrl+N and Ctrl+O even when no document is open
-                            if (keysym == XK_o || keysym == XK_O) {  // Ctrl+O (Open)
-                                user->waiting_for_operation = true;
-                                platform_open_file(file_open_callback, user);
-                                handled = true;
-                            }
-                            else if (keysym == XK_n || keysym == XK_N) {  // Ctrl+N (New)
-                                // Create a new empty document
-                                document* doc = doc_create(100);
-                                u32 empty_data[] = {0};
-                                u32_string* empty_line = u32str_init(empty_data);
-                                doc_append_line_str32(doc, empty_line);
-                                u32str_destroy(empty_line);
-                                AddDocumentView(user, doc, nullptr);
-                                handled = true;
-                            }
-                            // Other shortcuts require an active document view
-                            else if (!user->views.empty() && user->active_view < user->views.size()) {
-                                document_view* view = user->views[user->active_view];
-                                if (view) {
-                                    if (keysym == XK_x || keysym == XK_X) {  // Ctrl+X (Cut)
-                                        ApplicationCut(user);
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_c || keysym == XK_C) {  // Ctrl+C (Copy)
-                                        ApplicationCopy(user);
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_v || keysym == XK_V) {  // Ctrl+V (Paste)
-                                        ApplicationPaste(user);
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_a || keysym == XK_A) {  // Ctrl+A (Select All)
-                                        document_view_select_all(view);
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_s || keysym == XK_S) {  // Ctrl+S (Save) or Ctrl+Shift+S (Save As)
-                                        if (shiftDown) {
-                                            // Ctrl+Shift+S - Save As
-                                            // Trigger save as for the current document
-                                            document* doc = document_view_get_document(view);
-                                            if (doc) {
-                                                // Convert document content to string
-                                                u32_string* content = doc_to_str32(doc);
-                                                if (content) {
-                                                    // Get the UTF-32 content length
-                                                    u32 content_len = u32str_length(content);
-                                                    // Convert to UTF-8
-                                                    u32 buffer_size = content_len * 4 + 1;
-                                                    unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
-                                                    u32 utf8_len = 0;
-                                                    for (u32 i = 0; i < content_len; i++) {
-                                                        u32 ch = u32str_get(content, i);
-                                                        if (ch <= 0x7F) {
-                                                            utf8_content[utf8_len++] = (unsigned char)ch;
-                                                        } else if (ch <= 0x7FF) {
-                                                            utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
-                                                        } else if (ch <= 0xFFFF) {
-                                                            utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
-                                                        } else if (ch <= 0x10FFFF) {
-                                                            utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
-                                                        }
-                                                    }
-                                                    platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
-                                                    free(utf8_content);
-                                                    u32str_destroy(content);
-                                                }
-                                            }
-                                        } else {
-                                            // Ctrl+S - Save
-                                            document* doc = document_view_get_document(view);
-                                            if (doc) {
-                                                // Convert document content to string
-                                                u32_string* content = doc_to_str32(doc);
-                                                if (content) {
-                                                    // Get the UTF-32 content length
-                                                    u32 content_len = u32str_length(content);
-                                                    // Convert to UTF-8
-                                                    u32 buffer_size = content_len * 4 + 1;
-                                                    unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
-                                                    u32 utf8_len = 0;
-                                                    for (u32 i = 0; i < content_len; i++) {
-                                                        u32 ch = u32str_get(content, i);
-                                                        if (ch <= 0x7F) {
-                                                            utf8_content[utf8_len++] = (unsigned char)ch;
-                                                        } else if (ch <= 0x7FF) {
-                                                            utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
-                                                        } else if (ch <= 0xFFFF) {
-                                                            utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
-                                                        } else if (ch <= 0x10FFFF) {
-                                                            utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
-                                                            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
-                                                        }
-                                                    }
-                                                    if (document_view_get_path(view)) {
-                                                        // Has backing file - save directly
-                                                        platform_write_file(document_view_get_path(view), utf8_content, utf8_len, save_file_callback, user);
-                                                    } else {
-                                                        // No backing file - save as
-                                                        platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
-                                                    }
-                                                    free(utf8_content);
-                                                    u32str_destroy(content);
-                                                }
-                                            }
-                                        }
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_d || keysym == XK_D) {  // Ctrl+D (Duplicate Line)
-                                        document* doc = document_view_get_document(view);
-                                        u32 line_row = document_view_get_cursor_row(view);
-                                        if (doc && line_row < doc_line_count(doc)) {
-                                            // Get the current line
-                                            u32_string* line = doc_get_line(doc, line_row);
-                                            if (line) {
-                                                // Create a copy of the line
-                                                u32 line_len = u32str_length(line);
-                                                u32* line_data = (u32*)malloc((line_len + 1) * sizeof(u32));
-                                                for (u32 i = 0; i < line_len; i++) {
-                                                    line_data[i] = u32str_get(line, i);
-                                                }
-                                                line_data[line_len] = 0;
-                                                u32_string* duplicate = u32str_init(line_data);
-                                                free(line_data);
+                        ApplicationHandleKeyboard(user, characterCode, platformKey,
+                                                  static_cast<u32>(keysym), isKeyDown,
+                                                  altDown, ctrlDown, shiftDown);
 
-                                                // Insert the duplicate after the current line
-                                                doc_insert_line_str32(doc, line_row + 1, duplicate);
-                                                u32str_destroy(duplicate);
-
-                                                // Move cursor to the duplicated line
-                                                document_view_set_cursor_row(view, line_row + 1);
-                                            }
-                                        }
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_l || keysym == XK_L) {  // Ctrl+L (Delete Line)
-                                        document* doc = document_view_get_document(view);
-                                        u32 line_row = document_view_get_cursor_row(view);
-                                        if (doc && line_row < doc_line_count(doc)) {
-                                            // Delete the current line
-                                            doc_delete_line(doc, line_row);
-
-                                            // Adjust cursor if needed
-                                            u32 new_line_count = doc_line_count(doc);
-                                            if (document_view_get_cursor_row(view) >= new_line_count && new_line_count > 0) {
-                                                document_view_set_cursor_row(view, new_line_count - 1);
-                                            }
-                                            document_view_set_cursor_col(view, 0);
-                                        }
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_z || keysym == XK_Z) {  // Ctrl+Z (Undo)
-                                        if (doc_can_undo(document_view_get_document(view))) {
-                                            document_view_undo(view);
-                                        }
-                                        handled = true;
-                                    }
-                                    else if (keysym == XK_y || keysym == XK_Y) {  // Ctrl+Y (Redo)
-                                        if (doc_can_redo(document_view_get_document(view))) {
-                                            document_view_redo(view);
-                                        }
-                                        handled = true;
-                                    }
-                                }
-                            }
-                        }
-
-                        // Only forward input if not handled
-                        if (!handled) {
-                            ImGuiKeyboardInput(user->imgui_context, characterCode, virtualKeyCode,
-                                             isKeyDown, altDown, ctrlDown, shiftDown);
-
-                            // Also forward keyboard input to the active document view
-                            if (!user->views.empty() && user->active_view < user->views.size()) {
-                                document_view* view = user->views[user->active_view];
-                                if (view) {
-                                    document_view_keyboard_input(view, characterCode, platformKey,
-                                                                isKeyDown, altDown, ctrlDown, shiftDown);
-                                }
-                            }
+                        if (user->should_quit) {
+                            windowData.closeWindow = true;
+                            user->should_quit = false;
                         }
                     }
                     break;
@@ -718,94 +525,79 @@ int main(int argc, char** argv) {
                 case ButtonRelease:
                 case MotionNotify:
                     {
-                        // Get mouse position and adjust for zoom
                         float scale = 1.0f;
-                        if (user->zoom_level == 0) scale = 0.5f;       // 50%
-                        else if (user->zoom_level == 1) scale = 1.0f;  // 100%
-                        else if (user->zoom_level == 2) scale = 2.0f;  // 200%
+                        if (user->zoom_level == 0) scale = 0.5f;
+                        else if (user->zoom_level == 1) scale = 1.0f;
+                        else if (user->zoom_level == 2) scale = 2.0f;
 
-                        u32 mouseX = (u32)(event.xbutton.x / scale);
-                        u32 mouseY = (u32)(event.xbutton.y / scale);
-                        f32 normX = (f32)mouseX / windowData.width;
-                        f32 normY = (f32)mouseY / windowData.height;
+                        int rawX = (event.type == MotionNotify) ? event.xmotion.x : event.xbutton.x;
+                        int rawY = (event.type == MotionNotify) ? event.xmotion.y : event.xbutton.y;
 
-                        // Get button states
-                        bool leftDown = false;
-                        bool middleDown = false;
-                        bool rightDown = false;
-                        f32 scrollDir = 0.0f;
+                        u32 mouseX = static_cast<u32>(rawX / scale);
+                        u32 mouseY = static_cast<u32>(rawY / scale);
+                        f32 normX = static_cast<f32>(mouseX) / windowData.width;
+                        f32 normY = static_cast<f32>(mouseY) / windowData.height;
 
-                        if (event.type == ButtonPress || event.type == ButtonRelease) {
+                        ApplicationMouseEvent evt{};
+                        evt.x = mouseX;
+                        evt.y = mouseY;
+                        evt.normX = normX;
+                        evt.normY = normY;
+                        evt.scrollDelta = 0.0f;
+                        evt.button = ApplicationMouseButton::NoneButton;
+
+                        if (event.type == MotionNotify) {
+                            evt.type = ApplicationMouseEventType::Move;
+                            leftButtonDown = (event.xmotion.state & Button1Mask) != 0;
+                            middleButtonDown = (event.xmotion.state & Button2Mask) != 0;
+                            rightButtonDown = (event.xmotion.state & Button3Mask) != 0;
+                            evt.shiftDown = (event.xmotion.state & ShiftMask) != 0;
+                        } else {
                             bool isPressed = (event.type == ButtonPress);
+                            evt.type = isPressed ? ApplicationMouseEventType::Press
+                                                 : ApplicationMouseEventType::Release;
+                            evt.shiftDown = (event.xbutton.state & ShiftMask) != 0;
+
                             switch (event.xbutton.button) {
-                                case Button1: leftDown = isPressed; break;
-                                case Button2: middleDown = isPressed; break;
-                                case Button3: rightDown = isPressed; break;
-                                case Button4: if (isPressed) scrollDir = 1.0f; break;  // Scroll up
-                                case Button5: if (isPressed) scrollDir = -1.0f; break; // Scroll down
-                            }
-                        } else if (event.type == MotionNotify) {
-                            // For motion events, check current button states
-                            leftDown = (event.xmotion.state & Button1Mask) != 0;
-                            middleDown = (event.xmotion.state & Button2Mask) != 0;
-                            rightDown = (event.xmotion.state & Button3Mask) != 0;
-                        }
-
-                        bool shiftDown = false;
-                        if (event.type == ButtonPress || event.type == ButtonRelease) {
-                            shiftDown = (event.xbutton.state & ShiftMask) != 0;
-                        } else if (event.type == MotionNotify) {
-                            shiftDown = (event.xmotion.state & ShiftMask) != 0;
-                        }
-
-                        ImGuiMouseInput(user->imgui_context, mouseX, mouseY, normX, normY,
-                                      scrollDir, leftDown, middleDown, rightDown);
-
-                        // Check if mouse is over tab bar area (hardcoded for now since we know the layout)
-                        bool overTabBar = false;
-                        if (!user->views.empty() && mouseX >= 360 && mouseY <= 50) {
-                            overTabBar = true;
-                            // Don't forward scroll input if over tab bar
-                            if (scrollDir != 0) {
-                                scrollDir = 0;
-                            }
-                        }
-
-                        if (event.type == ButtonPress && event.xbutton.button == Button3) {
-                            bool hasDocument = !user->views.empty();
-                            bool inDocumentArea = mouseY >= 51;
-                            if (hasDocument && inDocumentArea && !overTabBar && !ImGuiIsMouseConsumed(user->imgui_context)) {
-                                user->show_context_menu = true;
-                                user->context_menu_x = mouseX;
-                                user->context_menu_y = mouseY;
-                            } else {
-                                user->show_context_menu = false;
-                            }
-                        }
-
-                        // Forward mouse input to active document view if ImGui didn't consume it
-                        if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar) {
-                            if (!user->views.empty() && user->active_view < user->views.size()) {
-                                document_view* view = user->views[user->active_view];
-                                if (view) {
-                                    if (event.type == ButtonPress || event.type == ButtonRelease) {
-                                        document_view_mouse_input(view, mouseX, mouseY, scrollDir,
-                                                                leftDown, middleDown, rightDown,
-                                                                shiftDown);
-                                    } else if (event.type == MotionNotify && leftDown) {
-                                        // Only send mouse move if left button is down (for selection)
-                                        document_view_mouse_moved(view, mouseX, mouseY, leftDown);
+                                case Button1:
+                                    leftButtonDown = isPressed;
+                                    evt.button = ApplicationMouseButton::Left;
+                                    break;
+                                case Button2:
+                                    middleButtonDown = isPressed;
+                                    evt.button = ApplicationMouseButton::Middle;
+                                    break;
+                                case Button3:
+                                    rightButtonDown = isPressed;
+                                    evt.button = ApplicationMouseButton::Right;
+                                    break;
+                                case Button4:
+                                    if (isPressed) {
+                                        evt.scrollDelta = 1.0f;
                                     }
-                                }
+                                    break;
+                                case Button5:
+                                    if (isPressed) {
+                                        evt.scrollDelta = -1.0f;
+                                    }
+                                    break;
+                                default:
+                                    break;
                             }
                         }
+
+                        evt.leftDown = leftButtonDown;
+                        evt.middleDown = middleButtonDown;
+                        evt.rightDown = rightButtonDown;
+
+                        ApplicationHandleMouse(user, evt);
                     }
                     break;
             }
         }
         
         // Update and render
-        long long currentTime = GetTimeInMilliseconds();
+        long long currentTime = (long long)platform_get_milliseconds();
         float deltaTime = (currentTime - lastTime) / 1000.0f;
         lastTime = currentTime;
         
@@ -813,7 +605,8 @@ int main(int argc, char** argv) {
 
         {
             // Clear the window buffer first
-            memset(windowData.pixels, 0, windowData.width * windowData.height * sizeof(u32));
+            // The application re-draws everything, skip as optimization
+            //memset(windowData.pixels, 0, windowData.width * windowData.height * sizeof(u32));
 
             // Draw application
             canvas* toDraw = Render(user);
@@ -841,7 +634,7 @@ int main(int argc, char** argv) {
                     u32 copy_height = (doc_canvas_height < (u32)windowData.height) ? doc_canvas_height : windowData.height;
 
                     for (u32 y = 0; y < copy_height; y++) {
-#ifdef RAW_COPY
+#ifdef CARROT_LINUX_RAW_COPY
                         memcpy(windowData.pixels + y * windowData.width,
                             doc_canvas_pixels + y * doc_canvas_width,
                             copy_width * sizeof(u32));
@@ -873,7 +666,7 @@ int main(int argc, char** argv) {
                             if (src_x >= doc_canvas_width) continue;
 
                             u32 pixel = doc_canvas_pixels[src_y * doc_canvas_width + src_x];
-#ifdef RAW_COPY
+#ifdef CARROT_LINUX_RAW_COPY
                             windowData.pixels[y * windowData.width + x] = pixel;
 #else
                             // Extract RGBA components

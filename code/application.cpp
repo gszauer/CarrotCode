@@ -7,6 +7,10 @@
 #include <algorithm>
 #include <string>
 
+void save_file_callback(bool success, void* userData);
+void save_as_callback(u32_string* filePath, void* userData);
+void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, void* userData);
+
 // Clipboard callback functions
 void clipboard_copy_callback(void* userData) {
     UserData* user = (UserData*)userData;
@@ -29,13 +33,7 @@ void clipboard_paste_callback(u32_string* content, void* userData) {
             if (doc) {
                 u32 text_len = u32str_length(content);
                 if (text_len > 0) {
-                    u32* text_data = (u32*)malloc(text_len * sizeof(u32));
-                    for (u32 i = 0; i < text_len; i++) {
-                        text_data[i] = u32str_get(content, i);
-                    }
-
-                    doc_paste(doc, text_data, text_len);
-                    free(text_data);
+                    doc_paste(doc, u32str_getBuffer(content), text_len);
 
                     document_view_validate_cursor_and_selection(view);
                     document_view_ensure_cursor_visible(view);
@@ -55,6 +53,105 @@ static document_view* GetActiveView(UserData* user) {
 static document* GetActiveDocument(UserData* user) {
     document_view* view = GetActiveView(user);
     return view ? document_view_get_document(view) : nullptr;
+}
+
+static void CreateNewDocument(UserData* user) {
+    if (!user) return;
+
+    document* doc = doc_create(100, true);
+    if (!doc) return;
+
+    AddDocumentView(user, doc, nullptr);
+}
+
+static bool ConvertDocumentToUtf8(document* doc, unsigned char** outBuffer, u32* outLength) {
+    if (!doc || !outBuffer || !outLength) return false;
+
+    u32_string* content = doc_to_str32(doc);
+    if (!content) return false;
+
+    u32 content_len = u32str_length(content);
+    u32 buffer_size = content_len * 4 + 1;
+    unsigned char* utf8_content = (unsigned char*)malloc(buffer_size);
+    if (!utf8_content) {
+        u32str_destroy(content);
+        return false;
+    }
+
+    u32 utf8_len = 0;
+    for (u32 i = 0; i < content_len; i++) {
+        u32 ch = u32str_get(content, i);
+        if (ch <= 0x7F) {
+            utf8_content[utf8_len++] = (unsigned char)ch;
+        } else if (ch <= 0x7FF) {
+            utf8_content[utf8_len++] = (unsigned char)(0xC0 | (ch >> 6));
+            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+        } else if (ch <= 0xFFFF) {
+            utf8_content[utf8_len++] = (unsigned char)(0xE0 | (ch >> 12));
+            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+        } else if (ch <= 0x10FFFF) {
+            utf8_content[utf8_len++] = (unsigned char)(0xF0 | (ch >> 18));
+            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 12) & 0x3F));
+            utf8_content[utf8_len++] = (unsigned char)(0x80 | ((ch >> 6) & 0x3F));
+            utf8_content[utf8_len++] = (unsigned char)(0x80 | (ch & 0x3F));
+        }
+    }
+
+    utf8_content[utf8_len] = 0;
+    u32str_destroy(content);
+
+    *outBuffer = utf8_content;
+    *outLength = utf8_len;
+    return true;
+}
+
+static void SaveActiveDocument(UserData* user, bool forceSaveAs) {
+    if (!user) return;
+
+    document_view* view = GetActiveView(user);
+    document* doc = GetActiveDocument(user);
+    if (!view || !doc) return;
+
+    unsigned char* utf8_content = nullptr;
+    u32 utf8_len = 0;
+    if (!ConvertDocumentToUtf8(doc, &utf8_content, &utf8_len)) return;
+
+    if (forceSaveAs || !document_view_get_path(view)) {
+        platform_save_file_as(utf8_content, utf8_len, save_as_callback, user);
+    } else {
+        platform_write_file(document_view_get_path(view), utf8_content, utf8_len, save_file_callback, user);
+    }
+
+    free(utf8_content);
+}
+
+static void DuplicateCurrentLine(document_view* view, document* doc) {
+    if (!view || !doc) return;
+
+    u32 line_row = document_view_get_cursor_row(view);
+    if (line_row >= doc_line_count(doc)) return;
+
+    u32_string* line = doc_get_line(doc, line_row);
+    if (!line) return;
+
+    doc_insert_line_str32(doc, line_row + 1, line);
+    document_view_set_cursor_row(view, line_row + 1);
+}
+
+static void DeleteCurrentLine(document_view* view, document* doc) {
+    if (!view || !doc) return;
+
+    u32 line_row = document_view_get_cursor_row(view);
+    if (line_row >= doc_line_count(doc)) return;
+
+    doc_delete_line(doc, line_row);
+
+    u32 new_line_count = doc_line_count(doc);
+    if (document_view_get_cursor_row(view) >= new_line_count && new_line_count > 0) {
+        document_view_set_cursor_row(view, new_line_count - 1);
+    }
+    document_view_set_cursor_col(view, 0);
 }
 
 void ApplicationCut(UserData* user) {
@@ -96,6 +193,139 @@ void ApplicationPaste(UserData* user) {
 
     user->waiting_for_operation = true;
     platform_clipboard_paste_text(clipboard_paste_callback, user);
+}
+
+void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey key,
+                               u32 nativeKey, bool isDown, bool altDown, bool ctrlDown, bool shiftDown) {
+    if (!user) return;
+
+    bool handled = false;
+
+    if (isDown) {
+        if (key == PlatformKey::Escape && !ctrlDown && !altDown) {
+            user->should_quit = true;
+            handled = true;
+        }
+        else if (ctrlDown && !user->waiting_for_operation) {
+            switch (key) {
+                case PlatformKey::KeyO:
+                    user->waiting_for_operation = true;
+                    platform_open_file(file_open_callback, user);
+                    handled = true;
+                    break;
+                case PlatformKey::KeyN:
+                    CreateNewDocument(user);
+                    handled = true;
+                    break;
+                default: {
+                    document_view* view = GetActiveView(user);
+                    document* doc = GetActiveDocument(user);
+                    if (view && doc) {
+                        switch (key) {
+                            case PlatformKey::KeyX:
+                                ApplicationCut(user);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyC:
+                                ApplicationCopy(user);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyV:
+                                ApplicationPaste(user);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyA:
+                                document_view_select_all(view);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyS:
+                                SaveActiveDocument(user, shiftDown);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyD:
+                                DuplicateCurrentLine(view, doc);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyL:
+                                DeleteCurrentLine(view, doc);
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyZ:
+                                if (shiftDown) {
+                                    if (doc_can_redo(doc)) {
+                                        document_view_redo(view);
+                                    }
+                                } else if (doc_can_undo(doc)) {
+                                    document_view_undo(view);
+                                }
+                                handled = true;
+                                break;
+                            case PlatformKey::KeyY:
+                                if (doc_can_redo(doc)) {
+                                    document_view_redo(view);
+                                }
+                                handled = true;
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                } break;
+            }
+        }
+    }
+
+    if (!handled) {
+        ImGuiKeyboardInput(user->imgui_context, characterCode, nativeKey,
+                           isDown, altDown, ctrlDown, shiftDown);
+
+        document_view* view = GetActiveView(user);
+        if (view) {
+            document_view_keyboard_input(view, characterCode, key,
+                                         isDown, altDown, ctrlDown, shiftDown);
+        }
+    }
+}
+
+void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt) {
+    if (!user) return;
+
+    ImGuiMouseInput(user->imgui_context, evt.x, evt.y, evt.normX, evt.normY,
+                    evt.scrollDelta, evt.leftDown, evt.middleDown, evt.rightDown);
+
+    bool overTabBar = false;
+    if (!user->views.empty() && evt.x >= 360 && evt.y <= 50) {
+        overTabBar = true;
+    }
+
+    if (evt.type == ApplicationMouseEventType::Press &&
+        evt.button == ApplicationMouseButton::Right) {
+        bool hasDocument = !user->views.empty();
+        bool inDocumentArea = evt.y >= 51;
+        if (hasDocument && inDocumentArea && !overTabBar &&
+            !ImGuiIsMouseConsumed(user->imgui_context)) {
+            user->show_context_menu = true;
+            user->context_menu_x = evt.x;
+            user->context_menu_y = evt.y;
+        } else {
+            user->show_context_menu = false;
+        }
+    }
+
+    if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar) {
+        document_view* view = GetActiveView(user);
+        if (view) {
+            if (evt.type == ApplicationMouseEventType::Move) {
+                if (evt.leftDown) {
+                    document_view_mouse_moved(view, evt.x, evt.y, evt.leftDown);
+                }
+            } else {
+                document_view_mouse_input(view, evt.x, evt.y, evt.scrollDelta,
+                                          evt.leftDown, evt.middleDown, evt.rightDown,
+                                          evt.shiftDown);
+            }
+        }
+    }
 }
 
 // Structure to hold data for the close confirmation callback
@@ -486,6 +716,7 @@ UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     user->show_context_menu = false;
     user->context_menu_x = 0;
     user->context_menu_y = 0;
+    user->should_quit = false;
 
     return user;
 }
@@ -696,12 +927,7 @@ canvas* Render(UserData* user) {
             // Handle File menu items
             if (clickedItem == 0) {  // New
                 // Create a new empty document with 100 undo levels
-                document* doc = doc_create(100);
-                // Add an initial empty line
-                u32 empty_data[] = {0};
-                u32_string* empty_line = u32str_init(empty_data);
-                doc_append_line_str32(doc, empty_line);
-                u32str_destroy(empty_line);
+                document* doc = doc_create(100, true);
                 // Add the document view with no path (nullptr)
                 AddDocumentView(user, doc, nullptr);
             }
@@ -853,7 +1079,7 @@ canvas* Render(UserData* user) {
                     }
                     else if (clickedItem == 5) {  // Export
                         // Create a new document for the export
-                        document* export_doc = doc_create(100);
+                        document* export_doc = doc_create(100, false);
 
                         // Build the markdown export string
                         for (size_t i = 0; i < user->views.size(); i++) {

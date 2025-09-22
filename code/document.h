@@ -17,7 +17,7 @@ struct document_cursor {
 
 // Creates an empty document with no lines
 // undo_levels: maximum number of undo operations to store (0 = no undo)
-document* doc_create(u32 undo_levels);
+document* doc_create(u32 undo_levels, bool init_with_newline);
 
 // Destroys the document and frees all associated memory
 void doc_destroy(document* doc);

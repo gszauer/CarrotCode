@@ -6,6 +6,7 @@
 #include "document.h"
 #include "imgui.h"
 #include "view.h"
+#include "platform.h"
 #include <vector>
 
 struct UserData {
@@ -30,6 +31,34 @@ struct UserData {
     u32 context_menu_x;
     u32 context_menu_y;
 
+    bool should_quit;
+};
+
+enum class ApplicationMouseEventType {
+    Press,
+    Release,
+    Move
+};
+
+enum class ApplicationMouseButton {
+    NoneButton,
+    Left,
+    Middle,
+    Right
+};
+
+struct ApplicationMouseEvent {
+    ApplicationMouseEventType type;
+    ApplicationMouseButton button;
+    u32 x;
+    u32 y;
+    f32 normX;
+    f32 normY;
+    f32 scrollDelta;
+    bool leftDown;
+    bool middleDown;
+    bool rightDown;
+    bool shiftDown;
 };
 
 UserData* Initialize(u32 desiredWidth, u32 desiredHeight);
@@ -41,5 +70,9 @@ void AddDocumentView(UserData* user, document* doc, const char* path);
 void ApplicationCut(UserData* user);
 void ApplicationCopy(UserData* user);
 void ApplicationPaste(UserData* user);
+
+void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey key,
+                               u32 nativeKey, bool isDown, bool altDown, bool ctrlDown, bool shiftDown);
+void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt);
 
 #endif

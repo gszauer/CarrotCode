@@ -257,7 +257,7 @@ static void record_action(document* doc, edit_action::action_type type, u32 line
     doc->modified = true;
 }
 
-document* doc_create(u32 undo_levels) {
+document* doc_create(u32 undo_levels, bool init_with_newline) {
     document* doc = (document*)malloc(sizeof(document));
     doc->lines = vec_docline_create();
     doc->modified = false;
@@ -283,6 +283,11 @@ document* doc_create(u32 undo_levels) {
     doc->selection_anchor.column = 0;
     doc->has_selection = false;
 
+    if (init_with_newline) {
+        document_line* line = docline_create();
+        vec_docline_push(doc->lines, line);
+    }
+
     return doc;
 }
 
@@ -306,9 +311,9 @@ void doc_destroy(document* doc) {
 }
 
 document* doc_from_str32(u32_string* content, u32 undo_levels) {
-    if (!content) return doc_create(undo_levels);
+    if (!content) return doc_create(undo_levels, true);
     
-    document* doc = doc_create(undo_levels);
+    document* doc = doc_create(undo_levels, false);
     
     u32 start = 0;
     for (u32 i = 0; i <= u32str_length(content); i++) {
