@@ -37,10 +37,9 @@ struct document_view {
     document_cursor lastClickPosition;
 };
 
-static const u32 CARROT_DOUBLE_CLICK_TIME = 500;
-static const u32 CARROT_TRIPLE_CLICK_TIME = 500;
-// Font metrics are now queried dynamically from the font object
-static const f32 SCROLLBAR_WIDTH = 30.0f;
+#define CARROT_DOUBLE_CLICK_TIME 500
+#define CARROT_TRIPLE_CLICK_TIME 500
+#define CARROT_SCROLLBAR_WIDTH 30.0f
 
 // Helper function to check if file path has a code file extension
 static bool has_code_extension(u32_string* path) {
@@ -429,13 +428,13 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     bool needsHScroll = view->maxScrollX > 0;
     bool needsVScroll = view->maxScrollY > 0;
 
-    if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
-    if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
+    if (needsHScroll) viewHeight -= CARROT_SCROLLBAR_WIDTH;
+    if (needsVScroll) viewWidth -= CARROT_SCROLLBAR_WIDTH;
 
     // Check if mouse is in vertical scrollbar area
     bool inVScrollBar = false;
     if (needsVScroll) {
-        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)CARROT_SCROLLBAR_WIDTH;
         if (x >= scrollbarX && x < view->displayAreaX + view->displayAreaW &&
             y >= view->displayAreaY && y < view->displayAreaY + view->displayAreaH) {
             inVScrollBar = true;
@@ -445,7 +444,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     // Check if mouse is in horizontal scrollbar area
     bool inHScrollBar = false;
     if (needsHScroll) {
-        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)CARROT_SCROLLBAR_WIDTH;
         if (y >= scrollbarY && y < view->displayAreaY + view->displayAreaH &&
             x >= view->displayAreaX && x < view->displayAreaX + view->displayAreaW) {
             inHScrollBar = true;
@@ -566,13 +565,13 @@ void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown)
     bool needsHScroll = view->maxScrollX > 0;
     bool needsVScroll = view->maxScrollY > 0;
 
-    if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
-    if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
+    if (needsHScroll) viewHeight -= CARROT_SCROLLBAR_WIDTH;
+    if (needsVScroll) viewWidth -= CARROT_SCROLLBAR_WIDTH;
 
     // Check if mouse is in vertical scrollbar area
     bool inVScrollBar = false;
     if (needsVScroll) {
-        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)CARROT_SCROLLBAR_WIDTH;
         if (x >= scrollbarX && x < view->displayAreaX + view->displayAreaW &&
             y >= view->displayAreaY && y < view->displayAreaY + view->displayAreaH) {
             inVScrollBar = true;
@@ -582,7 +581,7 @@ void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown)
     // Check if mouse is in horizontal scrollbar area
     bool inHScrollBar = false;
     if (needsHScroll) {
-        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)CARROT_SCROLLBAR_WIDTH;
         if (y >= scrollbarY && y < view->displayAreaY + view->displayAreaH &&
             x >= view->displayAreaX && x < view->displayAreaX + view->displayAreaW) {
             inHScrollBar = true;
@@ -638,11 +637,11 @@ void document_view_update(document_view* view, f32 deltaTime) {
         viewWidth -= view->lineNumberWidth;
     }
 
-    bool needsHScroll = contentWidth > viewWidth - SCROLLBAR_WIDTH;
-    bool needsVScroll = contentHeight > viewHeight - SCROLLBAR_WIDTH;
+    bool needsHScroll = contentWidth > viewWidth - CARROT_SCROLLBAR_WIDTH;
+    bool needsVScroll = contentHeight > viewHeight - CARROT_SCROLLBAR_WIDTH;
 
-    if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
-    if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
+    if (needsHScroll) viewHeight -= CARROT_SCROLLBAR_WIDTH;
+    if (needsVScroll) viewWidth -= CARROT_SCROLLBAR_WIDTH;
 
     view->maxScrollX = std::max(0.0f, contentWidth - viewWidth);
     view->maxScrollY = std::max(0.0f, contentHeight - viewHeight);
@@ -673,8 +672,8 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     bool needsHScroll = view->maxScrollX > 0;
     bool needsVScroll = view->maxScrollY > 0;
 
-    if (needsHScroll) viewHeight -= SCROLLBAR_WIDTH;
-    if (needsVScroll) viewWidth -= SCROLLBAR_WIDTH;
+    if (needsHScroll) viewHeight -= CARROT_SCROLLBAR_WIDTH;
+    if (needsVScroll) viewWidth -= CARROT_SCROLLBAR_WIDTH;
 
     u32 lineHeight = font_get_line_height(fnt);
     u32 charWidth = font_get_char_width(fnt, 'x');  // Use average char width
@@ -934,13 +933,13 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     // Draw interactive scrollbars using ImGui extended functions
     // Vertical scrollbar goes all the way to the bottom
     if (needsVScroll) {
-        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarX = view->displayAreaX + view->displayAreaW - (u32)CARROT_SCROLLBAR_WIDTH;
         u32 scrollbarHeight = view->displayAreaH;  // Full height, no reduction
 
         bool scrollChanged = false;
         f32 newScrollY = ImGuiVerticalScrollBarEx(imgui_context,
                                                   scrollbarX, view->displayAreaY,
-                                                  (u32)SCROLLBAR_WIDTH, scrollbarHeight,
+                                                  (u32)CARROT_SCROLLBAR_WIDTH, scrollbarHeight,
                                                   view->scrollY, viewHeight, viewHeight + view->maxScrollY,
                                                   &scrollChanged);
         if (scrollChanged) {
@@ -950,14 +949,14 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 
     // Horizontal scrollbar is shortened to avoid overlap with vertical scrollbar
     if (needsHScroll) {
-        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)SCROLLBAR_WIDTH;
+        u32 scrollbarY = view->displayAreaY + view->displayAreaH - (u32)CARROT_SCROLLBAR_WIDTH;
         u32 scrollbarWidth = view->displayAreaW;
-        if (needsVScroll) scrollbarWidth -= (u32)SCROLLBAR_WIDTH;  // Shorten to avoid overlap
+        if (needsVScroll) scrollbarWidth -= (u32)CARROT_SCROLLBAR_WIDTH;  // Shorten to avoid overlap
 
         bool scrollChanged = false;
         f32 newScrollX = ImGuiHorizontalScrollBarEx(imgui_context,
                                                     view->displayAreaX, scrollbarY,
-                                                    scrollbarWidth, (u32)SCROLLBAR_WIDTH,
+                                                    scrollbarWidth, (u32)CARROT_SCROLLBAR_WIDTH,
                                                     view->scrollX, viewWidth, viewWidth + view->maxScrollX,
                                                     &scrollChanged);
         if (scrollChanged) {
@@ -1345,8 +1344,8 @@ void document_view_ensure_cursor_visible(document_view* view) {
         viewWidth -= view->lineNumberWidth;
     }
 
-    if (view->maxScrollX > 0) viewHeight -= SCROLLBAR_WIDTH;
-    if (view->maxScrollY > 0) viewWidth -= SCROLLBAR_WIDTH;
+    if (view->maxScrollX > 0) viewHeight -= CARROT_SCROLLBAR_WIDTH;
+    if (view->maxScrollY > 0) viewWidth -= CARROT_SCROLLBAR_WIDTH;
 
     if (cursorX < view->scrollX) {
         view->scrollX = cursorX;
@@ -1375,7 +1374,7 @@ void document_view_center_cursor(document_view* view) {
     f32 cursorY = cursor.row * lineHeight;
     f32 viewHeight = view->displayAreaH;
 
-    if (view->maxScrollY > 0) viewHeight -= SCROLLBAR_WIDTH;
+    if (view->maxScrollY > 0) viewHeight -= CARROT_SCROLLBAR_WIDTH;
 
     view->scrollY = cursorY - viewHeight / 2;
     view->scrollY = std::max(0.0f, std::min(view->scrollY, view->maxScrollY));
