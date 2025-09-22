@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 
-// Adobe Spectrum Darkest Theme Colors
+// Adobe Spectrum Darkest theme palette used for painting primitive controls.
 namespace Colors {
     // Gray scale - using proper Spectrum Darkest values
     // Application background (darkest)
@@ -49,6 +49,8 @@ namespace Colors {
     const u8 SHADOW_R = 0x00, SHADOW_G = 0x00, SHADOW_B = 0x00;  // Pure black for shadows
 }
 
+// Runtime state for the immediate-mode UI.  The struct is opaque to API
+// consumers and tracks mouse/keyboard input along with per-widget data.
 struct ImGui {
     canvas* cnvs;
     font* fnt;
@@ -125,16 +127,20 @@ struct ImGui {
     } popupMenu;
 };
 
+// Simple monotonic ID generator; widgets use this to compare against hot/active
+// state in the same frame they are issued.
 static u32 GenerateId(ImGui* context) {
     return context->nextId++;
 }
 
+// Convenience helper for hit-testing against the current mouse position.
 static bool IsMouseInRect(ImGui* context, u32 x, u32 y, u32 w, u32 h) {
     return context->mouseX >= x && context->mouseX < x + w &&
            context->mouseY >= y && context->mouseY < y + h;
 }
 
-// Helper function to calculate centered text Y position, handling cases where control is smaller than text
+// Calculate a vertical offset that centers text inside a control, falling back
+// to top-alignment if the control is too small.
 static u32 GetCenteredTextY(u32 controlY, u32 controlHeight, u32 textHeight) {
     if (controlHeight >= textHeight) {
         return controlY + (controlHeight - textHeight) / 2;
@@ -171,6 +177,7 @@ font* ImGuiGetFont(ImGui* context) {
     return context ? context->fnt : nullptr;
 }
 
+// Prepare per-frame state (mouse transitions, cleared canvas, IDs, etc.).
 void ImGuiBeginFrame(ImGui* context) {
     // Update mouse pressed/released states
     context->mouseLeftPressed = context->mouseLeftDown && !context->prevMouseLeftDown;
@@ -194,6 +201,7 @@ void ImGuiBeginFrame(ImGui* context) {
     // Note: scrollDelta is now reset in EndFrame so controls can use it
 }
 
+// Cache the most recent keyboard event for widgets that query it this frame.
 void ImGuiKeyboardInput(ImGui* context, u32 characterCodeUnicode, u32 virtualKeyCode,
                         bool isKeyDown, bool altDown, bool ctrlDown, bool shiftDown) {
     context->lastChar = characterCodeUnicode;
@@ -204,6 +212,7 @@ void ImGuiKeyboardInput(ImGui* context, u32 characterCodeUnicode, u32 virtualKey
     context->shiftDown = shiftDown;
 }
 
+// Record mouse position/buttons/scroll so controls can respond in BeginFrame.
 void ImGuiMouseInput(ImGui* context, u32 windowRelativeXPos, u32 windowRelativeYPos,
                     f32 windowNormalizedXPos, f32 windowNormalizedYPos, f32 scrollDirection,
                     bool leftDown, bool middleDown, bool rightDown) {

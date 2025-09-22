@@ -1,3 +1,5 @@
+// Document view implementation.  This module bridges the document model with
+// rendering and user interaction details (scrolling, selection, etc.).
 #include "view.h"
 
 #include "document.h"
@@ -11,6 +13,7 @@
 #include <cstdlib>
 #include <cstdio>
 
+// Internal state for each document view instance (opaque to callers).
 struct document_view {
     document* target;
     font* fnt;
@@ -41,7 +44,8 @@ struct document_view {
 #define CARROT_TRIPLE_CLICK_TIME 500
 #define CARROT_SCROLLBAR_WIDTH 30.0f
 
-// Helper function to check if file path has a code file extension
+// Returns true when the supplied path looks like source code and should enable
+// syntax highlighting by default.
 static bool has_code_extension(u32_string* path) {
     if (!path) return false;
 
@@ -230,7 +234,7 @@ void document_view_update_font(document_view* view, font* fnt) {
     view->lineNumberWidth = font_get_char_width(fnt, '0') * 6 + 10;  // 5 digits + space + padding
 }
 
-// Helper function to calculate visual column position accounting for tabs
+// Calculate the visual column (taking tabs into account) for a character index.
 static u32 get_visual_column(u32_string* line, u32 charIndex, u32 tabWidth) {
     u32 visualCol = 0;
     for (u32 i = 0; i < charIndex && i < u32str_length(line); i++) {
@@ -245,7 +249,7 @@ static u32 get_visual_column(u32_string* line, u32 charIndex, u32 tabWidth) {
     return visualCol;
 }
 
-// Helper function to convert visual column to character index
+// Convert a visual column measurement back into a character index.
 static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
     u32 currentVisualCol = 0;
     u32 lineLength = u32str_length(line);
@@ -266,11 +270,14 @@ static u32 visual_to_char_index(u32_string* line, u32 visualCol, u32 tabWidth) {
     return lineLength;
 }
 
+// Populate start/end with an ordered selection range for this view.
 static void normalize_selection(document_view* view, document_cursor* start, document_cursor* end) {
     // Use the document's selection normalization
     doc_get_selection_range(view->target, start, end);
 }
 
+// Process keyboard input (already translated to UTF-32 and PlatformKey) against
+// the active document and selection.
 void document_view_keyboard_input(document_view* view, u32 unicode, PlatformKey virtualKey,
                                  bool isDown, bool alt, bool ctrl, bool shift) {
     if (!isDown) return;
@@ -371,9 +378,10 @@ static void select_line(document_view* view, u32 row) {
     doc_set_has_selection(view->target, true);
 }
 
+// Handle mouse button presses, releases, and wheel scrolling.
 void document_view_mouse_input(document_view* view, u32 x, u32 y,
-                              f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown,
-                              bool shiftDown) {
+                               f32 scrollDelta, bool leftDown, bool middleDown, bool rightDown,
+                               bool shiftDown) {
     static bool wasLeftDown = false;
     static bool wasRightDown = false;
 
