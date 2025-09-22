@@ -1003,65 +1003,83 @@ u32_string* document_view_get_selection(document_view* view) {
     document_cursor start, end;
     normalize_selection(view, &start, &end);
 
+    if (start.row == end.row && start.column == end.column) {
+        return nullptr;
+    }
+
     u32_string* result = u32str_create();
 
     if (start.row == end.row) {
         u32_string* line = doc_get_line(view->target, start.row);
-        if (line && end.column <= u32str_length(line)) {
-            u32_string* substr = u32str_substr(line, start.column, end.column - start.column);
-            if (substr) {
-                u32str_insert(result, substr, u32str_length(result), 0, u32str_length(substr));
-                u32str_destroy(substr);
-            }
-        }
-    } else {
-        // First line
-        u32_string* line = doc_get_line(view->target, start.row);
         if (line) {
             u32 lineLength = u32str_length(line);
-            if (start.column < lineLength) {
-                u32_string* substr = u32str_substr(line, start.column, lineLength - start.column);
-                if (substr) {
-                    u32str_insert(result, substr, u32str_length(result), 0, u32str_length(substr));
-                    u32str_destroy(substr);
-                }
-            }
-            u32 newline = '\n';
-            // Add newline - need to use a temporary string
-            u32* nl_data = (u32*)malloc(2 * sizeof(u32));
-            nl_data[0] = newline;
-            nl_data[1] = 0;
-            u32_string* nl_str = u32str_init(nl_data);
-            u32str_insert(result, nl_str, u32str_length(result), 0, 1);
-            u32str_destroy(nl_str);
-            free(nl_data);
-        }
-
-        // Middle lines
-        for (u32 row = start.row + 1; row < end.row; row++) {
-            line = doc_get_line(view->target, row);
-            if (line) {
-                u32str_insert(result, line, u32str_length(result), 0, u32str_length(line));
-                u32 newline = '\n';
-                // Add newline - need to use a temporary string
-            u32* nl_data = (u32*)malloc(2 * sizeof(u32));
-            nl_data[0] = newline;
-            nl_data[1] = 0;
-            u32_string* nl_str = u32str_init(nl_data);
-            u32str_insert(result, nl_str, u32str_length(result), 0, 1);
-            u32str_destroy(nl_str);
-            free(nl_data);
+            u32 clampedEnd = std::min(end.column, lineLength);
+            if (start.column < clampedEnd) {
+                u32str_insert(result, line, u32str_length(result), start.column, clampedEnd - start.column);
+                return result;
             }
         }
+        u32str_destroy(result);
+        return nullptr;
+    }
 
-        // Last line
-        line = doc_get_line(view->target, end.row);
-        if (line && end.column <= u32str_length(line)) {
-            u32_string* substr = u32str_substr(line, 0, end.column);
-            if (substr) {
-                u32str_insert(result, substr, u32str_length(result), 0, u32str_length(substr));
-                u32str_destroy(substr);
+    u32 totalLength = end.row - start.row; // newline characters between lines
+
+    u32_string* line = doc_get_line(view->target, start.row);
+    if (line) {
+        u32 lineLength = u32str_length(line);
+        if (start.column < lineLength) {
+            totalLength += lineLength - start.column;
+        }
+    }
+
+    for (u32 row = start.row + 1; row < end.row; ++row) {
+        line = doc_get_line(view->target, row);
+        if (line) {
+            totalLength += u32str_length(line);
+        }
+    }
+
+    line = doc_get_line(view->target, end.row);
+    if (line) {
+        u32 lineLength = u32str_length(line);
+        totalLength += std::min(end.column, lineLength);
+    }
+
+    if (totalLength > 0) {
+        u32str_reserve(result, totalLength);
+    }
+
+    // First line portion
+    line = doc_get_line(view->target, start.row);
+    if (line) {
+        u32 lineLength = u32str_length(line);
+        if (start.column < lineLength) {
+            u32 copyLen = lineLength - start.column;
+            u32str_insert(result, line, u32str_length(result), start.column, copyLen);
+        }
+    }
+    u32str_insert_char(result, u32str_length(result), '\n');
+
+    // Middle lines
+    for (u32 row = start.row + 1; row < end.row; ++row) {
+        line = doc_get_line(view->target, row);
+        if (line) {
+            u32 lineLen = u32str_length(line);
+            if (lineLen > 0) {
+                u32str_insert(result, line, u32str_length(result), 0, lineLen);
             }
+        }
+        u32str_insert_char(result, u32str_length(result), '\n');
+    }
+
+    // Last line portion
+    line = doc_get_line(view->target, end.row);
+    if (line) {
+        u32 lineLength = u32str_length(line);
+        u32 copyLen = std::min(end.column, lineLength);
+        if (copyLen > 0) {
+            u32str_insert(result, line, u32str_length(result), 0, copyLen);
         }
     }
 
