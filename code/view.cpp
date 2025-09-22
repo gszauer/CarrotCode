@@ -31,13 +31,14 @@ struct document_view {
     u32 lineNumberWidth;
     u32 tabWidth;
 
-    u32 lastClickTime;
+    u64 lastClickTime;
+    u64 lastDoubleClickTime;
     u32 clickCount;
     document_cursor lastClickPosition;
 };
 
-static const u32 DOUBLE_CLICK_TIME = 500;
-static const u32 TRIPLE_CLICK_TIME = 500;
+static const u32 CARROT_DOUBLE_CLICK_TIME = 500;
+static const u32 CARROT_TRIPLE_CLICK_TIME = 500;
 // Font metrics are now queried dynamically from the font object
 static const f32 SCROLLBAR_WIDTH = 30.0f;
 
@@ -203,6 +204,7 @@ document_view* document_view_create(document* doc, font* fnt, u32_string* path) 
     view->tabWidth = 4;
 
     view->lastClickTime = 0;
+    view->lastDoubleClickTime = 0;
     view->clickCount = 0;
     view->lastClickPosition.row = 0;
     view->lastClickPosition.column = 0;
@@ -470,7 +472,7 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
     document_cursor clickedCursor = document_view_pixel_to_cursor(view, effectiveX, effectiveY);
 
     if (leftDown && !wasLeftDown) {
-        u32 currentTime = 0;
+        u64 currentTime = platform_get_milliseconds();
 
         if (shiftDown) {
             document_cursor currentCursor = doc_get_cursor(view->target);
@@ -485,20 +487,29 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
             bool hasSelection = (anchor.row != cursor.row) || (anchor.column != cursor.column);
             doc_set_has_selection(view->target, hasSelection);
             view->clickCount = 1;
+            view->lastDoubleClickTime = 0;
         } else {
-            if (clickedCursor.row == view->lastClickPosition.row &&
-                clickedCursor.column == view->lastClickPosition.column &&
-                currentTime - view->lastClickTime < DOUBLE_CLICK_TIME) {
+            bool samePosition = (clickedCursor.row == view->lastClickPosition.row &&
+                                 clickedCursor.column == view->lastClickPosition.column);
 
-                view->clickCount++;
-
-                if (view->clickCount == 2) {
-                    select_word_at_cursor(view, clickedCursor);
-                } else if (view->clickCount >= 3) {
-                    select_line(view, clickedCursor.row);
-                }
+            if (!samePosition || currentTime - view->lastClickTime > CARROT_DOUBLE_CLICK_TIME) {
+                view->clickCount = 1;
+                view->lastDoubleClickTime = 0;
+                doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
+                doc_set_selection_anchor(view->target, clickedCursor.row, clickedCursor.column);
+                doc_set_has_selection(view->target, false);
+            } else if (view->clickCount == 1 &&
+                       currentTime - view->lastClickTime <= CARROT_DOUBLE_CLICK_TIME) {
+                view->clickCount = 2;
+                view->lastDoubleClickTime = currentTime;
+                select_word_at_cursor(view, clickedCursor);
+            } else if (view->clickCount >= 2 &&
+                       currentTime - view->lastDoubleClickTime <= CARROT_TRIPLE_CLICK_TIME) {
+                view->clickCount = 3;
+                select_line(view, clickedCursor.row);
             } else {
                 view->clickCount = 1;
+                view->lastDoubleClickTime = 0;
                 doc_set_cursor(view->target, clickedCursor.row, clickedCursor.column);
                 doc_set_selection_anchor(view->target, clickedCursor.row, clickedCursor.column);
                 doc_set_has_selection(view->target, false);
