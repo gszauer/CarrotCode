@@ -767,8 +767,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                             canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos,
                                                 color_default[0], color_default[1], color_default[2]);
                         }
-                    } else if (ch >= 32 && ch <= 126) {
-                        char str[2] = {(char)ch, '\0'};
+                    } else {
+                        char glyph = (ch >= 32 && ch <= 126) ? (char)ch : '?';
+                        char str[2] = {glyph, '\0'};
                         canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos,
                                             color_default[0], color_default[1], color_default[2]);
                     }
@@ -809,8 +810,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                                 canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos,
                                                     color_default[0], color_default[1], color_default[2]);
                             }
-                        } else if (ch >= 32 && ch <= 126) {
-                            char str[2] = {(char)ch, '\0'};
+                        } else {
+                            char glyph = (ch >= 32 && ch <= 126) ? (char)ch : '?';
+                            char str[2] = {glyph, '\0'};
                             canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos,
                                                 color_default[0], color_default[1], color_default[2]);
                         }
@@ -873,8 +875,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
                                     canvas_draw_text_cstr(cnvs, fnt, space, xPos + i * charWidth, (u32)yPos,
                                                         color[0], color[1], color[2]);
                                 }
-                            } else if (ch >= 32 && ch <= 126) {
-                                char str[2] = {(char)ch, '\0'};
+                            } else {
+                                char glyph = (ch >= 32 && ch <= 126) ? (char)ch : '?';
+                                char str[2] = {glyph, '\0'};
                                 canvas_draw_text_cstr(cnvs, fnt, str, xPos, (u32)yPos,
                                                     color[0], color[1], color[2]);
                             }
