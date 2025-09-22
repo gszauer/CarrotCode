@@ -275,38 +275,6 @@ void document_view_keyboard_input(document_view* view, u32 unicode, PlatformKey 
                                  bool isDown, bool alt, bool ctrl, bool shift) {
     if (!isDown) return;
 
-    if (ctrl) {
-        switch (unicode) {
-            case 'a':
-            case 'A':
-                document_view_select_all(view);
-                return;
-            case 'c':
-            case 'C':
-                document_view_copy(view);
-                return;
-            case 'x':
-            case 'X':
-                document_view_cut(view);
-                return;
-            case 'v':
-            case 'V':
-                return;
-            case 'z':
-            case 'Z':
-                if (shift) {
-                    document_view_redo(view);
-                } else {
-                    document_view_undo(view);
-                }
-                return;
-            case 'y':
-            case 'Y':
-                document_view_redo(view);
-                return;
-        }
-    }
-
     switch (virtualKey) {
         case PlatformKey::Left:
             if (ctrl) {
@@ -541,7 +509,6 @@ void document_view_mouse_input(document_view* view, u32 x, u32 y,
             doc_validate_cursor(view->target);
         }
 
-        // TODO: Show context menu
     }
 
     wasLeftDown = leftDown;
@@ -1456,30 +1423,6 @@ u8* document_view_save_ascii(document_view* view, u32* out_size) {
     doc_set_modified(view->target, false);
     *out_size = totalSize;
     return buffer;
-}
-
-void document_view_copy(document_view* view) {
-    if (!doc_has_selection(view->target)) return;
-
-    u32_string* selection = document_view_get_selection(view);
-    if (selection) {
-        u32str_destroy(selection);
-    }
-}
-
-void document_view_cut(document_view* view) {
-    if (!doc_has_selection(view->target)) return;
-
-    document_view_copy(view);
-    document_view_delete_selection(view);
-}
-
-void document_view_paste(document_view* view, const u32* text, u32 length) {
-    if (!view || !view->target || !text || length == 0) return;
-
-    doc_paste(view->target, text, length);
-    document_view_validate_cursor_and_selection(view);
-    document_view_ensure_cursor_visible(view);
 }
 
 void document_view_undo(document_view* view) {

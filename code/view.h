@@ -62,10 +62,6 @@ void document_view_center_cursor(document_view* view);
 u8* document_view_save_utf32(document_view* view, u32* out_size);
 u8* document_view_save_ascii(document_view* view, u32* out_size);
 
-void document_view_copy(document_view* view);
-void document_view_cut(document_view* view);
-void document_view_paste(document_view* view, const u32* text, u32 length);
-
 void document_view_undo(document_view* view);
 void document_view_redo(document_view* view);
 
