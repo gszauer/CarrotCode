@@ -1,5 +1,27 @@
-# CarrotCode Text Editor
+# Carrot Code Text Editor
+Carrot Code is a minimal text editor with syntax highlight support, inspired by [lite](https://github.com/rxi/lite).
 
-CarrotCode is a lightweight, cross-platform text editor built with a focus on simplicity and performance. Written in C++ with minimal dependencies, it features a custom rendering engine that provides smooth text editing capabilities with syntax highlighting support for multiple programming languages. The editor implements essential features like undo/redo operations, clipboard integration, file management, and a clean menu-driven interface, all while maintaining a small memory footprint and fast startup times.
+[Carrot Code V1](https://github.com/gszauer/CarrotCode/tree/V1) was focused on performance with an OpenGL backend, full unicode rendering, and true MDI support. In contrast [V2](https://github.com/gszauer/CarrotCode/tree/V2) embeds [font 8x16](https://github.com/hubenchang0515/font8x16/tree/master), displaying only ascii characters. V2 also uses a tiled software renderer, and is written to be more C like. 
 
-The application demonstrates several interesting technical implementations including a manual XPM parser for window icons (avoiding external image library dependencies), a flexible zoom system that scales the interface at 50%, 100%, and 200% levels, and direct X11 integration on Linux for optimal performance. The codebase is structured around a document-view architecture with separate concerns for rendering, input handling, and text manipulation, making it both maintainable and extensible. CarrotCode serves as both a practical text editing tool and an educational example of building a GUI application from fundamental principles without relying on heavyweight frameworks.
+
+## MIT License
+
+Copyright (c) 2025 [Gabor Szauer](https://gabormakesgames.com/)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
