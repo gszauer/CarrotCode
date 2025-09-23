@@ -38,11 +38,23 @@ struct document_view {
     u64 lastDoubleClickTime;
     u32 clickCount;
     document_cursor lastClickPosition;
+
+    f32 cursorBlinkTimer;
+    bool cursorBlinkVisible;
+    document_cursor lastCursorPosition;
 };
 
 #define CARROT_DOUBLE_CLICK_TIME 500
 #define CARROT_TRIPLE_CLICK_TIME 500
 #define CARROT_SCROLLBAR_WIDTH 30.0f
+#define CARROT_CURSOR_BLINK_TOGGLE 0.5f
+
+static void document_view_reset_cursor_blink(document_view* view) {
+    if (!view || !view->target) return;
+    view->cursorBlinkTimer = 0.0f;
+    view->cursorBlinkVisible = true;
+    view->lastCursorPosition = doc_get_cursor(view->target);
+}
 
 // Returns true when the supplied path looks like source code and should enable
 // syntax highlighting by default.
@@ -213,6 +225,8 @@ document_view* document_view_create(document* doc, font* fnt, u32_string* path) 
     view->clickCount = 0;
     view->lastClickPosition.row = 0;
     view->lastClickPosition.column = 0;
+
+    document_view_reset_cursor_blink(view);
 
     return view;
 }
@@ -584,6 +598,23 @@ void document_view_mouse_moved(document_view* view, u32 x, u32 y, bool leftDown)
 }
 
 void document_view_update(document_view* view, f32 deltaTime) {
+    if (!view || !view->target) return;
+
+    document_cursor currentCursor = doc_get_cursor(view->target);
+    bool cursorChanged = (currentCursor.row != view->lastCursorPosition.row) ||
+                         (currentCursor.column != view->lastCursorPosition.column);
+    bool hasSelection = doc_has_selection(view->target);
+
+    if (cursorChanged || hasSelection) {
+        document_view_reset_cursor_blink(view);
+    } else {
+        view->cursorBlinkTimer += deltaTime;
+        while (view->cursorBlinkTimer >= CARROT_CURSOR_BLINK_TOGGLE) {
+            view->cursorBlinkTimer -= CARROT_CURSOR_BLINK_TOGGLE;
+            view->cursorBlinkVisible = !view->cursorBlinkVisible;
+        }
+    }
+
     u32 lineCount = doc_line_count(view->target);
     f32 lineHeight = font_get_line_height(view->fnt);
     f32 charWidth = font_get_char_width(view->fnt, 'x');  // Use average char width
@@ -654,8 +685,9 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
     u32 lineCount = doc_line_count(view->target);
     lastVisibleLine = std::min(lastVisibleLine, lineCount);
 
+    bool hasSelection = doc_has_selection(view->target);
     document_cursor selStart = {0, 0}, selEnd = {0, 0};
-    if (doc_has_selection(view->target)) {
+    if (hasSelection) {
         normalize_selection(view, &selStart, &selEnd);
     }
 
@@ -715,7 +747,7 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
         u32 lineLength = u32str_length(line);
 
         // Draw selection background
-        if (doc_has_selection(view->target)) {
+        if (hasSelection) {
             u32 selStartCol = 0, selEndCol = lineLength;
 
             if (lineIdx == selStart.row && lineIdx == selEnd.row) {
@@ -896,9 +928,12 @@ void document_view_render(document_view* view, struct ImGui* imgui_context, canv
 
         // Draw cursor
         if (cursorPos.row == lineIdx) {
-            u32 cursorVisualCol = get_visual_column(line, cursorPos.column, view->tabWidth);
-            u32 cursorX = (u32)(contentStartX + (cursorVisualCol * charWidth) - view->scrollX);
-            canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 0xFF, 0xFF, 0xFF);  // SPECTRUM_DARKEST_GRAY_900 - bright cursor
+            bool showCursor = view->cursorBlinkVisible || hasSelection;
+            if (showCursor) {
+                u32 cursorVisualCol = get_visual_column(line, cursorPos.column, view->tabWidth);
+                u32 cursorX = (u32)(contentStartX + (cursorVisualCol * charWidth) - view->scrollX);
+                canvas_draw_rect(cnvs, cursorX, (u32)yPos, 2, lineHeight, 0xFF, 0xFF, 0xFF);  // SPECTRUM_DARKEST_GRAY_900 - bright cursor
+            }
         }
     }
 
