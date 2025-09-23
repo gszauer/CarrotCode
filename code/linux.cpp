@@ -45,6 +45,21 @@ struct WindowData {
 // Global window data for platform_exit
 static WindowData* g_windowData = nullptr;
 
+// Clipboard state shared with the X11 event loop
+static u8_string* g_clipboardText = nullptr;
+
+struct ClipboardRequestState {
+    bool active = false;
+    bool triedStringFallback = false;
+    platform_clipboard_paste_text_callback callback = nullptr;
+    void* userData = nullptr;
+    Atom selection = None;
+    Atom target = None;
+    Atom property = None;
+};
+
+static ClipboardRequestState g_clipboardRequest;
+
 u64 platform_get_milliseconds() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -389,19 +404,87 @@ int main(int argc, char** argv) {
                         XFlush(windowData.display);
                     }
                     break;
-                    
+
+                case SelectionRequest: {
+                    XSelectionRequestEvent* req = &event.xselectionrequest;
+                    XSelectionEvent respond = {};
+                    respond.type = SelectionNotify;
+                    respond.display = req->display;
+                    respond.requestor = req->requestor;
+                    respond.selection = req->selection;
+                    respond.target = req->target;
+                    respond.time = req->time;
+                    respond.property = None;
+
+                    Atom clipboardAtom = XInternAtom(windowData.display, "CLIPBOARD", False);
+                    Atom targetsAtom = XInternAtom(windowData.display, "TARGETS", False);
+                    Atom utf8Atom = XInternAtom(windowData.display, "UTF8_STRING", False);
+                    Atom textAtom = XInternAtom(windowData.display, "TEXT", False);
+                    Atom textPlainAtom = XInternAtom(windowData.display, "text/plain", False);
+                    Atom textPlainUtf8Atom = XInternAtom(windowData.display, "text/plain;charset=utf-8", False);
+
+                    Atom propertyAtom = (req->property == None) ? req->target : req->property;
+                    bool handled = false;
+                    bool ownsSelection = (req->selection == clipboardAtom || req->selection == XA_PRIMARY) &&
+                        (XGetSelectionOwner(windowData.display, req->selection) == windowData.window);
+
+                    if (ownsSelection) {
+                        u8* utf8Bytes = g_clipboardText ? u8str_getBuffer(g_clipboardText) : nullptr;
+                        u32 utf8Length = g_clipboardText ? u8str_size_bytes(g_clipboardText) : 0;
+                        if (!utf8Bytes) {
+                            utf8Length = 0;
+                        }
+                        if (req->target == targetsAtom) {
+                            Atom supported[] = { utf8Atom, textPlainUtf8Atom, textAtom, textPlainAtom, XA_STRING };
+                            XChangeProperty(windowData.display, req->requestor, propertyAtom, XA_ATOM, 32,
+                                            PropModeReplace,
+                                            reinterpret_cast<const unsigned char*>(supported),
+                                            static_cast<int>(sizeof(supported) / sizeof(Atom)));
+                            handled = true;
+                        } else if (req->target == utf8Atom || req->target == textPlainUtf8Atom) {
+                            XChangeProperty(windowData.display, req->requestor, propertyAtom, utf8Atom, 8,
+                                            PropModeReplace,
+                                            reinterpret_cast<const unsigned char*>(utf8Bytes),
+                                            static_cast<int>(utf8Length));
+                            handled = true;
+                        } else if (req->target == textAtom || req->target == textPlainAtom || req->target == XA_STRING) {
+                            std::string ascii;
+                            if (utf8Bytes && utf8Length > 0) {
+                                ascii.reserve(utf8Length);
+                                for (u32 i = 0; i < utf8Length; i++) {
+                                    unsigned char ch = utf8Bytes[i];
+                                    ascii.push_back(ch < 0x80 ? static_cast<char>(ch) : '?');
+                                }
+                            }
+                            const unsigned char* bytes = reinterpret_cast<const unsigned char*>(ascii.c_str());
+                            unsigned long length = ascii.size();
+                            XChangeProperty(windowData.display, req->requestor, propertyAtom, XA_STRING, 8,
+                                            PropModeReplace, bytes, static_cast<int>(length));
+                            handled = true;
+                        }
+                    }
+
+                    if (handled) {
+                        respond.property = propertyAtom;
+                    }
+
+                    XSendEvent(windowData.display, req->requestor, False, 0,
+                               reinterpret_cast<XEvent*>(&respond));
+                    XFlush(windowData.display);
+                    break;
+                }
+
                 case SelectionNotify:
                     if (event.xselection.property == XdndSelectionProperty) {
                         Atom actual_type;
                         int actual_format;
                         unsigned long nitems, bytes_after;
                         unsigned char* data = nullptr;
-                        
+
                         if (XGetWindowProperty(windowData.display, windowData.window,
-                                             XdndSelectionProperty, 0, ~0L, True,  // Delete after reading
+                                             XdndSelectionProperty, 0, ~0L, True,
                                              AnyPropertyType, &actual_type, &actual_format,
                                              &nitems, &bytes_after, &data) == Success) {
-                            
                             if (data && nitems > 0) {
                                 // Parse URI list (file://path format)
                                 std::string uri((char*)data, nitems);
@@ -409,10 +492,9 @@ int main(int argc, char** argv) {
                                 // Process all files in the drop (they're separated by newlines)
                                 size_t pos = 0;
                                 while (pos < uri.length()) {
-                                    // Find the next file:// URI
                                     size_t file_start = uri.find("file://", pos);
                                     if (file_start == std::string::npos) {
-                                        break;  // No more files
+                                        break;
                                     }
 
                                     // Extract this URI up to the next newline or end of string
@@ -420,10 +502,10 @@ int main(int argc, char** argv) {
                                     std::string file_uri;
                                     if (uri_end != std::string::npos) {
                                         file_uri = uri.substr(file_start, uri_end - file_start);
-                                        pos = uri_end + 1;  // Move past this URI for next iteration
+                                        pos = uri_end + 1;
                                     } else {
                                         file_uri = uri.substr(file_start);
-                                        pos = uri.length();  // This was the last URI
+                                        pos = uri.length();
                                     }
 
                                     // Extract path from file:// URI
@@ -448,7 +530,6 @@ int main(int argc, char** argv) {
                                                               std::istreambuf_iterator<char>());
                                             file.close();
 
-                                            // Convert to u32_string
                                             std::vector<u32> u32content;
                                             for (char c : content) {
                                                 u32content.push_back((u32)(unsigned char)c);
@@ -456,21 +537,18 @@ int main(int argc, char** argv) {
                                             u32content.push_back(0);
 
                                             u32_string* file_str = u32str_init(u32content.data());
-
-                                            // Create document and add it as a view
                                             document* new_doc = doc_from_str32(file_str, 100);
                                             u32str_destroy(file_str);
 
                                             // Add document view
                                             AddDocumentView(user, new_doc, filepath.c_str());
                                         }
-                                    }  // end if (file_uri.substr(0, 7) == "file://")
-                                }  // end while loop processing all files
+                                    }
+                                }
                                 XFree(data);
                             }
                         }
-                        
-                        // Send XdndFinished to the source window
+
                         if (xdndSourceWindow != None) {
                             XEvent reply;
                             memset(&reply, 0, sizeof(reply));
@@ -479,15 +557,74 @@ int main(int argc, char** argv) {
                             reply.xclient.message_type = XdndFinished;
                             reply.xclient.format = 32;
                             reply.xclient.data.l[0] = windowData.window;
-                            reply.xclient.data.l[1] = 1; // Accepted
+                            reply.xclient.data.l[1] = 1;
                             reply.xclient.data.l[2] = XdndActionCopy;
                             XSendEvent(windowData.display, xdndSourceWindow, False, NoEventMask, &reply);
                             XFlush(windowData.display);
                         }
-                        
-                        // Clear the property and source window
+
                         XDeleteProperty(windowData.display, windowData.window, XdndSelectionProperty);
                         xdndSourceWindow = None;
+                    }
+                    else if (g_clipboardRequest.active &&
+                             event.xselection.selection == g_clipboardRequest.selection) {
+                        if (event.xselection.property == None) {
+                            if (!g_clipboardRequest.triedStringFallback && g_clipboardRequest.target != XA_STRING) {
+                                g_clipboardRequest.triedStringFallback = true;
+                                g_clipboardRequest.target = XA_STRING;
+                                XConvertSelection(windowData.display, g_clipboardRequest.selection, XA_STRING,
+                                                  g_clipboardRequest.property, windowData.window,
+                                                  event.xselection.time ? event.xselection.time : CurrentTime);
+                                XFlush(windowData.display);
+                            } else {
+                                if (g_clipboardRequest.callback) {
+                                    g_clipboardRequest.callback(nullptr, g_clipboardRequest.userData);
+                                }
+                                g_clipboardRequest = ClipboardRequestState();
+                            }
+                            break;
+                        }
+
+                        Atom actual_type;
+                        int actual_format;
+                        unsigned long nitems, bytes_after;
+                        unsigned char* data = nullptr;
+
+                        u32_string* result = nullptr;
+                        if (XGetWindowProperty(windowData.display, windowData.window,
+                                               g_clipboardRequest.property, 0, ~0L, True,
+                                               AnyPropertyType, &actual_type, &actual_format,
+                                               &nitems, &bytes_after, &data) == Success) {
+                            if (data && nitems > 0) {
+                                u8* buffer = (u8*)malloc(nitems + 1);
+                                if (buffer) {
+                                    memcpy(buffer, data, nitems);
+                                    buffer[nitems] = 0;
+                                    u8_string* temp = u8str_init(buffer);
+                                    if (temp) {
+                                        result = u8str_to_u32str(temp);
+                                        u8str_destroy(temp);
+                                    }
+                                    free(buffer);
+                                }
+                            }
+                            if (!result) {
+                                result = u32str_create();
+                            }
+                        }
+
+                        if (data) {
+                            XFree(data);
+                        }
+
+                        if (g_clipboardRequest.callback) {
+                            g_clipboardRequest.callback(result, g_clipboardRequest.userData);
+                        }
+                        if (result) {
+                            u32str_destroy(result);
+                        }
+
+                        g_clipboardRequest = ClipboardRequestState();
                     }
                     break;
                     
@@ -695,6 +832,12 @@ int main(int argc, char** argv) {
     
     // Cleanup
     Shutdown(user);
+
+    if (g_clipboardText) {
+        u8str_destroy(g_clipboardText);
+        g_clipboardText = nullptr;
+    }
+    g_clipboardRequest = ClipboardRequestState();
     
     // Note: XDestroyImage also frees the pixel data we provided
     windowData.backBuffer->data = NULL; // Prevent double free
@@ -721,137 +864,99 @@ void platform_get_window_size(u32* width, u32* height) {
 // A full async implementation would require handling X11 events in the main loop
 
 void platform_clipboard_copy_text(u32_string* content, platform_clipboard_copy_text_callback callback, void* userData) {
-    // For now, we'll implement a simplified version that works synchronously
-    // A proper async implementation would need to integrate with the X11 event loop
-
-    Display* display = XOpenDisplay(NULL);
-    if (!display) {
+    if (!g_windowData || !g_windowData->display) {
         if (callback) callback(userData);
         return;
     }
 
-    Window window = DefaultRootWindow(display);
-    Atom clipboard = XInternAtom(display, "CLIPBOARD", False);
-    Atom utf8 = XInternAtom(display, "UTF8_STRING", False);
-    Atom targets = XInternAtom(display, "TARGETS", False);
+    Display* display = g_windowData->display;
+    Window window = g_windowData->window;
 
-    if (content && u32str_length(content) > 0) {
-        // Convert u32_string to UTF-8
-        u32 len = u32str_length(content);
-        // Allocate buffer for UTF-8 (worst case is 4 bytes per character)
-        char* utf8_text = (char*)malloc(len * 4 + 1);
-        u32 utf8_len = 0;
-
-        for (u32 i = 0; i < len; i++) {
-            u32 ch = u32str_get(content, i);
-            if (ch < 0x80) {
-                utf8_text[utf8_len++] = (char)ch;
-            } else if (ch < 0x800) {
-                utf8_text[utf8_len++] = (char)(0xC0 | (ch >> 6));
-                utf8_text[utf8_len++] = (char)(0x80 | (ch & 0x3F));
-            } else if (ch < 0x10000) {
-                utf8_text[utf8_len++] = (char)(0xE0 | (ch >> 12));
-                utf8_text[utf8_len++] = (char)(0x80 | ((ch >> 6) & 0x3F));
-                utf8_text[utf8_len++] = (char)(0x80 | (ch & 0x3F));
-            } else {
-                utf8_text[utf8_len++] = (char)(0xF0 | (ch >> 18));
-                utf8_text[utf8_len++] = (char)(0x80 | ((ch >> 12) & 0x3F));
-                utf8_text[utf8_len++] = (char)(0x80 | ((ch >> 6) & 0x3F));
-                utf8_text[utf8_len++] = (char)(0x80 | (ch & 0x3F));
-            }
-        }
-        utf8_text[utf8_len] = '\0';
-
-        // Store in a property (simplified - proper implementation would handle selection requests)
-        XStoreBytes(display, utf8_text, utf8_len);
-
-        // Also try to set the clipboard selection
-        XSetSelectionOwner(display, clipboard, window, CurrentTime);
-        XSetSelectionOwner(display, XA_PRIMARY, window, CurrentTime);
-
-        free(utf8_text);
+    if (g_clipboardText) {
+        u8str_destroy(g_clipboardText);
+        g_clipboardText = nullptr;
     }
 
-    XCloseDisplay(display);
+    bool hasContent = content && u32str_length(content) > 0;
+    if (hasContent) {
+        g_clipboardText = u32str_to_u8str(content);
+    } else {
+        g_clipboardText = u8str_create();
+        if (g_clipboardText) {
+            u8str_reserve(g_clipboardText, 0);
+        }
+    }
+
+    if (!g_clipboardText) {
+        g_clipboardText = u8str_create();
+        if (g_clipboardText) {
+            u8str_reserve(g_clipboardText, 0);
+        }
+    }
+
+    Atom clipboard = XInternAtom(display, "CLIPBOARD", False);
+
+    XSetSelectionOwner(display, clipboard, window, CurrentTime);
+    XSetSelectionOwner(display, XA_PRIMARY, window, CurrentTime);
+    XFlush(display);
 
     if (callback) callback(userData);
 }
 
 void platform_clipboard_paste_text(platform_clipboard_paste_text_callback callback, void* userData) {
-    Display* display = XOpenDisplay(NULL);
-    if (!display) {
+    if (!g_windowData || !g_windowData->display) {
         if (callback) callback(nullptr, userData);
         return;
     }
 
-    // Try to get clipboard contents
-    int nbytes = 0;
-    char* data = XFetchBytes(display, &nbytes);
+    Display* display = g_windowData->display;
+    Window window = g_windowData->window;
 
-    u32_string* result = nullptr;
+    Atom clipboard = XInternAtom(display, "CLIPBOARD", False);
+    Window owner = XGetSelectionOwner(display, clipboard);
 
-    if (data && nbytes > 0) {
-        // Convert UTF-8 to u32_string
-        // Count characters first
-        u32 char_count = 0;
-        for (int i = 0; i < nbytes; ) {
-            unsigned char c = data[i];
-            if (c < 0x80) {
-                char_count++;
-                i++;
-            } else if ((c & 0xE0) == 0xC0) {
-                char_count++;
-                i += 2;
-            } else if ((c & 0xF0) == 0xE0) {
-                char_count++;
-                i += 3;
-            } else if ((c & 0xF8) == 0xF0) {
-                char_count++;
-                i += 4;
-            } else {
-                i++; // Skip invalid byte
-            }
+    if (owner == window) {
+        u32_string* direct = nullptr;
+        if (g_clipboardText) {
+            direct = u8str_to_u32str(g_clipboardText);
+        }
+        if (!direct) {
+            direct = u32str_create();
         }
 
-        // Allocate u32 buffer
-        u32* buffer = (u32*)malloc((char_count + 1) * sizeof(u32));
-        u32 idx = 0;
+        if (callback) callback(direct, userData);
+        if (direct) u32str_destroy(direct);
+        return;
+    }
 
-        // Convert UTF-8 to u32
-        for (int i = 0; i < nbytes && idx < char_count; ) {
-            unsigned char c = data[i];
-            if (c < 0x80) {
-                buffer[idx++] = c;
-                i++;
-            } else if ((c & 0xE0) == 0xC0 && i + 1 < nbytes) {
-                buffer[idx++] = ((c & 0x1F) << 6) | (data[i + 1] & 0x3F);
-                i += 2;
-            } else if ((c & 0xF0) == 0xE0 && i + 2 < nbytes) {
-                buffer[idx++] = ((c & 0x0F) << 12) | ((data[i + 1] & 0x3F) << 6) | (data[i + 2] & 0x3F);
-                i += 3;
-            } else if ((c & 0xF8) == 0xF0 && i + 3 < nbytes) {
-                buffer[idx++] = ((c & 0x07) << 18) | ((data[i + 1] & 0x3F) << 12) |
-                               ((data[i + 2] & 0x3F) << 6) | (data[i + 3] & 0x3F);
-                i += 4;
-            } else {
-                i++; // Skip invalid byte
-            }
+    if (g_clipboardRequest.active) {
+        if (callback) callback(nullptr, userData);
+        return;
+    }
+
+    Atom selection = clipboard;
+    if (owner == None) {
+        Window primaryOwner = XGetSelectionOwner(display, XA_PRIMARY);
+        if (primaryOwner == None) {
+            if (callback) callback(nullptr, userData);
+            return;
         }
-        buffer[idx] = 0;
-
-        result = u32str_init(buffer);
-        free(buffer);
-        XFree(data);
+        selection = XA_PRIMARY;
     }
 
-    XCloseDisplay(display);
+    Atom utf8 = XInternAtom(display, "UTF8_STRING", False);
+    Atom property = XInternAtom(display, "CARROT_CLIP_TEMP", False);
 
-    if (callback) callback(result, userData);
+    g_clipboardRequest.active = true;
+    g_clipboardRequest.triedStringFallback = false;
+    g_clipboardRequest.callback = callback;
+    g_clipboardRequest.userData = userData;
+    g_clipboardRequest.selection = selection;
+    g_clipboardRequest.target = utf8;
+    g_clipboardRequest.property = property;
 
-    // Clean up the u32_string if it was created
-    if (result) {
-        u32str_destroy(result);
-    }
+    XConvertSelection(display, selection, utf8, property, window, CurrentTime);
+    XFlush(display);
 }
 
 

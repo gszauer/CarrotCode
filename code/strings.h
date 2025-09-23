@@ -75,8 +75,11 @@ u8_string* u8str_create(); // Empty string
 u8_string* u8str_init(u8* data); // Expected data to be null terminated
 void u8str_destroy(u8_string* str);
 
+u8* u8str_getBuffer(u8_string* target);
 u8 u8str_get(u8_string* target, u32 index);
 void u8str_set(u8_string* target, u32 index, u8 value);
+
+u32 u8str_size_bytes(u8_string* target);
 
 char u8str_getChar(u8_string* target, u32 index);
 void u8str_setChar(u8_string* target, u32 index, char value);

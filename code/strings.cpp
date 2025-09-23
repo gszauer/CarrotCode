@@ -372,6 +372,13 @@ u32* u32str_getBuffer(u32_string* target) {
     return 0;
 }
 
+u8* u8str_getBuffer(u8_string* target) {
+    if (target) {
+        return target->buffer;
+    }
+    return 0;
+}
+
 i32 u32str_compare(u32_string* a, u32_string* b) {
     if (!a && !b) return 0;
     if (!a) return -1;
@@ -782,6 +789,11 @@ u8 u8str_get(u8_string* target, u32 index) {
         pos += bytes_read;
     }
     return target->buffer[pos];
+}
+
+u32 u8str_size_bytes(u8_string* target) {
+    if (!target) return 0;
+    return target->sizeBytes;
 }
 
 void u8str_set(u8_string* target, u32 index, u8 value) {
