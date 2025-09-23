@@ -64,6 +64,68 @@ static void CreateNewDocument(UserData* user) {
     AddDocumentView(user, doc, nullptr);
 }
 
+static void OpenAboutDocument(UserData* user) {
+    if (!user) return;
+
+    static const char aboutText[] = R"ABOUT(Carrot Code is a minimal text editor with syntax highlight support, inspired by lite (https://github.com/rxi/lite).
+
+V1 (https://github.com/gszauer/CarrotCode/tree/V1) of carrot code focused on full unicode rendering, in contrast V2 (https://github.com/gszauer/CarrotCode/tree/V2) embeds font 8x16 (https://github.com/hubenchang0515/font8x16/tree/master) and only displays ascii characters. 
+
+Carrot Code V2 uses a software renderer, which updates it's internal rendering in a batch mode. You can toggle the visualizer in the debug menu.
+
+By Gabor https://gabormakesgames.com/ 
+
+MIT License
+
+Copyright (c) 2025 Gabor Szauer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.)ABOUT";
+
+    size_t len = strlen(aboutText);
+    u32* buffer = (u32*)malloc((len + 1) * sizeof(u32));
+    if (!buffer) {
+        return;
+    }
+
+    for (size_t i = 0; i < len; ++i) {
+        buffer[i] = (unsigned char)aboutText[i];
+    }
+    buffer[len] = 0;
+
+    u32_string* aboutStr = u32str_init(buffer);
+    free(buffer);
+
+    if (!aboutStr) {
+        return;
+    }
+
+    document* doc = doc_from_str32(aboutStr, 100);
+    u32str_destroy(aboutStr);
+
+    if (!doc) {
+        return;
+    }
+
+    doc_set_modified(doc, false);
+    AddDocumentView(user, doc, nullptr);
+}
+
 static bool ConvertDocumentToUtf8(document* doc, unsigned char** outBuffer, u32* outLength) {
     if (!doc || !outBuffer || !outLength) return false;
 
@@ -1248,7 +1310,10 @@ canvas* Render(UserData* user) {
             user->menu_index = -1;
 
             // Handle Help menu items
-            if (clickedItem == 1) {  // Github
+            if (clickedItem == 0) {
+                OpenAboutDocument(user);
+            }
+            else if (clickedItem == 1) {  // Github
                 platform_launch_browser("https://github.com/gszauer/CarrotCode");
             } else if (clickedItem == 2) {
                 if (user->tile_debug_enabled) {
