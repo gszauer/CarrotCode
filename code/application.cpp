@@ -1341,7 +1341,7 @@ canvas* Render(UserData* user) {
     if (canvasWidth > 360) {
         // Draw separator area with spacing on both sides
         // Total separator area is 20px (5px margin + 10px separator + 5px margin)
-        canvas_draw_rect(user->cnvs, 360, 0, 20, 50, 0x33, 0x33, 0x33);  // Same darker color as header
+        canvas_draw_rect(user->cnvs, 360, 0, 20, 50, 0x24, 0x24, 0x24);  // Match menu/tab header tone
 
         // Draw three vertical lines in the separator area (centered)
         canvas_draw_rect(user->cnvs, 366, 15, 1, 20, 0x52, 0x52, 0x52);  // Line 1
@@ -1349,7 +1349,7 @@ canvas* Render(UserData* user) {
         canvas_draw_rect(user->cnvs, 372, 15, 1, 20, 0x52, 0x52, 0x52);  // Line 3
 
         // Draw tab bar background (starts at 380 with proper spacing)
-        canvas_draw_rect(user->cnvs, 380, 0, canvasWidth - 380, 50, 0x33, 0x33, 0x33);  // Same darker color
+        canvas_draw_rect(user->cnvs, 380, 0, canvasWidth - 380, 50, 0x24, 0x24, 0x24);  // Match menu/tab header tone
 
         // Draw bottom border for entire header area
         canvas_draw_rect(user->cnvs, 360, 49, canvasWidth - 360, 1, 0x52, 0x52, 0x52);  // BORDER color
@@ -1469,6 +1469,13 @@ canvas* Render(UserData* user) {
             document_view_render(view, user->imgui_context, user->cnvs, user->fnt, true);
         }
     } else {
+        // No document is open: fill the workspace with the same tone as document backgrounds
+        const u32 workspaceY = 51;
+        if (canvasHeight > workspaceY) {
+            canvas_draw_rect(user->cnvs, 0, workspaceY, canvasWidth, canvasHeight - workspaceY,
+                             0x2F, 0x2F, 0x2F);
+        }
+
         // Show drop zone with Spectrum colors
         u32 rect_width = 400;
         u32 rect_height = 60;

@@ -15,6 +15,9 @@ namespace Colors {
     // Menu bar / Tab bar (one step lighter)
     const u8 SURFACE_R = 0x27, SURFACE_G = 0x27, SURFACE_B = 0x27;  // SPECTRUM_DARKEST_GRAY_75
 
+    // Popup menus (darker than document surface so they stand out)
+    const u8 MENU_POPUP_R = 0x24, MENU_POPUP_G = 0x24, MENU_POPUP_B = 0x24;  // Slightly darker than SURFACE
+
     // Document/Editor background (another step lighter)
     const u8 DOCUMENT_R = 0x2F, DOCUMENT_G = 0x2F, DOCUMENT_B = 0x2F;  // SPECTRUM_DARKEST_GRAY_100
 
@@ -923,8 +926,9 @@ void ImGuiBeginTabBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, u32 numTabs, u
         context->mouseInputConsumed = true;
     }
 
-    // Draw tab bar background - slightly darker than menu bar for separation
-    canvas_draw_rect(context->cnvs, x, y, w, h, 0x33, 0x33, 0x33);
+    // Draw tab bar background - reuse the dark menu tone so the header feels cohesive
+    canvas_draw_rect(context->cnvs, x, y, w, h,
+                    Colors::MENU_POPUP_R, Colors::MENU_POPUP_G, Colors::MENU_POPUP_B);
 
     // Set initial clip rectangle for the full tab bar
     // This will be adjusted in ImGuiTab if overflow is detected
@@ -1293,9 +1297,9 @@ void ImGuiBeginMenuBar(ImGui* context, u32 x, u32 y, u32 w, u32 h, i32 activeIte
         context->mouseInputConsumed = true;
     }
 
-    // Draw menu bar background - use darker color to match tab area
+    // Draw menu bar background - keep darker than document content for contrast
     canvas_draw_rect(context->cnvs, x, y, w, h,
-                    0x33, 0x33, 0x33);
+                    Colors::MENU_POPUP_R, Colors::MENU_POPUP_G, Colors::MENU_POPUP_B);
 
     // Draw bottom border
     canvas_draw_rect(context->cnvs, x, y + h - 1, w, 1,
@@ -1454,10 +1458,10 @@ void ImGuiRenderBeginMenu(ImGui* context, u32 x, u32 y, u32 itemCount) {
                     context->popupMenu.width, totalHeight,
                     Colors::SHADOW_R, Colors::SHADOW_G, Colors::SHADOW_B);
 
-    // Draw background - use lighter color (SPECTRUM_DARKEST_GRAY_200) to stand out from document
+    // Draw background - keep popup darker than the document surface for contrast
     canvas_draw_rect(context->cnvs, x, y,
                     context->popupMenu.width, totalHeight,
-                    0x39, 0x39, 0x39);  // SPECTRUM_DARKEST_GRAY_200 - lighter than document
+                    Colors::MENU_POPUP_R, Colors::MENU_POPUP_G, Colors::MENU_POPUP_B);
 }
 
 // Render a single menu item
