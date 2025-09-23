@@ -1237,10 +1237,12 @@ canvas* Render(UserData* user) {
     }
     else if (user->menu_index == 3) {
         menuX = 265;
-        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 2, 220);
+        ImGuiConsumePopupMenuInput(user->imgui_context, menuX, menuY, 4, 220);
 
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 0)) clickedItem = 0;
         if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 1)) clickedItem = 1;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 2)) clickedItem = 2;
+        if (ImGuiProcessMenuItem(user->imgui_context, menuX, menuY, 3)) clickedItem = 3;
 
         if (clickedItem >= 0) {
             user->menu_index = -1;
@@ -1248,6 +1250,16 @@ canvas* Render(UserData* user) {
             // Handle Help menu items
             if (clickedItem == 1) {  // Github
                 platform_launch_browser("https://github.com/gszauer/CarrotCode");
+            } else if (clickedItem == 2) {
+                if (user->tile_debug_enabled) {
+                    user->tile_debug_enabled = false;
+                    canvas_set_tile_debug_enabled(user->cnvs, false);
+                }
+            } else if (clickedItem == 3) {
+                if (!user->tile_debug_enabled) {
+                    user->tile_debug_enabled = true;
+                    canvas_set_tile_debug_enabled(user->cnvs, true);
+                }
             }
         }
     }
@@ -1528,9 +1540,15 @@ canvas* Render(UserData* user) {
         ImGuiRenderEndMenu(user->imgui_context);
     }
     else if (user->menu_index == 3) {
-        ImGuiRenderBeginMenu(user->imgui_context, 265, menuY, 2);
+        ImGuiRenderBeginMenu(user->imgui_context, 265, menuY, 4);
         ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 0, "About");
         ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 1, "Github");
+
+        const char* redraw_off = user->tile_debug_enabled ? "Redraw: Off" : "> Redraw: Off";
+        const char* redraw_on  = user->tile_debug_enabled ? "> Redraw: On" : "Redraw: On";
+
+        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 2, redraw_off);
+        ImGuiRenderMenuItem(user->imgui_context, 265, menuY, 3, redraw_on);
         ImGuiRenderEndMenu(user->imgui_context);
     }
     else if (user->menu_index == 4 && !user->views.empty()) {
