@@ -34,6 +34,7 @@ struct UserData {
     u32 context_menu_x;
     u32 context_menu_y;
 
+    bool tile_debug_enabled;
     bool should_quit;
 };
 

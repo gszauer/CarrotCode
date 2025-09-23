@@ -106,4 +106,7 @@ u32 canvas_get_width(canvas* cnvs);
 // Returns 0 if canvas is NULL
 u32 canvas_get_height(canvas* cnvs);
 
+// Enables or disables a debug overlay showing recently redrawn tiles
+void canvas_set_tile_debug_enabled(canvas* cnvs, bool enabled);
+
 #endif

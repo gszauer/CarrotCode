@@ -376,6 +376,10 @@ u32 canvas_get_height(canvas* cnvs) {
     return cnvs->height;
 }
 
+void canvas_set_tile_debug_enabled(canvas* cnvs, bool /*enabled*/) {
+    (void)cnvs;
+}
+
 #if 0
 canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     if (!doc || !fnt) {

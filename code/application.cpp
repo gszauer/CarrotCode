@@ -217,6 +217,11 @@ void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey ke
                     CreateNewDocument(user);
                     handled = true;
                     break;
+                case PlatformKey::KeyQ:
+                    user->tile_debug_enabled = !user->tile_debug_enabled;
+                    canvas_set_tile_debug_enabled(user->cnvs, user->tile_debug_enabled);
+                    handled = true;
+                    break;
                 default: {
                     document_view* view = GetActiveView(user);
                     document* doc = GetActiveDocument(user);
@@ -716,8 +721,11 @@ UserData* Initialize(u32 desiredWidth, u32 desiredHeight) {
     user->show_context_menu = false;
     user->context_menu_x = 0;
     user->context_menu_y = 0;
+    user->tile_debug_enabled = false;
     user->should_quit = false;
     user->menu_index = -1;
+
+    canvas_set_tile_debug_enabled(user->cnvs, user->tile_debug_enabled);
 
     return user;
 }
