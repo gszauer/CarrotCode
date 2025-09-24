@@ -786,15 +786,33 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformTriggerFileOpen() {
 // Entry point
 // -------------------------------------------------------------------------------------------------
 
-int main() {
-    js_get_window_size(&g_windowWidth, &g_windowHeight);
-    g_devicePixelRatio = js_get_device_pixel_ratio();
+static void DeferredInit(void* userData) {
+    (void)userData;
+
+    // Initialize the application
     g_user = Initialize(static_cast<u32>(g_windowWidth), static_cast<u32>(g_windowHeight));
     if (!g_user) {
-        return 1;
+        return;
     }
 
     EnsureCanvasMatchesWindow();
+    g_lastTimeMs = emscripten_get_now();
+
+    // Start the main loop
+    emscripten_set_main_loop(MainLoop, 0, false);
+
+    // Set up event callbacks
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, KeyboardCallback);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, KeyboardCallback);
+    emscripten_set_mousedown_callback("#carrot-canvas", nullptr, true, MouseCallback);
+    emscripten_set_mouseup_callback("#carrot-canvas", nullptr, true, MouseCallback);
+    emscripten_set_mousemove_callback("#carrot-canvas", nullptr, true, MouseCallback);
+    emscripten_set_wheel_callback("#carrot-canvas", nullptr, true, WheelCallback);
+}
+
+int main() {
+    js_get_window_size(&g_windowWidth, &g_windowHeight);
+    g_devicePixelRatio = js_get_device_pixel_ratio();
 
     EM_ASM({
         Module._carrotMain = Module._main;
@@ -804,15 +822,8 @@ int main() {
         }
     });
 
-    g_lastTimeMs = emscripten_get_now();
+    // Defer initialization to next tick to prevent timeout warnings
+    emscripten_async_call(DeferredInit, nullptr, 0);
 
-    emscripten_set_main_loop(MainLoop, 0, false);
-
-    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, KeyboardCallback);
-    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, KeyboardCallback);
-    emscripten_set_mousedown_callback("#carrot-canvas", nullptr, true, MouseCallback);
-    emscripten_set_mouseup_callback("#carrot-canvas", nullptr, true, MouseCallback);
-    emscripten_set_mousemove_callback("#carrot-canvas", nullptr, true, MouseCallback);
-    emscripten_set_wheel_callback("#carrot-canvas", nullptr, true, WheelCallback);
     return 0;
 }
