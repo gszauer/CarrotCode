@@ -262,6 +262,7 @@ void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey ke
     if (!user) return;
 
     bool handled = false;
+    bool allowDocumentInput = !ImGuiIsDisabled(user->imgui_context);
 
     if (isDown) {
         if (key == PlatformKey::Escape && !ctrlDown && !altDown) {
@@ -287,7 +288,7 @@ void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey ke
                 default: {
                     document_view* view = GetActiveView(user);
                     document* doc = GetActiveDocument(user);
-                    if (view && doc) {
+                    if (allowDocumentInput && view && doc) {
                         switch (key) {
                             case PlatformKey::KeyX:
                                 ApplicationCut(user);
@@ -347,7 +348,7 @@ void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey ke
                            isDown, altDown, ctrlDown, shiftDown);
 
         document_view* view = GetActiveView(user);
-        if (view) {
+        if (view && allowDocumentInput) {
             document_view_keyboard_input(view, characterCode, key,
                                          isDown, altDown, ctrlDown, shiftDown);
         }
@@ -356,6 +357,8 @@ void ApplicationHandleKeyboard(UserData* user, u32 characterCode, PlatformKey ke
 
 void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt) {
     if (!user) return;
+
+    bool allowDocumentInput = !ImGuiIsDisabled(user->imgui_context);
 
     ImGuiMouseInput(user->imgui_context, evt.x, evt.y, evt.normX, evt.normY,
                     evt.scrollDelta, evt.leftDown, evt.middleDown, evt.rightDown);
@@ -369,7 +372,7 @@ void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt) {
         evt.button == ApplicationMouseButton::Right) {
         bool hasDocument = !user->views.empty();
         bool inDocumentArea = evt.y >= 51;
-        if (hasDocument && inDocumentArea && !overTabBar &&
+        if (allowDocumentInput && hasDocument && inDocumentArea && !overTabBar &&
             !ImGuiIsMouseConsumed(user->imgui_context)) {
             user->show_context_menu = true;
             user->context_menu_x = evt.x;
@@ -379,7 +382,7 @@ void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt) {
         }
     }
 
-    if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar) {
+    if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar && allowDocumentInput) {
         document_view* view = GetActiveView(user);
         if (view) {
             if (evt.type == ApplicationMouseEventType::Move) {

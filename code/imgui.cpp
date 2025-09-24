@@ -263,6 +263,10 @@ void ImGuiPopDisabled(ImGui* context) {
     }
 }
 
+bool ImGuiIsDisabled(ImGui* context) {
+    return context ? (context->disabledDepth > 0) : true;
+}
+
 bool ImGuiIsMouseConsumed(ImGui* context) {
     return context->mouseInputConsumed;
 }

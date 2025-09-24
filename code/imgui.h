@@ -28,6 +28,7 @@ font* ImGuiGetFont(ImGui* context);
 void ImGuiPushDisabled(ImGui* context);
 void ImGuiPopDisabled(ImGui* context);
 bool ImGuiIsMouseConsumed(ImGui* context);
+bool ImGuiIsDisabled(ImGui* context);
 void ImGuiGetMousePosition(ImGui* context, u32* outX, u32* outY);
 bool ImGuiMouseLeftPressed(ImGui* context);
 bool ImGuiMouseLeftReleased(ImGui* context);
