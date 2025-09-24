@@ -294,8 +294,8 @@ var Module = Module || {};
 
     pasteSubmit.addEventListener('click', function() {
         const text = pasteText.value || '';
-        const payload = fromJsString(text);
         runWhenRuntimeReady(() => {
+            const payload = fromJsString(text);
             callExport('_CarrotPlatformOnPasteResult', [payload.ptr, payload.len]);
             if (payload.ptr) {
                 Module._free(payload.ptr);
@@ -322,8 +322,8 @@ var Module = Module || {};
     saveConfirm.addEventListener('click', function() {
         const name = saveNameInput.value.trim() || 'document.txt';
         triggerDownload(pendingSaveBytes, name);
-        const payload = fromJsString(name);
         runWhenRuntimeReady(() => {
+            const payload = fromJsString(name);
             callExport('_CarrotPlatformOnSaveResult', [payload.ptr, payload.len]);
             if (payload.ptr) {
                 Module._free(payload.ptr);
@@ -350,15 +350,15 @@ var Module = Module || {};
         reader.onload = function(loadEvent) {
             const arrayBuffer = loadEvent.target.result;
             const dataBytes = new Uint8Array(arrayBuffer);
-            const dataPtr = Module._malloc(dataBytes.length || 1);
-            if (dataBytes.length > 0) {
-                const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
-                if (heapU8) {
-                    heapU8.set(dataBytes, dataPtr);
-                }
-            }
-            const namePayload = fromJsString(file.name || '');
             runWhenRuntimeReady(() => {
+                const dataPtr = Module._malloc(dataBytes.length || 1);
+                if (dataBytes.length > 0) {
+                    const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+                    if (heapU8) {
+                        heapU8.set(dataBytes, dataPtr);
+                    }
+                }
+                const namePayload = fromJsString(file.name || '');
                 callExport('_CarrotPlatformOnOpenFileResult', [namePayload.ptr, namePayload.len, dataPtr, dataBytes.length]);
                 if (namePayload.ptr) {
                     Module._free(namePayload.ptr);

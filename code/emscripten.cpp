@@ -444,15 +444,24 @@ void platform_clipboard_copy_text(u32_string* content, platform_clipboard_copy_t
     g_clipboardCopy.callback = callback;
     g_clipboardCopy.userData = userData;
 
+    // Clear mouse button state when showing modal to prevent stuck selection
+    g_mouseLeft = false;
+    g_mouseMiddle = false;
+    g_mouseRight = false;
+
     std::string utf8 = U32StringToUtf8(content);
-    EM_ASM({ console.log('[Native] platform_clipboard_copy_text start'); });
     js_platform_show_copy_modal(utf8.c_str(), static_cast<int>(utf8.size()));
 }
 
 void platform_clipboard_paste_text(platform_clipboard_paste_text_callback callback, void* userData) {
     g_clipboardPaste.callback = callback;
     g_clipboardPaste.userData = userData;
-    EM_ASM({ console.log('[Native] platform_clipboard_paste_text start'); });
+
+    // Clear mouse button state when showing modal to prevent stuck selection
+    g_mouseLeft = false;
+    g_mouseMiddle = false;
+    g_mouseRight = false;
+
     js_platform_show_paste_modal();
 }
 
@@ -527,6 +536,14 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnCopyFinished() {
         g_clipboardCopy.userData = nullptr;
         cb(data);
     }
+
+    // Send a synthetic mouse release event to clear any stuck selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnPasteResult(const char* textPtr, int textLen) {
@@ -539,11 +556,17 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnPasteResult(const char* textPtr, int t
     g_clipboardPaste.callback = nullptr;
     g_clipboardPaste.userData = nullptr;
 
-    EM_ASM({ console.log('[Native] CarrotPlatformOnPasteResult (success)'); });
-
     cb(converted, data);
     if (converted) {
         u32str_destroy(converted);
+    }
+
+    // Send a synthetic mouse release event to clear any stuck selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
     }
 }
 
@@ -553,8 +576,15 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnPasteCanceled() {
     void* data = g_clipboardPaste.userData;
     g_clipboardPaste.callback = nullptr;
     g_clipboardPaste.userData = nullptr;
-    EM_ASM({ console.log('[Native] CarrotPlatformOnPasteCanceled'); });
     cb(nullptr, data);
+
+    // Send a synthetic mouse release event to clear any stuck selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnYesNoResult(int yes) {
