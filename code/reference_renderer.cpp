@@ -380,6 +380,27 @@ void canvas_set_tile_debug_enabled(canvas* cnvs, bool /*enabled*/) {
     (void)cnvs;
 }
 
+const canvas_tile_region* canvas_get_redraw_regions(canvas* cnvs, u32* out_count) {
+    if (!cnvs) {
+        if (out_count) {
+            *out_count = 0;
+        }
+        return nullptr;
+    }
+
+    static canvas_tile_region region;
+    region.x = 0;
+    region.y = 0;
+    region.w = static_cast<int>(cnvs->width);
+    region.h = static_cast<int>(cnvs->height);
+
+    if (out_count) {
+        *out_count = 1;
+    }
+
+    return &region;
+}
+
 #if 0
 canvas* canvas_debug_doc(document* doc, font* fnt, bool highlight_syntax) {
     if (!doc || !fnt) {

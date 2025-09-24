@@ -18,6 +18,8 @@ struct font {
     // Placeholder; font data lives in font8x16.h
 };
 
+static_assert(sizeof(canvas_tile_region) == sizeof(int) * 4, "canvas_tile_region layout must stay packed");
+
 struct Rect {
     int x;
     int y;
@@ -294,6 +296,7 @@ struct canvas {
     bool force_full_redraw;
 
     std::vector<int> last_overlay_cells;
+    std::vector<canvas_tile_region> redraw_regions;
     std::vector<double> cell_last_update_time;
     std::vector<double> cell_flash_start_time;
     double start_time_seconds;
@@ -822,12 +825,18 @@ static void ensure_frame_rendered(canvas* ctx) {
     std::sort(cells_to_redraw.begin(), cells_to_redraw.end());
     cells_to_redraw.erase(std::unique(cells_to_redraw.begin(), cells_to_redraw.end()), cells_to_redraw.end());
 
+    ctx->redraw_regions.clear();
+    ctx->redraw_regions.reserve(cells_to_redraw.size());
+
     std::vector<int> dirty_sorted = dirty_cells;
     std::sort(dirty_sorted.begin(), dirty_sorted.end());
 
     for (int index : cells_to_redraw) {
         Rect region = cell_index_to_rect(ctx, index);
         render_region(ctx, region);
+
+        canvas_tile_region exposed_region{region.x, region.y, region.w, region.h};
+        ctx->redraw_regions.push_back(exposed_region);
 
         bool is_dirty = std::binary_search(dirty_sorted.begin(), dirty_sorted.end(), index);
         if (!is_dirty) {
@@ -876,4 +885,25 @@ void canvas_set_tile_debug_enabled(canvas* ctx, bool enabled) {
         std::fill(ctx->cell_flash_start_time.begin(), ctx->cell_flash_start_time.end(), -1.0);
         ctx->last_overlay_cells.clear();
     }
+}
+
+const canvas_tile_region* canvas_get_redraw_regions(canvas* ctx, u32* out_count) {
+    if (!ctx) {
+        if (out_count) {
+            *out_count = 0;
+        }
+        return nullptr;
+    }
+
+    ensure_frame_rendered(ctx);
+
+    if (out_count) {
+        *out_count = static_cast<u32>(ctx->redraw_regions.size());
+    }
+
+    if (ctx->redraw_regions.empty()) {
+        return nullptr;
+    }
+
+    return ctx->redraw_regions.data();
 }

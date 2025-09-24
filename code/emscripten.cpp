@@ -16,8 +16,8 @@
 // JavaScript bridge helpers
 // -------------------------------------------------------------------------------------------------
 
-EM_JS(void, js_platform_blit, (uintptr_t pixelPtr, int width, int height, float scale), {
-    Module.platform.blitCanvas(pixelPtr, width, height, scale);
+EM_JS(void, js_platform_blit, (uintptr_t pixelPtr, int width, int height, float scale, uintptr_t regionsPtr, int regionCount), {
+    Module.platform.blitCanvas(pixelPtr, width, height, scale, regionsPtr, regionCount);
 });
 
 EM_JS(void, js_platform_show_copy_modal, (const char* textPtr, int textLen), {
@@ -460,8 +460,16 @@ static void MainLoop() {
     float scale = GetZoomScale();
 
     if (pixels && width > 0 && height > 0) {
+        u32 regionCount = 0;
+        const canvas_tile_region* regions = canvas_get_redraw_regions(cnvs, &regionCount);
         uintptr_t pixelPtr = reinterpret_cast<uintptr_t>(pixels);
-        js_platform_blit(pixelPtr, static_cast<int>(width), static_cast<int>(height), scale);
+        uintptr_t regionsPtr = reinterpret_cast<uintptr_t>(regions);
+        js_platform_blit(pixelPtr,
+                         static_cast<int>(width),
+                         static_cast<int>(height),
+                         scale,
+                         regionsPtr,
+                         static_cast<int>(regionCount));
     }
 }
 

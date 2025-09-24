@@ -7,6 +7,13 @@
 struct canvas;
 struct font;
 
+struct canvas_tile_region {
+    int x;
+    int y;
+    int w;
+    int h;
+};
+
 // Canvas creation and destruction
 
 // Creates a new canvas with the specified dimensions
@@ -108,5 +115,9 @@ u32 canvas_get_height(canvas* cnvs);
 
 // Enables or disables a debug overlay showing recently redrawn tiles
 void canvas_set_tile_debug_enabled(canvas* cnvs, bool enabled);
+
+// Returns a pointer to the list of tile-sized regions redrawn during the last render pass
+// The pointer remains valid until the next render
+const canvas_tile_region* canvas_get_redraw_regions(canvas* cnvs, u32* out_count);
 
 #endif

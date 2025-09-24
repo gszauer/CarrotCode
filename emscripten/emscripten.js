@@ -105,6 +105,7 @@ var Module = Module || {};
     const textEncoder = new TextEncoder();
 
     let imageData = null;
+    let imageData32 = null;
     let lastBlitWidth = 0;
     let lastBlitHeight = 0;
     let currentScale = 1.0;
@@ -125,6 +126,7 @@ var Module = Module || {};
     function ensureImageData(width, height) {
         if (!imageData || width !== lastBlitWidth || height !== lastBlitHeight) {
             imageData = ctx.createImageData(width, height);
+            imageData32 = new Uint32Array(imageData.data.buffer);
             lastBlitWidth = width;
             lastBlitHeight = height;
         }
@@ -160,6 +162,7 @@ var Module = Module || {};
             canvas.width = width;
             canvas.height = height;
             imageData = null;
+            imageData32 = null;
         }
         const dpr = window.devicePixelRatio || 1;
         canvas.style.width = (width * currentScale / dpr) + 'px';
@@ -210,29 +213,85 @@ var Module = Module || {};
                 shutdownDiv.classList.remove('hidden');
             }
         },
-        blitCanvas: function(ptr, width, height, scale) {
+        blitCanvas: function(ptr, width, height, scale, regionsPtr, regionCount) {
             applyCanvasSizing(width, height, scale);
 
-            const view = (Module.HEAPU32 && Module.HEAPU32.byteLength)
+            const pixelHeap = (Module.HEAPU32 && Module.HEAPU32.byteLength)
                 ? Module.HEAPU32
                 : (typeof HEAPU32 !== 'undefined' && HEAPU32 && HEAPU32.byteLength)
                     ? HEAPU32
                     : null;
-            if (!ptr || !width || !height || !view) {
+            const regionHeap = (Module.HEAP32 && Module.HEAP32.byteLength)
+                ? Module.HEAP32
+                : (typeof HEAP32 !== 'undefined' && HEAP32 && HEAP32.byteLength)
+                    ? HEAP32
+                    : null;
+
+            if (!ptr || !width || !height || !pixelHeap) {
                 return;
             }
 
+            const pixelCount = width * height;
+            const start = ptr >>> 2;
+            const src = pixelHeap.subarray(start, start + pixelCount);
             const image = ensureImageData(width, height);
-            const src = view.subarray(ptr >>> 2, (ptr >>> 2) + width * height);
-            const dst = image.data;
+            if (!image || src.length !== pixelCount) {
+                return;
+            }
 
-            for (let i = 0; i < src.length; i++) {
-                const pixel = src[i];
-                const idx = i << 2;
-                dst[idx]     = pixel & 0xFF;        // R
-                dst[idx + 1] = (pixel >>> 8) & 0xFF; // G
-                dst[idx + 2] = (pixel >>> 16) & 0xFF; // B
-                dst[idx + 3] = (pixel >>> 24) & 0xFF; // A
+            if (!imageData32 || imageData32.length !== pixelCount) {
+                imageData32 = new Uint32Array(image.data.buffer);
+            }
+            const dst32 = imageData32;
+
+            const shouldCopyAll = !regionsPtr || regionCount <= 0 || !regionHeap;
+
+            if (shouldCopyAll) {
+                dst32.set(src);
+            } else {
+                const base = regionsPtr >>> 2;
+                for (let i = 0; i < regionCount; i++) {
+                    const offset = base + (i * 4);
+                    let x = regionHeap[offset];
+                    let y = regionHeap[offset + 1];
+                    let w = regionHeap[offset + 2];
+                    let h = regionHeap[offset + 3];
+
+                    if (w <= 0 || h <= 0) {
+                        continue;
+                    }
+
+                    if (x < 0) {
+                        w += x;
+                        x = 0;
+                    }
+                    if (y < 0) {
+                        h += y;
+                        y = 0;
+                    }
+                    if (x >= width || y >= height) {
+                        continue;
+                    }
+                    if (x + w > width) {
+                        w = width - x;
+                    }
+                    if (y + h > height) {
+                        h = height - y;
+                    }
+                    if (w <= 0 || h <= 0) {
+                        continue;
+                    }
+
+                    let srcRow = (y * width) + x;
+                    let dstRow = srcRow;
+                    for (let row = 0; row < h; row++) {
+                        const srcStart = srcRow;
+                        const srcEnd = srcStart + w;
+                        dst32.set(src.subarray(srcStart, srcEnd), dstRow);
+                        srcRow += width;
+                        dstRow += width;
+                    }
+                }
             }
 
             ctx.putImageData(image, 0, 0);
