@@ -1,0 +1,394 @@
+var Module = Module || {};
+
+(function() {
+    let runtimeReady = false;
+    const runtimeQueue = [];
+
+    function runWhenRuntimeReady(callback) {
+        if (runtimeReady) {
+            callback();
+        } else {
+            runtimeQueue.push(callback);
+        }
+    }
+
+    const previousOnRuntimeInitialized = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function() {
+        runtimeReady = true;
+        while (runtimeQueue.length) {
+            const fn = runtimeQueue.shift();
+            try {
+                fn();
+            } catch (err) {
+                console.error('Runtime callback error:', err);
+            }
+        }
+        if (typeof previousOnRuntimeInitialized === 'function') {
+            previousOnRuntimeInitialized();
+        }
+    };
+
+    Module.runWhenRuntimeReady = runWhenRuntimeReady;
+
+    function waitForHeapReady(resolve) {
+        if (Module.HEAPU32 && Module.HEAPU32.byteLength) {
+            resolve(true);
+            return;
+        }
+        Module.runWhenRuntimeReady(() => {
+            const check = () => {
+                if (Module.HEAPU32 && Module.HEAPU32.byteLength) {
+                    resolve(true);
+                } else {
+                    requestAnimationFrame(check);
+                }
+            };
+            check();
+        });
+    }
+
+    function notifyDevicePixelRatio() {
+        const dpr = window.devicePixelRatio || 1;
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformSetDevicePixelRatio', [dpr]));
+        return dpr;
+    }
+
+    const canvas = document.getElementById('carrot-canvas');
+    const copyModal = document.getElementById('copy-modal');
+    const copyText = document.getElementById('copy-modal-text');
+    const copyButton = document.getElementById('copy-modal-copy');
+    const copyClose = document.getElementById('copy-modal-close');
+
+    const pasteModal = document.getElementById('paste-modal');
+    const pasteText = document.getElementById('paste-modal-text');
+    const pasteSubmit = document.getElementById('paste-modal-submit');
+    const pasteCancel = document.getElementById('paste-modal-cancel');
+
+    const yesNoModal = document.getElementById('yesno-modal');
+    const yesNoMessage = document.getElementById('yesno-modal-message');
+    const yesButton = document.getElementById('yesno-modal-yes');
+    const noButton = document.getElementById('yesno-modal-no');
+
+    const saveModal = document.getElementById('save-modal');
+    const saveNameInput = document.getElementById('save-modal-name');
+    const saveConfirm = document.getElementById('save-modal-save');
+    const saveCancel = document.getElementById('save-modal-cancel');
+
+    const fileInput = document.getElementById('file-input');
+
+    const textDecoder = new TextDecoder('utf-8');
+    const textEncoder = new TextEncoder();
+
+    let imageData = null;
+    let lastBlitWidth = 0;
+    let lastBlitHeight = 0;
+    let currentScale = 1.0;
+    let pendingSaveBytes = null;
+
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+    function hideModal(element) {
+        element.classList.add('hidden');
+        // Return focus to canvas so keyboard shortcuts continue working
+        queueMicrotask(() => canvas.focus());
+    }
+
+    function showModal(element) {
+        element.classList.remove('hidden');
+    }
+
+    function ensureImageData(width, height) {
+        if (!imageData || width !== lastBlitWidth || height !== lastBlitHeight) {
+            imageData = ctx.createImageData(width, height);
+            lastBlitWidth = width;
+            lastBlitHeight = height;
+        }
+        return imageData;
+    }
+
+    function toJsString(ptr, len) {
+        if (!ptr || !len) return '';
+        const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+        if (!heapU8) return '';
+        const bytes = heapU8.subarray(ptr, ptr + len);
+        return textDecoder.decode(bytes);
+    }
+
+    function fromJsString(str) {
+        if (!str || str.length === 0) {
+            return { ptr: 0, len: 0 };
+        }
+        const bytes = textEncoder.encode(str);
+        const buffer = Module._malloc(bytes.length);
+        const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+        if (heapU8) {
+            heapU8.set(bytes, buffer);
+        } else {
+            console.warn('HEAPU8 unavailable while copying string payload.');
+        }
+        return { ptr: buffer, len: bytes.length };
+    }
+
+    function applyCanvasSizing(width, height, scale) {
+        currentScale = scale || 1.0;
+        if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+            imageData = null;
+        }
+        const dpr = window.devicePixelRatio || 1;
+        canvas.style.width = (width * currentScale / dpr) + 'px';
+        canvas.style.height = (height * currentScale / dpr) + 'px';
+    }
+
+    function triggerDownload(bytes, suggestedName) {
+        if (!bytes) return;
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = suggestedName || 'carrotcode.txt';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+    }
+
+    Module.preRun = Module.preRun || [];
+    Module.postRun = Module.postRun || [];
+    Module.print = Module.print || function() {
+        console.log.apply(console, arguments);
+    };
+    Module.printErr = Module.printErr || function() {
+        console.error.apply(console, arguments);
+    };
+    Module.canvas = canvas;
+
+    function callExport(name, args) {
+        const fn = Module[name];
+        if (typeof fn === 'function') {
+            return fn.apply(Module, args || []);
+        }
+        console.warn('Tried to invoke missing export', name);
+        return undefined;
+    }
+
+    Module.platform = {
+        applyCanvasSizing,
+        blitCanvas: function(ptr, width, height, scale) {
+            applyCanvasSizing(width, height, scale);
+
+            const view = (Module.HEAPU32 && Module.HEAPU32.byteLength)
+                ? Module.HEAPU32
+                : (typeof HEAPU32 !== 'undefined' && HEAPU32 && HEAPU32.byteLength)
+                    ? HEAPU32
+                    : null;
+            if (!ptr || !width || !height || !view) {
+                return;
+            }
+
+            const image = ensureImageData(width, height);
+            const src = view.subarray(ptr >>> 2, (ptr >>> 2) + width * height);
+            const dst = image.data;
+
+            for (let i = 0; i < src.length; i++) {
+                const pixel = src[i];
+                const idx = i << 2;
+                dst[idx]     = pixel & 0xFF;        // R
+                dst[idx + 1] = (pixel >>> 8) & 0xFF; // G
+                dst[idx + 2] = (pixel >>> 16) & 0xFF; // B
+                dst[idx + 3] = (pixel >>> 24) & 0xFF; // A
+            }
+
+            ctx.putImageData(image, 0, 0);
+        },
+        showCopyModal: function(textPtr, textLen) {
+            const text = toJsString(textPtr, textLen);
+            copyText.value = text;
+            showModal(copyModal);
+            copyText.focus();
+            copyText.select();
+        },
+        showPasteModal: function() {
+            pasteText.value = '';
+            showModal(pasteModal);
+            pasteText.focus();
+            pasteText.select();
+        },
+        showYesNoModal: function(messagePtr, messageLen) {
+            yesNoMessage.textContent = toJsString(messagePtr, messageLen);
+            showModal(yesNoModal);
+            yesButton.focus();
+        },
+        showSaveModal: function(defaultNamePtr, defaultNameLen, dataPtr, dataLen) {
+            const defaultName = toJsString(defaultNamePtr, defaultNameLen) || 'document.txt';
+            saveNameInput.value = defaultName;
+            const heapU8Save = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+            pendingSaveBytes = (dataLen && heapU8Save) ? heapU8Save.slice(dataPtr, dataPtr + dataLen) : new Uint8Array();
+            showModal(saveModal);
+            saveNameInput.focus();
+            saveNameInput.select();
+        },
+        beginOpenFile: function() {
+            fileInput.value = '';
+            fileInput.click();
+        },
+        downloadFile: function(namePtr, nameLen, dataPtr, dataLen) {
+            const name = toJsString(namePtr, nameLen) || 'document.txt';
+            const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+            const bytes = (dataLen && heapU8) ? heapU8.slice(dataPtr, dataPtr + dataLen) : new Uint8Array();
+            triggerDownload(bytes, name);
+        },
+        launchUrl: function(urlPtr, urlLen) {
+            const url = toJsString(urlPtr, urlLen);
+            if (url) {
+                window.open(url, '_blank', 'noopener');
+            }
+        },
+        getWindowSize: function() {
+            return [window.innerWidth || canvas.clientWidth || 1600,
+                    window.innerHeight || canvas.clientHeight || 1200];
+        }
+    };
+
+    notifyDevicePixelRatio();
+
+    copyButton.addEventListener('click', function() {
+        const text = copyText.value;
+        navigator.clipboard.writeText(text).catch(function() {
+            // Fallback: do nothing, user can still copy manually
+        });
+        hideModal(copyModal);
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnCopyFinished'));
+    });
+
+    copyClose.addEventListener('click', function() {
+        hideModal(copyModal);
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnCopyFinished'));
+    });
+
+    pasteSubmit.addEventListener('click', function() {
+        const text = pasteText.value || '';
+        const payload = fromJsString(text);
+        runWhenRuntimeReady(() => {
+            callExport('_CarrotPlatformOnPasteResult', [payload.ptr, payload.len]);
+            if (payload.ptr) {
+                Module._free(payload.ptr);
+            }
+        });
+        hideModal(pasteModal);
+    });
+
+    pasteCancel.addEventListener('click', function() {
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnPasteCanceled'));
+        hideModal(pasteModal);
+    });
+
+    yesButton.addEventListener('click', function() {
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnYesNoResult', [1]));
+        hideModal(yesNoModal);
+    });
+
+    noButton.addEventListener('click', function() {
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnYesNoResult', [0]));
+        hideModal(yesNoModal);
+    });
+
+    saveConfirm.addEventListener('click', function() {
+        const name = saveNameInput.value.trim() || 'document.txt';
+        triggerDownload(pendingSaveBytes, name);
+        const payload = fromJsString(name);
+        runWhenRuntimeReady(() => {
+            callExport('_CarrotPlatformOnSaveResult', [payload.ptr, payload.len]);
+            if (payload.ptr) {
+                Module._free(payload.ptr);
+            }
+        });
+        pendingSaveBytes = null;
+        hideModal(saveModal);
+    });
+
+    saveCancel.addEventListener('click', function() {
+        pendingSaveBytes = null;
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnSaveCanceled'));
+        hideModal(saveModal);
+    });
+
+    fileInput.addEventListener('change', function(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+            runWhenRuntimeReady(() => callExport('_CarrotPlatformOnOpenFileCanceled'));
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(loadEvent) {
+            const arrayBuffer = loadEvent.target.result;
+            const dataBytes = new Uint8Array(arrayBuffer);
+            const dataPtr = Module._malloc(dataBytes.length || 1);
+            if (dataBytes.length > 0) {
+                const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+                if (heapU8) {
+                    heapU8.set(dataBytes, dataPtr);
+                }
+            }
+            const namePayload = fromJsString(file.name || '');
+            runWhenRuntimeReady(() => {
+                callExport('_CarrotPlatformOnOpenFileResult', [namePayload.ptr, namePayload.len, dataPtr, dataBytes.length]);
+                if (namePayload.ptr) {
+                    Module._free(namePayload.ptr);
+                }
+                if (dataPtr) {
+                    Module._free(dataPtr);
+                }
+            });
+        };
+        reader.onerror = function() {
+            runWhenRuntimeReady(() => callExport('_CarrotPlatformOnOpenFileCanceled'));
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    if (fileInput) {
+        fileInput.addEventListener('cancel', function() {
+            runWhenRuntimeReady(() => callExport('_CarrotPlatformOnOpenFileCanceled'));
+        });
+    }
+
+    window.addEventListener('resize', function() {
+        notifyDevicePixelRatio();
+        const [width, height] = Module.platform.getWindowSize();
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnWindowResized', [width, height]));
+    });
+
+    canvas.addEventListener('click', function() {
+        canvas.focus();
+    });
+
+    canvas.addEventListener('contextmenu', function(event) {
+        event.preventDefault();
+    });
+
+    if (window.matchMedia) {
+        const ratios = [0.75, 1, 1.25, 1.5, 2, 3, 4];
+        ratios.forEach((ratio) => {
+            const query = window.matchMedia(`(resolution: ${ratio}dppx)`);
+            const handler = () => notifyDevicePixelRatio();
+            if (query) {
+                if (typeof query.addEventListener === 'function') {
+                    query.addEventListener('change', handler);
+                } else if (typeof query.addListener === 'function') {
+                    query.addListener(handler);
+                }
+            }
+        });
+    }
+
+    // Ensure initial focus so keyboard works out of the gate
+    window.addEventListener('load', function() {
+        canvas.focus();
+        notifyDevicePixelRatio();
+        const [width, height] = Module.platform.getWindowSize();
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnWindowResized', [width, height]));
+    });
+})();
