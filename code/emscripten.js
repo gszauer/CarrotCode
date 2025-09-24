@@ -7,27 +7,20 @@ var Module = Module || {};
     function runWhenRuntimeReady(callback) {
         // Check if runtime is actually ready
         if (!runtimeReady && (Module.calledRun || typeof Module._CarrotPlatformOnCopyFinished === 'function')) {
-            console.log('[JS] Runtime was ready but flag not set - fixing');
             runtimeReady = true;
             // Also drain any queued items
             drainRuntimeQueue();
         }
 
         if (runtimeReady) {
-            console.log('[JS] runWhenRuntimeReady immediate - executing callback');
             callback();
         } else {
-            console.log('[JS] runWhenRuntimeReady queued');
             runtimeQueue.push(callback);
-            console.log(`[JS] queue size now ${runtimeQueue.length}`);
         }
     }
 
     function drainRuntimeQueue() {
         if (!runtimeReady) return;
-        if (runtimeQueue.length) {
-            console.log(`[JS] draining queued callback count=${runtimeQueue.length}`);
-        }
         while (runtimeQueue.length) {
             const fn = runtimeQueue.shift();
             try {
@@ -43,24 +36,20 @@ var Module = Module || {};
 
     Module.onRuntimeInitialized = function() {
         runtimeReady = true;
-        console.log('[JS] runtime initialized; draining queue');
         drainRuntimeQueue();
         if (typeof previousOnRuntimeInitialized === 'function') {
             previousOnRuntimeInitialized();
         }
         if (typeof Module._carrotMain === 'function') {
-            console.log('[JS] invoking stored main');
             Module._carrotMain();
             Module._carrotMain = undefined;
         }
     };
 
     if (Module.calledRun) {
-        console.log('[JS] Module already ran; draining queue immediately');
         runtimeReady = true;
         drainRuntimeQueue();
         if (typeof Module._carrotMain === 'function') {
-            console.log('[JS] invoking stored main');
             Module._carrotMain();
             Module._carrotMain = undefined;
         }
@@ -239,21 +228,17 @@ var Module = Module || {};
             ctx.putImageData(image, 0, 0);
         },
         showCopyModal: function(textPtr, textLen) {
-            console.log('[JS] showCopyModal called');
             const text = toJsString(textPtr, textLen);
             copyText.value = text;
             showModal(copyModal);
             copyText.focus();
             copyText.select();
-            console.log('[JS] Copy modal is now visible');
         },
         showPasteModal: function() {
-            console.log('[JS] showPasteModal called');
             pasteText.value = '';
             showModal(pasteModal);
             pasteText.focus();
             pasteText.select();
-            console.log('[JS] Paste modal is now visible');
         },
         showYesNoModal: function(messagePtr, messageLen) {
             yesNoMessage.textContent = toJsString(messagePtr, messageLen);
@@ -294,53 +279,33 @@ var Module = Module || {};
     notifyDevicePixelRatio();
 
     copyButton.addEventListener('click', function() {
-        console.log('[JS] copyButton clicked - about to close modal and call C++ callback');
         const text = copyText.value;
         navigator.clipboard.writeText(text).catch(function() {
             // Fallback: do nothing, user can still copy manually
         });
         hideModal(copyModal);
-        console.log('[JS] copyButton - modal hidden, calling _CarrotPlatformOnCopyFinished');
-        runWhenRuntimeReady(() => {
-            console.log('[JS] copyButton - Actually calling _CarrotPlatformOnCopyFinished NOW');
-            callExport('_CarrotPlatformOnCopyFinished');
-            console.log('[JS] copyButton - _CarrotPlatformOnCopyFinished called');
-        });
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnCopyFinished'));
     });
 
     copyClose.addEventListener('click', function() {
-        console.log('[JS] copyClose clicked - about to close modal and call C++ callback');
         hideModal(copyModal);
-        console.log('[JS] copyClose - modal hidden, calling _CarrotPlatformOnCopyFinished');
-        runWhenRuntimeReady(() => {
-            console.log('[JS] copyClose - Actually calling _CarrotPlatformOnCopyFinished NOW');
-            callExport('_CarrotPlatformOnCopyFinished');
-            console.log('[JS] copyClose - _CarrotPlatformOnCopyFinished called');
-        });
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnCopyFinished'));
     });
 
     pasteSubmit.addEventListener('click', function() {
-        console.log('[JS] pasteSubmit clicked - processing paste');
         const text = pasteText.value || '';
         const payload = fromJsString(text);
         runWhenRuntimeReady(() => {
-            console.log('[JS] pasteSubmit - calling _CarrotPlatformOnPasteResult');
             callExport('_CarrotPlatformOnPasteResult', [payload.ptr, payload.len]);
             if (payload.ptr) {
                 Module._free(payload.ptr);
             }
-            console.log('[JS] pasteSubmit - _CarrotPlatformOnPasteResult called');
         });
         hideModal(pasteModal);
     });
 
     pasteCancel.addEventListener('click', function() {
-        console.log('[JS] pasteCancel clicked');
-        runWhenRuntimeReady(() => {
-            console.log('[JS] pasteCancel - calling _CarrotPlatformOnPasteCanceled');
-            callExport('_CarrotPlatformOnPasteCanceled');
-            console.log('[JS] pasteCancel - _CarrotPlatformOnPasteCanceled called');
-        });
+        runWhenRuntimeReady(() => callExport('_CarrotPlatformOnPasteCanceled'));
         hideModal(pasteModal);
     });
 

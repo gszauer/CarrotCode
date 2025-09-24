@@ -509,16 +509,12 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformSetDevicePixelRatio(float dpi) {
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnCopyFinished() {
-    EM_ASM({ console.log('[emscripten.cpp] CarrotPlatformOnCopyFinished called, has callback=' + $0); },
-        g_clipboardCopy.callback ? 1 : 0);
     if (g_clipboardCopy.callback) {
         auto cb = g_clipboardCopy.callback;
         void* data = g_clipboardCopy.userData;
         g_clipboardCopy.callback = nullptr;
         g_clipboardCopy.userData = nullptr;
-        EM_ASM({ console.log('[emscripten.cpp] CarrotPlatformOnCopyFinished - invoking application callback'); });
         cb(data);
-        EM_ASM({ console.log('[emscripten.cpp] CarrotPlatformOnCopyFinished - application callback returned'); });
     }
 }
 

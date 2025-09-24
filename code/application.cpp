@@ -35,8 +35,6 @@ void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, voi
 // Clipboard callback functions
 void clipboard_copy_callback(void* userData) {
     UserData* user = (UserData*)userData;
-    EM_ASM({ console.log('[C++] clipboard_copy_callback: waiting_for_operation=' + $0 + ' -> false, disabled_state_pushed=' + $1); },
-        user->waiting_for_operation ? 1 : 0, user->disabled_state_pushed ? 1 : 0);
     user->waiting_for_operation = false;
     if (user->pending_clipboard_text) {
         u32str_destroy(user->pending_clipboard_text);
@@ -47,8 +45,6 @@ void clipboard_copy_callback(void* userData) {
 
 void clipboard_paste_callback(u32_string* content, void* userData) {
     UserData* user = (UserData*)userData;
-    EM_ASM({ console.log('[C++] clipboard_paste_callback: waiting_for_operation=' + $0 + ' -> false, disabled_state_pushed=' + $1); },
-        user->waiting_for_operation ? 1 : 0, user->disabled_state_pushed ? 1 : 0);
     user->waiting_for_operation = false;
 
     // If we have content and an active document view, insert it
@@ -244,7 +240,6 @@ static void DeleteCurrentLine(document_view* view, document* doc) {
 
 void ApplicationCut(UserData* user) {
     if (!user || user->waiting_for_operation) return;
-    EM_ASM({ console.log('[C++] ApplicationCut: Starting cut operation'); });
 
     document_view* view = GetActiveView(user);
     document* doc = GetActiveDocument(user);
@@ -263,7 +258,6 @@ void ApplicationCut(UserData* user) {
 
 void ApplicationCopy(UserData* user) {
     if (!user || user->waiting_for_operation) return;
-    EM_ASM({ console.log('[C++] ApplicationCopy: Starting copy operation'); });
 
     document* doc = GetActiveDocument(user);
     if (!doc) return;
@@ -272,7 +266,6 @@ void ApplicationCopy(UserData* user) {
     if (!text_to_copy) return;
 
     user->pending_clipboard_text = text_to_copy;
-    EM_ASM({ console.log('[C++] ApplicationCopy: setting waiting_for_operation = true'); });
     user->waiting_for_operation = true;
     user->show_context_menu = false;
     platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
@@ -280,11 +273,9 @@ void ApplicationCopy(UserData* user) {
 
 void ApplicationPaste(UserData* user) {
     if (!user || user->waiting_for_operation) return;
-    EM_ASM({ console.log('[C++] ApplicationPaste: Starting paste operation'); });
 
     if (!GetActiveDocument(user)) return;
 
-    EM_ASM({ console.log('[C++] ApplicationPaste: setting waiting_for_operation = true'); });
     user->waiting_for_operation = true;
     user->show_context_menu = false;
     platform_clipboard_paste_text(clipboard_paste_callback, user);
@@ -907,19 +898,13 @@ canvas* Render(UserData* user) {
 
     // Push disabled state if waiting for async operation and haven't pushed yet
     if (user->waiting_for_operation && !user->disabled_state_pushed) {
-        EM_ASM({ console.log('[C++] Render: PUSHING disabled state (waiting=true, pushed=false)'); });
         ImGuiPushDisabled(user->imgui_context);
         user->disabled_state_pushed = true;
     }
     // Pop disabled state if no longer waiting but state was pushed
     else if (!user->waiting_for_operation && user->disabled_state_pushed) {
-        EM_ASM({ console.log('[C++] Render: POPPING disabled state (waiting=false, pushed=true)'); });
         ImGuiPopDisabled(user->imgui_context);
         user->disabled_state_pushed = false;
-    }
-    else {
-        EM_ASM({ console.log('[C++] Render: No state change (waiting=' + $0 + ', pushed=' + $1 + ', disabled=' + $2 + ')'); },
-            user->waiting_for_operation ? 1 : 0, user->disabled_state_pushed ? 1 : 0, ImGuiIsDisabled(user->imgui_context) ? 1 : 0);
     }
 
     canvas_clear(user->cnvs, 0x1E, 0x1E, 0x1E);  // SPECTRUM_DARKEST_GRAY_50 - Application background
