@@ -22,6 +22,7 @@ u16_string* u8str_to_u16str(u8_string* target);
 // u32_string functions
 u32_string* u32str_create(); // Empty string
 u32_string* u32str_init(u32* data); // Expected data to be null terminated
+u32_string* u32str_init_utf8(u8* utf8_data); // Create from UTF-8 encoded data (null terminated)
 void u32str_destroy(u32_string* str);
 
 u32* u32str_getBuffer(u32_string* target);

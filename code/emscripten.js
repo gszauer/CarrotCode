@@ -426,4 +426,91 @@ var Module = Module || {};
         const [width, height] = Module.platform.getWindowSize();
         runWhenRuntimeReady(() => callExport('_CarrotPlatformOnWindowResized', [width, height]));
     });
+
+    // Drag and drop support
+    let dragCounter = 0;
+
+    function handleDragEnter(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter++;
+        if (dragCounter === 1) {
+            document.body.classList.add('drag-over');
+        }
+    }
+
+    function handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter--;
+        if (dragCounter === 0) {
+            document.body.classList.remove('drag-over');
+        }
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter = 0;
+        document.body.classList.remove('drag-over');
+
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            const file = files[0]; // Only handle first file
+
+            const reader = new FileReader();
+            reader.onload = function(loadEvent) {
+                const arrayBuffer = loadEvent.target.result;
+                const dataBytes = new Uint8Array(arrayBuffer);
+                runWhenRuntimeReady(() => {
+                    // Trigger file open through keyboard shortcut (Ctrl+O)
+                    const keyEvent = {
+                        key: 'o',
+                        code: 'KeyO',
+                        keyCode: 79,
+                        ctrlKey: true,
+                        altKey: false,
+                        shiftKey: false,
+                        metaKey: false
+                    };
+                    callExport('_CarrotPlatformTriggerFileOpen');
+
+                    // Then deliver the file data
+                    setTimeout(() => {
+                        const dataPtr = Module._malloc(dataBytes.length || 1);
+                        if (dataBytes.length > 0) {
+                            const heapU8 = Module.HEAPU8 || (typeof HEAPU8 !== 'undefined' ? HEAPU8 : null);
+                            if (heapU8) {
+                                heapU8.set(dataBytes, dataPtr);
+                            }
+                        }
+                        const namePayload = fromJsString(file.name || '');
+                        callExport('_CarrotPlatformOnOpenFileResult', [namePayload.ptr, namePayload.len, dataPtr, dataBytes.length]);
+                        if (namePayload.ptr) {
+                            Module._free(namePayload.ptr);
+                        }
+                        if (dataPtr) {
+                            Module._free(dataPtr);
+                        }
+                    }, 10);
+                });
+            };
+            reader.onerror = function() {
+                console.error('Failed to read dropped file');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    }
+
+    // Add drag and drop event listeners
+    document.addEventListener('dragenter', handleDragEnter, false);
+    document.addEventListener('dragleave', handleDragLeave, false);
+    document.addEventListener('dragover', handleDragOver, false);
+    document.addEventListener('drop', handleDrop, false);
 })();

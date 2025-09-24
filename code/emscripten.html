@@ -170,6 +170,25 @@
             margin: 0;
             color: #9d9d9d;
         }
+
+        /* Drag and drop visual feedback */
+        body.drag-over::after {
+            content: 'Drop file to open';
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(122, 58, 110, 0.9);
+            color: #f0f0f0;
+            font-size: 2rem;
+            font-weight: 300;
+            z-index: 1500;
+            pointer-events: none;
+            border: 4px dashed rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            margin: 20px;
+        }
     </style>
 </head>
 <body>

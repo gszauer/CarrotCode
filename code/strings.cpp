@@ -212,17 +212,33 @@ u32_string* u32str_create() {
 
 u32_string* u32str_init(u32* data) {
     if (!data) return u32str_create();
-    
+
     u32_string* str = u32str_create();
     u32 len = 0;
     while (data[len] != 0) len++;
-    
+
     u32str_reserve(str, len);
     memcpy(str->buffer, data, len * sizeof(u32));
     str->buffer[len] = 0;
     str->lengthChars = len;
     str->sizeBytes = len * sizeof(u32);
     return str;
+}
+
+u32_string* u32str_init_utf8(u8* utf8_data) {
+    if (!utf8_data) return u32str_create();
+
+    // Create a temporary u8_string from the UTF-8 data
+    u8_string* temp_u8 = u8str_init(utf8_data);
+    if (!temp_u8) return u32str_create();
+
+    // Convert UTF-8 to UTF-32
+    u32_string* result = u8str_to_u32str(temp_u8);
+
+    // Clean up temporary
+    u8str_destroy(temp_u8);
+
+    return result ? result : u32str_create();
 }
 
 void u32str_destroy(u32_string* str) {

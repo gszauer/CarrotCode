@@ -729,6 +729,21 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnWindowResized(int width, int height) {
     RecreateCanvasForWindowSize();
 }
 
+EMSCRIPTEN_KEEPALIVE void CarrotPlatformTriggerFileOpen() {
+    // Simulate Ctrl+O keypress to trigger file open
+    if (!g_user) return;
+
+    EmscriptenKeyboardEvent keyEvent = {};
+    keyEvent.ctrlKey = true;
+    keyEvent.altKey = false;
+    keyEvent.shiftKey = false;
+    keyEvent.keyCode = 79; // 'O'
+    std::strcpy(keyEvent.key, "o");
+    std::strcpy(keyEvent.code, "KeyO");
+
+    ApplicationHandleKeyboard(g_user, 0, PlatformKey::KeyO, 79, true, false, true, false);
+}
+
 }
 
 // ------------------------------------------------------------------------------------------------- 

@@ -756,15 +756,14 @@ void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, voi
         }
         path[path_len] = '\0';
 
-        // Convert file data to u32_string
-        std::vector<u32> u32content;
-        char* file_chars = (char*)fileData;
-        for (u32 i = 0; i < fileBytes; i++) {
-            u32content.push_back((unsigned char)file_chars[i]);
-        }
-        u32content.push_back(0); // null terminator
+        // Convert file data (UTF-8) to u32_string
+        // Make sure the data is null-terminated for u32str_init_utf8
+        u8* utf8_data = (u8*)malloc(fileBytes + 1);
+        memcpy(utf8_data, fileData, fileBytes);
+        utf8_data[fileBytes] = 0; // Null terminate
 
-        u32_string* file_str = u32str_init(u32content.data());
+        u32_string* file_str = u32str_init_utf8(utf8_data);
+        free(utf8_data);
 
         // Create document from the string
         document* doc = doc_from_str32(file_str, 100);
