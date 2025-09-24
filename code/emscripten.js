@@ -6,15 +6,20 @@ var Module = Module || {};
 
     function runWhenRuntimeReady(callback) {
         if (runtimeReady) {
+            console.log('[JS] runWhenRuntimeReady immediate');
             callback();
         } else {
+            console.log('[JS] runWhenRuntimeReady queued');
             runtimeQueue.push(callback);
+            console.log(`[JS] queue size now ${runtimeQueue.length}`);
         }
     }
 
-    const previousOnRuntimeInitialized = Module.onRuntimeInitialized;
-    Module.onRuntimeInitialized = function() {
-        runtimeReady = true;
+    function drainRuntimeQueue() {
+        if (!runtimeReady) return;
+        if (runtimeQueue.length) {
+            console.log(`[JS] draining queued callback count=${runtimeQueue.length}`);
+        }
         while (runtimeQueue.length) {
             const fn = runtimeQueue.shift();
             try {
@@ -23,12 +28,35 @@ var Module = Module || {};
                 console.error('Runtime callback error:', err);
             }
         }
+    }
+
+    const previousOnRuntimeInitialized = Module.onRuntimeInitialized;
+    Module.runWhenRuntimeReady = runWhenRuntimeReady;
+
+    Module.onRuntimeInitialized = function() {
+        runtimeReady = true;
+        console.log('[JS] runtime initialized; draining queue');
+        drainRuntimeQueue();
         if (typeof previousOnRuntimeInitialized === 'function') {
             previousOnRuntimeInitialized();
         }
+        if (typeof Module._carrotMain === 'function') {
+            console.log('[JS] invoking stored main');
+            Module._carrotMain();
+            Module._carrotMain = undefined;
+        }
     };
 
-    Module.runWhenRuntimeReady = runWhenRuntimeReady;
+    if (Module.calledRun) {
+        console.log('[JS] Module already ran; draining queue immediately');
+        runtimeReady = true;
+        drainRuntimeQueue();
+        if (typeof Module._carrotMain === 'function') {
+            console.log('[JS] invoking stored main');
+            Module._carrotMain();
+            Module._carrotMain = undefined;
+        }
+    }
 
     function waitForHeapReady(resolve) {
         if (Module.HEAPU32 && Module.HEAPU32.byteLength) {
@@ -259,11 +287,13 @@ var Module = Module || {};
             // Fallback: do nothing, user can still copy manually
         });
         hideModal(copyModal);
+        console.log('[JS] copyButton closing modal');
         runWhenRuntimeReady(() => callExport('_CarrotPlatformOnCopyFinished'));
     });
 
     copyClose.addEventListener('click', function() {
         hideModal(copyModal);
+        console.log('[JS] copyClose closing modal');
         runWhenRuntimeReady(() => callExport('_CarrotPlatformOnCopyFinished'));
     });
 

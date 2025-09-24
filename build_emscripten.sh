@@ -22,6 +22,7 @@ EMCC_FLAGS=(
     -O3
     -sALLOW_MEMORY_GROWTH=1
     -sASSERTIONS=0
+    -sERROR_ON_UNDEFINED_SYMBOLS=0
     -sENVIRONMENT=web
     -sEXPORTED_FUNCTIONS="['_main','_CarrotPlatformOnCopyFinished','_CarrotPlatformOnPasteResult','_CarrotPlatformOnPasteCanceled','_CarrotPlatformOnYesNoResult','_CarrotPlatformOnSaveResult','_CarrotPlatformOnSaveCanceled','_CarrotPlatformOnOpenFileResult','_CarrotPlatformOnOpenFileCanceled','_CarrotPlatformOnWindowResized','_CarrotPlatformSetDevicePixelRatio']"
     -sEXPORTED_RUNTIME_METHODS="['ccall','cwrap']"

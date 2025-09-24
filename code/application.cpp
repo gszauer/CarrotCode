@@ -1,11 +1,32 @@
 #include "application.h"
 #include "strings.h"
 #include "platform.h"
-#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
 #include <string>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+// These static flags are only used by the optional render logging to avoid
+// spamming the browser console unless the state actually changes.
+static bool g_lastRenderWaiting = false;
+static bool g_lastRenderDisabled = false;
+static bool g_renderLogInitialized = false;
+static inline void CarrotLogRender(const char* tag, bool waiting, bool disabled) {
+    if (!g_renderLogInitialized || waiting != g_lastRenderWaiting || disabled != g_lastRenderDisabled) {
+        EM_ASM({ console.log(UTF8ToString($0) + ' waiting=' + $1 + ' disabled=' + $2); }, tag, waiting ? 1 : 0, disabled ? 1 : 0);
+        g_lastRenderWaiting = waiting;
+        g_lastRenderDisabled = disabled;
+        g_renderLogInitialized = true;
+    }
+}
+#define CARROT_LOG_RENDER(tag, waiting, disabled) CarrotLogRender(tag, waiting, disabled)
+#define CARROT_LOG_EVENT(tag) EM_ASM({ console.log(tag); })
+#else
+#define CARROT_LOG_RENDER(tag, waiting, disabled) ((void)0)
+#define CARROT_LOG_EVENT(tag) ((void)0)
+#endif
 
 void save_file_callback(bool success, void* userData);
 void save_as_callback(u32_string* filePath, void* userData);
@@ -15,15 +36,18 @@ void file_open_callback(u32_string* filePath, void* fileData, u32 fileBytes, voi
 void clipboard_copy_callback(void* userData) {
     UserData* user = (UserData*)userData;
     user->waiting_for_operation = false;
+    CARROT_LOG_EVENT("[Copy] finished");
     if (user->pending_clipboard_text) {
         u32str_destroy(user->pending_clipboard_text);
         user->pending_clipboard_text = nullptr;
     }
+    user->show_context_menu = false;
 }
 
 void clipboard_paste_callback(u32_string* content, void* userData) {
     UserData* user = (UserData*)userData;
     user->waiting_for_operation = false;
+    CARROT_LOG_EVENT("[Paste] finished");
 
     // If we have content and an active document view, insert it
     if (content && !user->views.empty() && user->active_view < user->views.size()) {
@@ -245,6 +269,8 @@ void ApplicationCopy(UserData* user) {
 
     user->pending_clipboard_text = text_to_copy;
     user->waiting_for_operation = true;
+    CARROT_LOG_EVENT("[Copy] start");
+    user->show_context_menu = false;
     platform_clipboard_copy_text(text_to_copy, clipboard_copy_callback, user);
 }
 
@@ -254,6 +280,8 @@ void ApplicationPaste(UserData* user) {
     if (!GetActiveDocument(user)) return;
 
     user->waiting_for_operation = true;
+    CARROT_LOG_EVENT("[Paste] start");
+    user->show_context_menu = false;
     platform_clipboard_paste_text(clipboard_paste_callback, user);
 }
 
@@ -868,11 +896,15 @@ void AddDocumentView(UserData* user, document* doc, const char* path) {
 }
 
 canvas* Render(UserData* user) {
+    CARROT_LOG_RENDER("[Render begin]", user->waiting_for_operation ? 1 : 0,
+                      ImGuiIsDisabled(user->imgui_context) ? 1 : 0);
     ImGuiBeginFrame(user->imgui_context);
 
     // Push disabled state if waiting for async operation
+    bool pushedWaitDisabled = false;
     if (user->waiting_for_operation) {
         ImGuiPushDisabled(user->imgui_context);
+        pushedWaitDisabled = true;
     }
 
     canvas_clear(user->cnvs, 0x1E, 0x1E, 0x1E);  // SPECTRUM_DARKEST_GRAY_50 - Application background
@@ -1724,9 +1756,12 @@ canvas* Render(UserData* user) {
     }
 
     // Pop disabled state if we pushed it
-    if (user->waiting_for_operation) {
+    if (pushedWaitDisabled) {
         ImGuiPopDisabled(user->imgui_context);
     }
+
+    CARROT_LOG_RENDER("[Render end]", user->waiting_for_operation ? 1 : 0,
+                      ImGuiIsDisabled(user->imgui_context) ? 1 : 0);
 
     ImGuiEndFrame(user->imgui_context);
 

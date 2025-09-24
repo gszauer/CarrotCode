@@ -434,12 +434,14 @@ void platform_clipboard_copy_text(u32_string* content, platform_clipboard_copy_t
     g_clipboardCopy.userData = userData;
 
     std::string utf8 = U32StringToUtf8(content);
+    EM_ASM({ console.log('[Native] platform_clipboard_copy_text start'); });
     js_platform_show_copy_modal(utf8.c_str(), static_cast<int>(utf8.size()));
 }
 
 void platform_clipboard_paste_text(platform_clipboard_paste_text_callback callback, void* userData) {
     g_clipboardPaste.callback = callback;
     g_clipboardPaste.userData = userData;
+    EM_ASM({ console.log('[Native] platform_clipboard_paste_text start'); });
     js_platform_show_paste_modal();
 }
 
@@ -512,6 +514,7 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnCopyFinished() {
         void* data = g_clipboardCopy.userData;
         g_clipboardCopy.callback = nullptr;
         g_clipboardCopy.userData = nullptr;
+        EM_ASM({ console.log('[Native] CarrotPlatformOnCopyFinished (invoking callback)'); });
         cb(data);
     }
 }
@@ -526,6 +529,8 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnPasteResult(const char* textPtr, int t
     g_clipboardPaste.callback = nullptr;
     g_clipboardPaste.userData = nullptr;
 
+    EM_ASM({ console.log('[Native] CarrotPlatformOnPasteResult (success)'); });
+
     cb(converted, data);
     if (converted) {
         u32str_destroy(converted);
@@ -538,6 +543,7 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnPasteCanceled() {
     void* data = g_clipboardPaste.userData;
     g_clipboardPaste.callback = nullptr;
     g_clipboardPaste.userData = nullptr;
+    EM_ASM({ console.log('[Native] CarrotPlatformOnPasteCanceled'); });
     cb(nullptr, data);
 }
 
@@ -630,16 +636,25 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnWindowResized(int width, int height) {
 
 int main() {
     js_get_window_size(&g_windowWidth, &g_windowHeight);
-
+    g_devicePixelRatio = js_get_device_pixel_ratio();
     g_user = Initialize(static_cast<u32>(g_windowWidth), static_cast<u32>(g_windowHeight));
     if (!g_user) {
         return 1;
     }
 
-    g_devicePixelRatio = js_get_device_pixel_ratio();
     EnsureCanvasMatchesWindow();
 
+    EM_ASM({
+        Module._carrotMain = Module._main;
+        if (Module.runtimeInitialized) {
+            Module._carrotMain();
+            Module._carrotMain = undefined;
+        }
+    });
+
     g_lastTimeMs = emscripten_get_now();
+
+    emscripten_set_main_loop(MainLoop, 0, false);
 
     emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, KeyboardCallback);
     emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, true, KeyboardCallback);
@@ -647,7 +662,5 @@ int main() {
     emscripten_set_mouseup_callback("#carrot-canvas", nullptr, true, MouseCallback);
     emscripten_set_mousemove_callback("#carrot-canvas", nullptr, true, MouseCallback);
     emscripten_set_wheel_callback("#carrot-canvas", nullptr, true, WheelCallback);
-
-    emscripten_set_main_loop(MainLoop, 0, false);
     return 0;
 }
