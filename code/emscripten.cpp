@@ -44,6 +44,10 @@ EM_JS(void, js_platform_launch_url, (const char* urlPtr, int urlLen), {
     Module.platform.launchUrl(urlPtr, urlLen);
 });
 
+EM_JS(void, js_platform_show_shutdown_message, (), {
+    Module.platform.showShutdownMessage();
+});
+
 EM_JS(void, js_platform_download_file, (const char* namePtr, int nameLen, const uint8_t* dataPtr, int dataLen), {
     Module.platform.downloadFile(namePtr, nameLen, dataPtr, dataLen);
 });
@@ -400,6 +404,7 @@ static void MainLoop() {
         emscripten_cancel_main_loop();
         Shutdown(g_user);
         g_user = nullptr;
+        js_platform_show_shutdown_message();
         return;
     }
 

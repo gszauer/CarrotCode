@@ -200,6 +200,16 @@ var Module = Module || {};
 
     Module.platform = {
         applyCanvasSizing,
+        showShutdownMessage: function() {
+            // Hide canvas
+            canvas.style.display = 'none';
+
+            // Show shutdown message
+            const shutdownDiv = document.getElementById('shutdown-message');
+            if (shutdownDiv) {
+                shutdownDiv.classList.remove('hidden');
+            }
+        },
         blitCanvas: function(ptr, width, height, scale) {
             applyCanvasSizing(width, height, scale);
 
