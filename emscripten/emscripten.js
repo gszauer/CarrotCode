@@ -5,8 +5,8 @@ var Module = Module || {};
     const runtimeQueue = [];
 
     function runWhenRuntimeReady(callback) {
-        // Check if runtime is actually ready
-        if (!runtimeReady && (Module.calledRun || typeof Module._CarrotPlatformOnCopyFinished === 'function')) {
+        // Check if runtime is actually ready - need _malloc to be available
+        if (!runtimeReady && (Module.calledRun || (typeof Module._malloc === 'function' && typeof Module._free === 'function'))) {
             runtimeReady = true;
             // Also drain any queued items
             drainRuntimeQueue();
