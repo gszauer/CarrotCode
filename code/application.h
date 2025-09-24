@@ -27,6 +27,7 @@ struct UserData {
 
     // Async operation state
     bool waiting_for_operation;
+    bool disabled_state_pushed;  // Track if we've pushed disabled state
     u32_string* pending_clipboard_text;
 
     // Context menu state
