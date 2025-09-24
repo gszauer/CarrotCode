@@ -477,12 +477,23 @@ void platform_launch_browser(const char* url) {
 void platform_open_file(platform_open_file_callback callback, void* userData) {
     g_openFile.callback = callback;
     g_openFile.userData = userData;
+
+    // Clear mouse button state when showing file dialog to prevent stuck selection
+    g_mouseLeft = false;
+    g_mouseMiddle = false;
+    g_mouseRight = false;
+
     js_platform_begin_open_file();
 }
 
 void platform_modal_yesno(const char* message, platform_modal_yesno_callback callback, void* userData) {
     g_yesNo.callback = callback;
     g_yesNo.userData = userData;
+
+    // Clear mouse button state when showing modal to prevent stuck selection
+    g_mouseLeft = false;
+    g_mouseMiddle = false;
+    g_mouseRight = false;
 
     if (!message) {
         js_platform_show_yesno_modal(nullptr, 0);
@@ -494,6 +505,11 @@ void platform_modal_yesno(const char* message, platform_modal_yesno_callback cal
 void platform_save_file_as(void* fileData, u32 fileSizeBytes, platform_save_file_as_callback callback, void* userData) {
     g_saveAs.callback = callback;
     g_saveAs.userData = userData;
+
+    // Clear mouse button state when showing modal to prevent stuck selection
+    g_mouseLeft = false;
+    g_mouseMiddle = false;
+    g_mouseRight = false;
 
     const char* defaultName = "document.txt";
     js_platform_show_save_modal(defaultName, static_cast<int>(std::strlen(defaultName)),
@@ -594,6 +610,14 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnYesNoResult(int yes) {
     g_yesNo.callback = nullptr;
     g_yesNo.userData = nullptr;
     cb(yes != 0, data);
+
+    // Send a synthetic mouse release to clear any selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnSaveResult(const char* namePtr, int nameLen) {
@@ -610,6 +634,14 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnSaveResult(const char* namePtr, int na
     if (path) {
         u32str_destroy(path);
     }
+
+    // Send a synthetic mouse release to clear any selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnSaveCanceled() {
@@ -619,6 +651,14 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnSaveCanceled() {
     g_saveAs.callback = nullptr;
     g_saveAs.userData = nullptr;
     cb(nullptr, data);
+
+    // Send a synthetic mouse release to clear any selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnOpenFileResult(const char* namePtr, int nameLen, const uint8_t* dataPtr, int dataLen) {
@@ -651,6 +691,14 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnOpenFileResult(const char* namePtr, in
     if (copy) {
         free(copy);
     }
+
+    // Send a synthetic mouse release to clear any selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnOpenFileCanceled() {
@@ -660,6 +708,14 @@ EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnOpenFileCanceled() {
     g_openFile.callback = nullptr;
     g_openFile.userData = nullptr;
     cb(nullptr, nullptr, 0, data);
+
+    // Send a synthetic mouse release to clear any selection state
+    if (g_user) {
+        EmscriptenMouseEvent syntheticEvent = {};
+        syntheticEvent.canvasX = 0;
+        syntheticEvent.canvasY = 0;
+        DispatchMouseEvent(ApplicationMouseEventType::Release, &syntheticEvent, 0.0f, ApplicationMouseButton::Left);
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void CarrotPlatformOnWindowResized(int width, int height) {
