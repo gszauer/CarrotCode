@@ -420,11 +420,8 @@ static EM_BOOL WheelCallback(int /*eventType*/, const EmscriptenWheelEvent* e, v
     mouseEquivalent.canvasY = mouseY;
     mouseEquivalent.shiftKey = e->mouse.shiftKey;
 
-    // First send a Move event to update mouse position
-    DispatchMouseEvent(ApplicationMouseEventType::Move, &mouseEquivalent, 0.0f, ApplicationMouseButton::NoneButton);
-
-    // Then send a Press event with scroll delta so it gets handled by document_view_mouse_input
-    DispatchMouseEvent(ApplicationMouseEventType::Press, &mouseEquivalent, delta, ApplicationMouseButton::NoneButton);
+    // Send a Move event with scroll delta - this avoids triggering UI interactions
+    DispatchMouseEvent(ApplicationMouseEventType::Move, &mouseEquivalent, delta, ApplicationMouseButton::NoneButton);
 
     return EM_TRUE;
 }

@@ -384,8 +384,15 @@ void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt) {
 
     bool allowDocumentInput = !ImGuiIsDisabled(user->imgui_context);
 
-    ImGuiMouseInput(user->imgui_context, evt.x, evt.y, evt.normX, evt.normY,
-                    evt.scrollDelta, evt.leftDown, evt.middleDown, evt.rightDown);
+    // Special handling for scroll events - bypass ImGui if it's just scrolling
+    bool isScrollOnly = (evt.scrollDelta != 0.0f &&
+                         evt.type == ApplicationMouseEventType::Move &&
+                         evt.button == ApplicationMouseButton::NoneButton);
+
+    if (!isScrollOnly) {
+        ImGuiMouseInput(user->imgui_context, evt.x, evt.y, evt.normX, evt.normY,
+                        evt.scrollDelta, evt.leftDown, evt.middleDown, evt.rightDown);
+    }
 
     bool overTabBar = false;
     if (!user->views.empty() && evt.x >= 360 && evt.y <= 50) {
@@ -406,10 +413,14 @@ void ApplicationHandleMouse(UserData* user, const ApplicationMouseEvent& evt) {
         }
     }
 
-    if (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar && allowDocumentInput) {
+    // For scroll-only events, always pass to document view
+    bool shouldProcessInput = isScrollOnly ||
+                             (!ImGuiIsMouseConsumed(user->imgui_context) && !overTabBar && allowDocumentInput);
+
+    if (shouldProcessInput) {
         document_view* view = GetActiveView(user);
         if (view) {
-            if (evt.type == ApplicationMouseEventType::Move) {
+            if (evt.type == ApplicationMouseEventType::Move && !isScrollOnly) {
                 if (evt.leftDown) {
                     document_view_mouse_moved(view, evt.x, evt.y, evt.leftDown);
                 }
