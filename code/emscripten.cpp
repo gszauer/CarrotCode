@@ -332,36 +332,57 @@ static EM_BOOL KeyboardCallback(int eventType, const EmscriptenKeyboardEvent* e,
 static EM_BOOL MouseCallback(int eventType, const EmscriptenMouseEvent* e, void* /*userData*/) {
     if (!g_user || !e) return EM_FALSE;
 
+    // Get the actual mouse position from the event since canvasX/Y might be invalid
+    int mouseX = EM_ASM_INT({
+        var rect = Module.canvas.getBoundingClientRect();
+        var x = $0 - rect.left;
+        var y = $1 - rect.top;
+        Module.lastMouseX = x;
+        Module.lastMouseY = y;
+        return x;
+    }, e->clientX, e->clientY);
+
+    int mouseY = EM_ASM_INT({
+        var rect = Module.canvas.getBoundingClientRect();
+        var y = $0 - rect.top;
+        return y;
+    }, e->clientY);
+
+    // Use the calculated coordinates instead of canvasX/Y
+    EmscriptenMouseEvent fixedEvent = *e;
+    fixedEvent.canvasX = mouseX;
+    fixedEvent.canvasY = mouseY;
+
     switch (eventType) {
         case EMSCRIPTEN_EVENT_MOUSEMOVE:
-            DispatchMouseEvent(ApplicationMouseEventType::Move, e, 0.0f, ApplicationMouseButton::NoneButton);
+            DispatchMouseEvent(ApplicationMouseEventType::Move, &fixedEvent, 0.0f, ApplicationMouseButton::NoneButton);
             break;
         case EMSCRIPTEN_EVENT_MOUSEDOWN:
             if (e->button == 0) {
                 g_mouseLeft = true;
-                DispatchMouseEvent(ApplicationMouseEventType::Press, e, 0.0f, ApplicationMouseButton::Left);
+                DispatchMouseEvent(ApplicationMouseEventType::Press, &fixedEvent, 0.0f, ApplicationMouseButton::Left);
             } else if (e->button == 1) {
                 g_mouseMiddle = true;
-                DispatchMouseEvent(ApplicationMouseEventType::Press, e, 0.0f, ApplicationMouseButton::Middle);
+                DispatchMouseEvent(ApplicationMouseEventType::Press, &fixedEvent, 0.0f, ApplicationMouseButton::Middle);
             } else if (e->button == 2) {
                 g_mouseRight = true;
-                DispatchMouseEvent(ApplicationMouseEventType::Press, e, 0.0f, ApplicationMouseButton::Right);
+                DispatchMouseEvent(ApplicationMouseEventType::Press, &fixedEvent, 0.0f, ApplicationMouseButton::Right);
             } else {
-                DispatchMouseEvent(ApplicationMouseEventType::Press, e, 0.0f, ApplicationMouseButton::NoneButton);
+                DispatchMouseEvent(ApplicationMouseEventType::Press, &fixedEvent, 0.0f, ApplicationMouseButton::NoneButton);
             }
             break;
         case EMSCRIPTEN_EVENT_MOUSEUP:
             if (e->button == 0) {
                 g_mouseLeft = false;
-                DispatchMouseEvent(ApplicationMouseEventType::Release, e, 0.0f, ApplicationMouseButton::Left);
+                DispatchMouseEvent(ApplicationMouseEventType::Release, &fixedEvent, 0.0f, ApplicationMouseButton::Left);
             } else if (e->button == 1) {
                 g_mouseMiddle = false;
-                DispatchMouseEvent(ApplicationMouseEventType::Release, e, 0.0f, ApplicationMouseButton::Middle);
+                DispatchMouseEvent(ApplicationMouseEventType::Release, &fixedEvent, 0.0f, ApplicationMouseButton::Middle);
             } else if (e->button == 2) {
                 g_mouseRight = false;
-                DispatchMouseEvent(ApplicationMouseEventType::Release, e, 0.0f, ApplicationMouseButton::Right);
+                DispatchMouseEvent(ApplicationMouseEventType::Release, &fixedEvent, 0.0f, ApplicationMouseButton::Right);
             } else {
-                DispatchMouseEvent(ApplicationMouseEventType::Release, e, 0.0f, ApplicationMouseButton::NoneButton);
+                DispatchMouseEvent(ApplicationMouseEventType::Release, &fixedEvent, 0.0f, ApplicationMouseButton::NoneButton);
             }
             break;
         default:
@@ -371,7 +392,9 @@ static EM_BOOL MouseCallback(int eventType, const EmscriptenMouseEvent* e, void*
 }
 
 static EM_BOOL WheelCallback(int /*eventType*/, const EmscriptenWheelEvent* e, void* /*userData*/) {
-    if (!g_user || !e) return EM_FALSE;
+    if (!g_user || !e) {
+        return EM_FALSE;
+    }
 
     float delta = 0.0f;
     double dy = e->deltaY;
@@ -384,12 +407,25 @@ static EM_BOOL WheelCallback(int /*eventType*/, const EmscriptenWheelEvent* e, v
     if (dy < 0) delta = 1.0f;
     else if (dy > 0) delta = -1.0f;
 
+    // Get the current mouse position from JavaScript since the wheel event's mouse coordinates are broken
+    int mouseX = EM_ASM_INT({
+        return Module.lastMouseX !== undefined ? Module.lastMouseX : 0;
+    });
+    int mouseY = EM_ASM_INT({
+        return Module.lastMouseY !== undefined ? Module.lastMouseY : 0;
+    });
+
     EmscriptenMouseEvent mouseEquivalent{};
-    mouseEquivalent.canvasX = e->mouse.canvasX;
-    mouseEquivalent.canvasY = e->mouse.canvasY;
+    mouseEquivalent.canvasX = mouseX;
+    mouseEquivalent.canvasY = mouseY;
     mouseEquivalent.shiftKey = e->mouse.shiftKey;
 
-    DispatchMouseEvent(ApplicationMouseEventType::Move, &mouseEquivalent, delta, ApplicationMouseButton::NoneButton);
+    // First send a Move event to update mouse position
+    DispatchMouseEvent(ApplicationMouseEventType::Move, &mouseEquivalent, 0.0f, ApplicationMouseButton::NoneButton);
+
+    // Then send a Press event with scroll delta so it gets handled by document_view_mouse_input
+    DispatchMouseEvent(ApplicationMouseEventType::Press, &mouseEquivalent, delta, ApplicationMouseButton::NoneButton);
+
     return EM_TRUE;
 }
 
