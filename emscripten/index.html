@@ -93,6 +93,11 @@
             color: #f5f5f5;
             font-size: 0.95rem;
             resize: vertical;
+            /* Allow text selection and input in modal fields */
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
         }
 
         .modal-dialog textarea {
@@ -141,7 +146,7 @@
 <div id="copy-modal" class="modal hidden">
     <div class="modal-dialog">
         <h2>Copy To Clipboard</h2>
-        <textarea id="copy-modal-text" readonly></textarea>
+        <textarea id="copy-modal-text"></textarea>
         <p class="helper-text">Use the copy button or select the text and press Ctrl+C / Command+C.</p>
         <div class="button-row">
             <button id="copy-modal-close">Close</button>

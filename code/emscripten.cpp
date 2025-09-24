@@ -291,6 +291,17 @@ static PlatformKey TranslateKey(const EmscriptenKeyboardEvent* e) {
 static EM_BOOL KeyboardCallback(int eventType, const EmscriptenKeyboardEvent* e, void* /*userData*/) {
     if (!g_user || !e) return EM_FALSE;
 
+    // Check if any modal is visible by checking if any element with class "modal" is not hidden
+    // If a modal is visible, don't capture keyboard events so browser shortcuts work
+    bool modalVisible = EM_ASM_INT({
+        var modals = document.querySelectorAll('.modal:not(.hidden)');
+        return modals.length > 0 ? 1 : 0;
+    });
+
+    if (modalVisible) {
+        return EM_FALSE; // Let the browser handle the event
+    }
+
     bool isKeyDown = (eventType == EMSCRIPTEN_EVENT_KEYDOWN);
     PlatformKey platformKey = TranslateKey(e);
     u32 nativeKey = static_cast<u32>(e->keyCode);
