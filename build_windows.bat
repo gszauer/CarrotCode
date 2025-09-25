@@ -46,6 +46,9 @@ if %errorlevel% neq 0 goto error
 cl %CFLAGS% %INCLUDES% /c code\view.cpp /Fobuild\windows\view.obj
 if %errorlevel% neq 0 goto error
 
+cl %CFLAGS% %INCLUDES% /c code\syntax.cpp /Fobuild\windows\syntax.obj
+if %errorlevel% neq 0 goto error
+
 echo Linking...
 link /NOLOGO /SUBSYSTEM:WINDOWS /OUT:build\windows\CarrotCode.exe ^
     build\windows\windows.obj ^
@@ -55,6 +58,7 @@ link /NOLOGO /SUBSYSTEM:WINDOWS /OUT:build\windows\CarrotCode.exe ^
     build\windows\document.obj ^
     build\windows\imgui.obj ^
     build\windows\view.obj ^
+    build\windows\syntax.obj ^
     %LIBS%
 
 if %errorlevel% neq 0 goto error
