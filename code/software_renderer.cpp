@@ -160,7 +160,8 @@ static void draw_rect_border(u32* pixels, u32 canvas_width, const Rect& rect, u3
 }
 
 static inline u8 clamp_to_u8(double value) {
-    value = std::clamp(value, 0.0, 255.0);
+    if (value < 0.0) value = 0.0;
+    else if (value > 255.0) value = 255.0;
     return static_cast<u8>(std::lround(value));
 }
 
