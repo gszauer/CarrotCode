@@ -31,7 +31,7 @@ if %errorlevel% neq 0 goto error
 cl %CFLAGS% %INCLUDES% /c code\application.cpp /Fobuild\windows\application.obj
 if %errorlevel% neq 0 goto error
 
-cl %CFLAGS% %INCLUDES% /c code\renderer.cpp /Fobuild\windows\renderer.obj
+cl %CFLAGS% %INCLUDES% /c code\software_renderer.cpp /Fobuild\windows\renderer.obj
 if %errorlevel% neq 0 goto error
 
 cl %CFLAGS% %INCLUDES% /c code\strings.cpp /Fobuild\windows\strings.obj
@@ -46,54 +46,6 @@ if %errorlevel% neq 0 goto error
 cl %CFLAGS% %INCLUDES% /c code\view.cpp /Fobuild\windows\view.obj
 if %errorlevel% neq 0 goto error
 
-cl %CFLAGS% %INCLUDES% /c code\font.cpp /Fobuild\windows\font.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\lex.cpp /Fobuild\windows\lex.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\trie.cpp /Fobuild\windows\trie.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\search.cpp /Fobuild\windows\search.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\image.cpp /Fobuild\windows\image.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\language_service.cpp /Fobuild\windows\language_service.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree_sitter.c /Fobuild\windows\tree_sitter.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-c\src\parser.c /Fobuild\windows\ts_c_parser.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-cpp\src\parser.c /Fobuild\windows\ts_cpp_parser.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-cpp\src\scanner.c /Fobuild\windows\ts_cpp_scanner.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-javascript\src\parser.c /Fobuild\windows\ts_js_parser.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-javascript\src\scanner.c /Fobuild\windows\ts_js_scanner.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-python\src\parser.c /Fobuild\windows\ts_python_parser.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-python\src\scanner.c /Fobuild\windows\ts_python_scanner.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-rust\src\parser.c /Fobuild\windows\ts_rust_parser.obj
-if %errorlevel% neq 0 goto error
-
-cl %CFLAGS% %INCLUDES% /c code\tree-sitter-rust\src\scanner.c /Fobuild\windows\ts_rust_scanner.obj
-if %errorlevel% neq 0 goto error
-
 echo Linking...
 link /NOLOGO /SUBSYSTEM:WINDOWS /OUT:build\windows\CarrotCode.exe ^
     build\windows\windows.obj ^
@@ -103,22 +55,6 @@ link /NOLOGO /SUBSYSTEM:WINDOWS /OUT:build\windows\CarrotCode.exe ^
     build\windows\document.obj ^
     build\windows\imgui.obj ^
     build\windows\view.obj ^
-    build\windows\font.obj ^
-    build\windows\lex.obj ^
-    build\windows\trie.obj ^
-    build\windows\search.obj ^
-    build\windows\image.obj ^
-    build\windows\language_service.obj ^
-    build\windows\tree_sitter.obj ^
-    build\windows\ts_c_parser.obj ^
-    build\windows\ts_cpp_parser.obj ^
-    build\windows\ts_cpp_scanner.obj ^
-    build\windows\ts_js_parser.obj ^
-    build\windows\ts_js_scanner.obj ^
-    build\windows\ts_python_parser.obj ^
-    build\windows\ts_python_scanner.obj ^
-    build\windows\ts_rust_parser.obj ^
-    build\windows\ts_rust_scanner.obj ^
     %LIBS%
 
 if %errorlevel% neq 0 goto error
