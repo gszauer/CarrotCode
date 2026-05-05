@@ -1,0 +1,2065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lite Canvas Editor</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #2e2e32; }
+  canvas { display: block; position: absolute; top: 0; left: 0; }
+  #fileInput { display: none; }
+  body { user-select: none; -webkit-user-select: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<input type="file" id="fileInput" />
+<script>
+"use strict";
+
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const Config = {
+  fps: 60,
+  cursorBlinkRate: 0.5,
+  scrollSpeed: 3,
+  fontFamily: "Consolas, 'Courier New', monospace",
+  fontSize: 15,
+  lineHeight: 1.5,
+  gutterPaddingLeft: 10,
+  gutterPaddingRight: 15,
+  textPaddingLeft: 8,
+  tabSize: 4,
+  undoMergeTimeout: 300,
+};
+
+// ============================================================
+// THEME (lite-inspired)
+// ============================================================
+const Theme = {
+  background:       "#2e2e32",
+  gutterBg:         "#2e2e32",
+  gutterText:       "#5a5a65",
+  gutterActiveLine: "#70707a",
+  lineHighlight:    "#34343a",
+  caret:            "#93DDFA",
+  selection:        "#48505880",
+  text:             "#c5c8c6",
+  menuBg:           "#252529",
+  menuBorder:       "#404046",
+  menuText:         "#c5c8c6",
+  menuHover:        "#3a3a42",
+  menuTextHover:    "#ffffff",
+  dropdownBg:       "#303035",
+  dropdownBorder:   "#505058",
+  dropdownHover:    "#45454f",
+  statusBg:         "#1d1d21",
+  statusText:       "#808088",
+  scrollbar:        "#50505a",
+  scrollbarHover:   "#70707a",
+  keyword:          "#E8BF6A",
+  keyword2:         "#d197d9",
+  literal:          "#97c279",
+  string:           "#97c279",
+  comment:          "#676b6f",
+  number:           "#D19A66",
+  symbol:           "#61AFEF",
+  operator:         "#56B6C2",
+  func:             "#61AFEF",
+  normal:           "#c5c8c6",
+};
+
+// ============================================================
+// FONT ATLAS
+// ============================================================
+class FontAtlas {
+  constructor(fontFamily, fontSize, dpr) {
+    this.dpr = dpr;
+    this.fontSize = fontSize;
+    this.fontFamily = fontFamily;
+    this.scaledSize = Math.round(fontSize * dpr);
+    this.font = this.scaledSize + "px " + fontFamily;
+
+    const measure = document.createElement("canvas").getContext("2d");
+    measure.font = this.font;
+    this.charWidth = Math.ceil(measure.measureText("M").width);
+    this.charHeight = Math.ceil(this.scaledSize * Config.lineHeight);
+
+    this.startChar = 32;
+    this.endChar = 126;
+    this.charCount = this.endChar - this.startChar + 1;
+    this.cols = 16;
+    this.rows = Math.ceil(this.charCount / this.cols);
+
+    this.atlasCanvas = document.createElement("canvas");
+    this.atlasCanvas.width = this.cols * this.charWidth;
+    this.atlasCanvas.height = this.rows * this.charHeight;
+
+    this.glyphs = {};
+    this._renderAtlas();
+    this._runCanvas = null;
+  }
+
+  _renderAtlas() {
+    const ctx = this.atlasCanvas.getContext("2d");
+    ctx.clearRect(0, 0, this.atlasCanvas.width, this.atlasCanvas.height);
+    ctx.font = this.font;
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#ffffff";
+
+    for (let i = 0; i < this.charCount; i++) {
+      const ch = String.fromCharCode(this.startChar + i);
+      const col = i % this.cols;
+      const row = Math.floor(i / this.cols);
+      const x = col * this.charWidth;
+      const yOff = Math.floor((this.charHeight - this.scaledSize) / 2);
+      const y = row * this.charHeight + yOff;
+      ctx.fillText(ch, x, y);
+      this.glyphs[this.startChar + i] = {
+        x: x, y: row * this.charHeight,
+        w: this.charWidth, h: this.charHeight
+      };
+    }
+  }
+
+  drawColoredText(ctx, runs, dx, dy) {
+    let x = dx;
+    for (let r = 0; r < runs.length; r++) {
+      const run = runs[r];
+      if (run.text.length > 0) {
+        this._drawTintedRun(ctx, run.text, x, dy, run.color);
+        x += run.text.length * this.charWidth;
+      }
+    }
+  }
+
+  _drawTintedRun(ctx, text, dx, dy, color) {
+    if (text.length === 0) return;
+    const w = text.length * this.charWidth;
+    const h = this.charHeight;
+
+    if (!this._runCanvas || this._runCanvas.width < w || this._runCanvas.height < h) {
+      this._runCanvas = document.createElement("canvas");
+      this._runCanvas.width = Math.max(w, 1024);
+      this._runCanvas.height = h;
+      this._runCtx = this._runCanvas.getContext("2d");
+    }
+    const rc = this._runCtx;
+    rc.clearRect(0, 0, w, h);
+
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      const g = this.glyphs[code];
+      if (g) {
+        rc.drawImage(this.atlasCanvas, g.x, g.y, g.w, g.h, i * this.charWidth, 0, g.w, g.h);
+      } else {
+        rc.font = this.font;
+        rc.fillStyle = "#ffffff";
+        rc.textBaseline = "top";
+        const yOff = Math.floor((this.charHeight - this.scaledSize) / 2);
+        rc.fillText(String.fromCharCode(code), i * this.charWidth, yOff);
+      }
+    }
+
+    rc.globalCompositeOperation = "source-in";
+    rc.fillStyle = color;
+    rc.fillRect(0, 0, w, h);
+    rc.globalCompositeOperation = "source-over";
+
+    ctx.drawImage(this._runCanvas, 0, 0, w, h, dx, dy, w, h);
+  }
+}
+
+// ============================================================
+// SYNTAX DEFINITIONS
+// ============================================================
+class SyntaxDef {
+  constructor(name, extensions, patterns) {
+    this.name = name;
+    this.extensions = extensions;
+    this.patterns = patterns;
+  }
+}
+
+const Syntaxes = [];
+
+Syntaxes.push(new SyntaxDef("JavaScript", [".js",".jsx",".mjs",".cjs",".ts",".tsx"], [
+  { regex: /\/\/.*/, type: "comment" },
+  { start: /\/\*/, end: /\*\//, type: "comment" },
+  { regex: /`(?:[^`\\]|\\.)*`/, type: "string" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /'(?:[^'\\]|\\.)*'/, type: "string" },
+  { regex: /\b(?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+\.?\d*(?:e[+-]?\d+)?)\b/, type: "number" },
+  { regex: /\b(?:true|false|null|undefined|NaN|Infinity)\b/, type: "literal" },
+  { regex: /\b(?:function|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|in|of|void|yield|await|async|class|extends|super|import|export|default|from|as|let|const|var|with|debugger|static|get|set)\b/, type: "keyword" },
+  { regex: /\b(?:this|self|window|document|console|Math|Object|Array|String|Number|Boolean|RegExp|Date|Map|Set|Promise|Symbol|Proxy|Reflect|JSON|Error)\b/, type: "keyword2" },
+  { regex: /[a-zA-Z_$][a-zA-Z0-9_$]*(?=\s*\()/, type: "func" },
+  { regex: /[a-zA-Z_$][a-zA-Z0-9_$]*/, type: "symbol" },
+  { regex: /[+\-*/%=<>!&|^~?:]+/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("HTML", [".html",".htm",".xml",".svg"], [
+  { start: /<!--/, end: /-->/, type: "comment" },
+  { regex: /<\/?[a-zA-Z][a-zA-Z0-9-]*/, type: "keyword" },
+  { regex: /\/?>/, type: "keyword" },
+  { regex: /\b[a-zA-Z-]+=/, type: "keyword2" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /'(?:[^'\\]|\\.)*'/, type: "string" },
+  { regex: /&[a-zA-Z]+;/, type: "literal" },
+]));
+
+Syntaxes.push(new SyntaxDef("CSS", [".css",".scss",".less"], [
+  { start: /\/\*/, end: /\*\//, type: "comment" },
+  { regex: /\/\/.*/, type: "comment" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /'(?:[^'\\]|\\.)*'/, type: "string" },
+  { regex: /#[0-9a-fA-F]{3,8}\b/, type: "number" },
+  { regex: /\b\d+\.?\d*(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?\b/, type: "number" },
+  { regex: /@[a-zA-Z-]+/, type: "keyword" },
+  { regex: /[.#][a-zA-Z_-][a-zA-Z0-9_-]*/, type: "keyword2" },
+  { regex: /[a-zA-Z-]+(?=\s*:)/, type: "func" },
+  { regex: /[{}();:,]/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("Python", [".py"], [
+  { regex: /#.*/, type: "comment" },
+  { start: /"""/, end: /"""/, type: "string" },
+  { start: /'''/, end: /'''/, type: "string" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /'(?:[^'\\]|\\.)*'/, type: "string" },
+  { regex: /\b\d+\.?\d*(?:e[+-]?\d+)?j?\b/i, type: "number" },
+  { regex: /\b(?:True|False|None)\b/, type: "literal" },
+  { regex: /\b(?:def|class|return|if|elif|else|for|while|break|continue|try|except|finally|raise|import|from|as|with|yield|lambda|pass|del|global|nonlocal|assert|async|await|and|or|not|is|in)\b/, type: "keyword" },
+  { regex: /\b(?:print|len|range|type|int|float|str|list|dict|set|tuple|bool|input|open|super|self)\b/, type: "keyword2" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()/, type: "func" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*/, type: "symbol" },
+  { regex: /[+\-*/%=<>!&|^~@:]+/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("JSON", [".json"], [
+  { regex: /"(?:[^"\\]|\\.)*"\s*(?=:)/, type: "keyword" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /\b(?:true|false|null)\b/, type: "literal" },
+  { regex: /-?\b\d+\.?\d*(?:e[+-]?\d+)?\b/i, type: "number" },
+  { regex: /[{}[\]:,]/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("Lua", [".lua"], [
+  { start: /--\[\[/, end: /\]\]/, type: "comment" },
+  { regex: /--.*/, type: "comment" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /'(?:[^'\\]|\\.)*'/, type: "string" },
+  { start: /\[\[/, end: /\]\]/, type: "string" },
+  { regex: /\b\d+\.?\d*(?:e[+-]?\d+)?\b/i, type: "number" },
+  { regex: /\b(?:true|false|nil)\b/, type: "literal" },
+  { regex: /\b(?:and|break|do|else|elseif|end|for|function|goto|if|in|local|not|or|repeat|return|then|until|while)\b/, type: "keyword" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()/, type: "func" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*/, type: "symbol" },
+  { regex: /[+\-*/%=<>!&|^~#.:]+/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("C/C++", [".c",".h",".cpp",".hpp",".cc"], [
+  { regex: /\/\/.*/, type: "comment" },
+  { start: /\/\*/, end: /\*\//, type: "comment" },
+  { regex: /#\s*\w+/, type: "keyword2" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /'(?:[^'\\]|\\.)*'/, type: "string" },
+  { regex: /\b(?:0x[0-9a-fA-F]+|0b[01]+|\d+\.?\d*(?:e[+-]?\d+)?[fFuUlL]*)\b/, type: "number" },
+  { regex: /\b(?:true|false|NULL|nullptr)\b/, type: "literal" },
+  { regex: /\b(?:auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|inline|int|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|class|namespace|template|typename|using|virtual|public|private|protected|new|delete|try|catch|throw|override|final|constexpr|noexcept|static_cast|dynamic_cast|const_cast|reinterpret_cast)\b/, type: "keyword" },
+  { regex: /\b(?:printf|scanf|malloc|free|memcpy|memset|strlen|strcmp|strcpy|std|cout|cin|endl|string|vector|map|set|pair|unique_ptr|shared_ptr)\b/, type: "keyword2" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()/, type: "func" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*/, type: "symbol" },
+  { regex: /[+\-*/%=<>!&|^~?:]+/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("Markdown", [".md",".markdown"], [
+  { regex: /^#{1,6}\s.*/, type: "keyword" },
+  { regex: /\*\*[^*]+\*\*/, type: "keyword2" },
+  { regex: /\*[^*]+\*/, type: "literal" },
+  { regex: /`[^`]+`/, type: "string" },
+  { regex: /^\s*[-*+]\s/, type: "keyword" },
+  { regex: /^\s*\d+\.\s/, type: "keyword" },
+  { regex: /\[.*?\]\(.*?\)/, type: "func" },
+  { regex: /^>\s.*/, type: "comment" },
+  { start: /^```/, end: /^```/, type: "string" },
+]));
+
+Syntaxes.push(new SyntaxDef("Rust", [".rs"], [
+  { regex: /\/\/.*/, type: "comment" },
+  { start: /\/\*/, end: /\*\//, type: "comment" },
+  { regex: /"(?:[^"\\]|\\.)*"/, type: "string" },
+  { regex: /\b\d+\.?\d*(?:e[+-]?\d+)?(?:f32|f64|u8|u16|u32|u64|i8|i16|i32|i64|usize|isize)?\b/, type: "number" },
+  { regex: /\b(?:true|false)\b/, type: "literal" },
+  { regex: /\b(?:fn|let|mut|const|static|if|else|for|while|loop|match|return|break|continue|struct|enum|impl|trait|pub|use|mod|crate|self|super|where|as|in|ref|move|async|await|dyn|type|unsafe|extern)\b/, type: "keyword" },
+  { regex: /\b(?:Self|Option|Result|Some|None|Ok|Err|Vec|String|Box|Rc|Arc|HashMap|HashSet|println|print|format|panic|todo|unimplemented)\b/, type: "keyword2" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*(?=\s*[!(])/, type: "func" },
+  { regex: /[a-zA-Z_][a-zA-Z0-9_]*/, type: "symbol" },
+  { regex: /[+\-*/%=<>!&|^~?:;]+/, type: "operator" },
+]));
+
+Syntaxes.push(new SyntaxDef("Plain", [], []));
+
+// ============================================================
+// TOKENIZER
+// ============================================================
+class Tokenizer {
+  constructor() {
+    this.syntax = Syntaxes[Syntaxes.length - 1];
+  }
+
+  setSyntax(syntax) {
+    this.syntax = syntax;
+  }
+
+  tokenize(lineText, state) {
+    const tokens = [];
+    let pos = 0;
+    const patterns = this.syntax.patterns;
+
+    if (state && state.rangeIdx !== null) {
+      const pat = patterns[state.rangeIdx];
+      const endMatch = lineText.match(pat.end);
+      if (endMatch) {
+        const endPos = endMatch.index + endMatch[0].length;
+        tokens.push({ text: lineText.substring(0, endPos), type: pat.type });
+        pos = endPos;
+        state = { rangeIdx: null };
+      } else {
+        tokens.push({ text: lineText, type: pat.type });
+        return { tokens, state };
+      }
+    }
+
+    if (!state) state = { rangeIdx: null };
+
+    while (pos < lineText.length) {
+      let matched = false;
+      const remaining = lineText.substring(pos);
+
+      for (let p = 0; p < patterns.length; p++) {
+        const pat = patterns[p];
+
+        if (pat.start) {
+          const startMatch = remaining.match(pat.start);
+          if (startMatch && startMatch.index === 0) {
+            const afterStart = lineText.substring(pos + startMatch[0].length);
+            const endMatch = afterStart.match(pat.end);
+            if (endMatch) {
+              const fullLen = startMatch[0].length + endMatch.index + endMatch[0].length;
+              tokens.push({ text: lineText.substring(pos, pos + fullLen), type: pat.type });
+              pos += fullLen;
+            } else {
+              tokens.push({ text: lineText.substring(pos), type: pat.type });
+              return { tokens, state: { rangeIdx: p } };
+            }
+            matched = true;
+            break;
+          }
+        } else if (pat.regex) {
+          const m = remaining.match(pat.regex);
+          if (m && m.index === 0) {
+            tokens.push({ text: m[0], type: pat.type });
+            pos += m[0].length;
+            matched = true;
+            break;
+          }
+        }
+      }
+
+      if (!matched) {
+        const last = tokens.length > 0 ? tokens[tokens.length - 1] : null;
+        if (last && last.type === "normal") {
+          last.text += lineText[pos];
+        } else {
+          tokens.push({ text: lineText[pos], type: "normal" });
+        }
+        pos++;
+      }
+    }
+
+    if (tokens.length === 0) {
+      tokens.push({ text: "", type: "normal" });
+    }
+
+    return { tokens, state };
+  }
+}
+
+function detectSyntax(filename) {
+  if (!filename) return Syntaxes[Syntaxes.length - 1];
+  const lower = filename.toLowerCase();
+  for (let i = 0; i < Syntaxes.length; i++) {
+    for (let e = 0; e < Syntaxes[i].extensions.length; e++) {
+      if (lower.endsWith(Syntaxes[i].extensions[e])) return Syntaxes[i];
+    }
+  }
+  return Syntaxes[Syntaxes.length - 1];
+}
+
+function tokenTypeToColor(type) {
+  return Theme[type] || Theme.normal;
+}
+
+// ============================================================
+// DOCUMENT
+// ============================================================
+class Doc {
+  constructor(text, filename) {
+    this.filename = filename || "untitled";
+    this.lines = text.split("\n");
+    if (this.lines.length === 0) this.lines = [""];
+    this.syntax = detectSyntax(this.filename);
+    this.tokenizer = new Tokenizer();
+    this.tokenizer.setSyntax(this.syntax);
+
+    this.hlCache = [];
+    this.hlDirtyFrom = 0;
+
+    this.cursorLine = 0;
+    this.cursorCol = 0;
+    this.selStartLine = 0;
+    this.selStartCol = 0;
+    this.selEndLine = 0;
+    this.selEndCol = 0;
+    this.selectionActive = false;
+
+    this.undoStack = [];
+    this.redoStack = [];
+    this.lastUndoTime = 0;
+    this.dirty = false;
+
+    // Desired column for vertical movement
+    this.desiredCol = 0;
+
+    this._highlightAll();
+  }
+
+  get lineCount() { return this.lines.length; }
+
+  getLine(idx) {
+    if (idx < 0 || idx >= this.lines.length) return "";
+    return this.lines[idx];
+  }
+
+  _highlightAll() {
+    this.hlCache = [];
+    let state = null;
+    for (let i = 0; i < this.lines.length; i++) {
+      const result = this.tokenizer.tokenize(this.lines[i], state);
+      this.hlCache[i] = result;
+      state = result.state;
+    }
+    this.hlDirtyFrom = this.lines.length;
+  }
+
+  _rehighlightFrom(line) {
+    let state = null;
+    if (line > 0 && this.hlCache[line - 1]) {
+      state = this.hlCache[line - 1].state;
+    }
+    for (let i = line; i < this.lines.length; i++) {
+      const result = this.tokenizer.tokenize(this.lines[i], state);
+      const old = this.hlCache[i];
+      this.hlCache[i] = result;
+      state = result.state;
+      if (old && i > line && JSON.stringify(old.state) === JSON.stringify(result.state)) {
+        break;
+      }
+    }
+  }
+
+  getTokensForLine(lineIdx) {
+    if (lineIdx < 0 || lineIdx >= this.lines.length) return [{ text: "", type: "normal" }];
+    if (!this.hlCache[lineIdx]) {
+      this._rehighlightFrom(lineIdx);
+    }
+    return this.hlCache[lineIdx].tokens;
+  }
+
+  setCursor(line, col, updateDesired) {
+    line = Math.max(0, Math.min(line, this.lines.length - 1));
+    col = Math.max(0, Math.min(col, this.getLine(line).length));
+    this.cursorLine = line;
+    this.cursorCol = col;
+    if (updateDesired !== false) {
+      this.desiredCol = col;
+    }
+  }
+
+  clearSelection() {
+    this.selectionActive = false;
+    this.selStartLine = this.cursorLine;
+    this.selStartCol = this.cursorCol;
+    this.selEndLine = this.cursorLine;
+    this.selEndCol = this.cursorCol;
+  }
+
+  startSelection() {
+    this.selectionActive = true;
+    this.selStartLine = this.cursorLine;
+    this.selStartCol = this.cursorCol;
+  }
+
+  updateSelectionEnd() {
+    if (!this.selectionActive) return;
+    this.selEndLine = this.cursorLine;
+    this.selEndCol = this.cursorCol;
+  }
+
+  hasSelection() {
+    if (!this.selectionActive) return false;
+    return !(this.selStartLine === this.selEndLine && this.selStartCol === this.selEndCol);
+  }
+
+  getNormalizedSelection() {
+    if (this.selStartLine < this.selEndLine ||
+        (this.selStartLine === this.selEndLine && this.selStartCol <= this.selEndCol)) {
+      return { fromLine: this.selStartLine, fromCol: this.selStartCol,
+               toLine: this.selEndLine, toCol: this.selEndCol };
+    }
+    return { fromLine: this.selEndLine, fromCol: this.selEndCol,
+             toLine: this.selStartLine, toCol: this.selStartCol };
+  }
+
+  getSelectedText() {
+    if (!this.hasSelection()) return "";
+    const sel = this.getNormalizedSelection();
+    if (sel.fromLine === sel.toLine) {
+      return this.getLine(sel.fromLine).substring(sel.fromCol, sel.toCol);
+    }
+    const parts = [];
+    parts.push(this.getLine(sel.fromLine).substring(sel.fromCol));
+    for (let i = sel.fromLine + 1; i < sel.toLine; i++) {
+      parts.push(this.getLine(i));
+    }
+    parts.push(this.getLine(sel.toLine).substring(0, sel.toCol));
+    return parts.join("\n");
+  }
+
+  // ---- Edit Operations ----
+  _pushUndo(action) {
+    const now = Date.now();
+    const last = this.undoStack.length > 0 ? this.undoStack[this.undoStack.length - 1] : null;
+
+    if (last && action.type === "insert" && last.type === "insert"
+        && (now - this.lastUndoTime) < Config.undoMergeTimeout
+        && action.text.length === 1 && !/\n/.test(action.text)
+        && last.line === action.line
+        && last.col + last.text.length === action.col) {
+      last.text += action.text;
+      this.lastUndoTime = now;
+      return;
+    }
+
+    if (last && action.type === "delete" && last.type === "delete"
+        && (now - this.lastUndoTime) < Config.undoMergeTimeout
+        && !action.text.includes("\n") && !last.text.includes("\n")
+        && action.line === last.line) {
+      if (action.col + action.text.length === last.col) {
+        last.text = action.text + last.text;
+        last.col = action.col;
+        this.lastUndoTime = now;
+        return;
+      }
+      if (action.col === last.col) {
+        last.text = last.text + action.text;
+        this.lastUndoTime = now;
+        return;
+      }
+    }
+
+    this.undoStack.push(action);
+    this.lastUndoTime = now;
+    this.redoStack = [];
+    this.dirty = true;
+  }
+
+  insertText(line, col, text) {
+    this._pushUndo({
+      type: "insert", line, col, text,
+      cursorLine: this.cursorLine, cursorCol: this.cursorCol
+    });
+    this._rawInsert(line, col, text);
+  }
+
+  _rawInsert(line, col, text) {
+    const lineText = this.getLine(line);
+    const before = lineText.substring(0, col);
+    const after = lineText.substring(col);
+    const inserted = text.split("\n");
+
+    if (inserted.length === 1) {
+      this.lines[line] = before + inserted[0] + after;
+      this._rehighlightFrom(line);
+    } else {
+      this.lines[line] = before + inserted[0];
+      const newLines = [];
+      for (let i = 1; i < inserted.length - 1; i++) {
+        newLines.push(inserted[i]);
+      }
+      newLines.push(inserted[inserted.length - 1] + after);
+      this.lines.splice(line + 1, 0, ...newLines);
+      this.hlCache.splice(line + 1, 0, ...new Array(newLines.length).fill(null));
+      this._rehighlightFrom(line);
+    }
+    this.dirty = true;
+  }
+
+  deleteRange(fromLine, fromCol, toLine, toCol) {
+    const text = this._getTextRange(fromLine, fromCol, toLine, toCol);
+    this._pushUndo({
+      type: "delete", line: fromLine, col: fromCol, text,
+      cursorLine: this.cursorLine, cursorCol: this.cursorCol
+    });
+    this._rawDelete(fromLine, fromCol, toLine, toCol);
+    return text;
+  }
+
+  _rawDelete(fromLine, fromCol, toLine, toCol) {
+    if (fromLine === toLine) {
+      const l = this.getLine(fromLine);
+      this.lines[fromLine] = l.substring(0, fromCol) + l.substring(toCol);
+      this._rehighlightFrom(fromLine);
+    } else {
+      const first = this.getLine(fromLine).substring(0, fromCol);
+      const last = this.getLine(toLine).substring(toCol);
+      this.lines[fromLine] = first + last;
+      const removeCount = toLine - fromLine;
+      this.lines.splice(fromLine + 1, removeCount);
+      this.hlCache.splice(fromLine + 1, removeCount);
+      this._rehighlightFrom(fromLine);
+    }
+    this.dirty = true;
+  }
+
+  _getTextRange(fromLine, fromCol, toLine, toCol) {
+    if (fromLine === toLine) return this.getLine(fromLine).substring(fromCol, toCol);
+    const parts = [];
+    parts.push(this.getLine(fromLine).substring(fromCol));
+    for (let i = fromLine + 1; i < toLine; i++) parts.push(this.getLine(i));
+    parts.push(this.getLine(toLine).substring(0, toCol));
+    return parts.join("\n");
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return;
+    const action = this.undoStack.pop();
+    if (action.type === "insert") {
+      const lines = action.text.split("\n");
+      const endLine = action.line + lines.length - 1;
+      const endCol = lines.length === 1
+        ? action.col + action.text.length
+        : lines[lines.length - 1].length;
+      this._rawDelete(action.line, action.col, endLine, endCol);
+    } else {
+      this._rawInsert(action.line, action.col, action.text);
+    }
+    this.setCursor(action.cursorLine, action.cursorCol);
+    this.redoStack.push(action);
+    this.clearSelection();
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) return;
+    const action = this.redoStack.pop();
+    if (action.type === "insert") {
+      this._rawInsert(action.line, action.col, action.text);
+      const lines = action.text.split("\n");
+      const endLine = action.line + lines.length - 1;
+      const endCol = lines.length === 1
+        ? action.col + action.text.length
+        : lines[lines.length - 1].length;
+      this.setCursor(endLine, endCol);
+    } else {
+      const lines = action.text.split("\n");
+      const endLine = action.line + lines.length - 1;
+      const endCol = lines.length === 1
+        ? action.col + action.text.length
+        : lines[lines.length - 1].length;
+      this._rawDelete(action.line, action.col, endLine, endCol);
+      this.setCursor(action.line, action.col);
+    }
+    this.undoStack.push(action);
+    this.clearSelection();
+  }
+
+  deleteSelection() {
+    if (!this.hasSelection()) return "";
+    const sel = this.getNormalizedSelection();
+    const text = this.deleteRange(sel.fromLine, sel.fromCol, sel.toLine, sel.toCol);
+    this.setCursor(sel.fromLine, sel.fromCol);
+    this.clearSelection();
+    return text;
+  }
+
+  wordBoundaryLeft(line, col) {
+    const text = this.getLine(line);
+    if (col <= 0) {
+      if (line > 0) return { line: line - 1, col: this.getLine(line - 1).length };
+      return { line: 0, col: 0 };
+    }
+    let i = col - 1;
+    const isWord = (c) => /[a-zA-Z0-9_$]/.test(c);
+    // Skip whitespace first
+    while (i > 0 && text[i] === ' ') i--;
+    const startType = isWord(text[i]);
+    while (i > 0 && isWord(text[i - 1]) === startType) i--;
+    return { line, col: i };
+  }
+
+  wordBoundaryRight(line, col) {
+    const text = this.getLine(line);
+    if (col >= text.length) {
+      if (line < this.lines.length - 1) return { line: line + 1, col: 0 };
+      return { line, col: text.length };
+    }
+    let i = col;
+    const isWord = (c) => /[a-zA-Z0-9_$]/.test(c);
+    const startType = isWord(text[i]);
+    while (i < text.length && isWord(text[i]) === startType) i++;
+    // Skip trailing whitespace
+    while (i < text.length && text[i] === ' ') i++;
+    return { line, col: i };
+  }
+}
+
+// ============================================================
+// EDITOR
+// ============================================================
+class Editor {
+  constructor(canvasEl) {
+    this.canvas = canvasEl;
+    this.ctx = canvasEl.getContext("2d");
+    this.dpr = window.devicePixelRatio || 1;
+
+    this.atlas = new FontAtlas(Config.fontFamily, Config.fontSize, this.dpr);
+
+    // Welcome content
+    const welcomeText = [
+      '// Lite Canvas Editor',
+      '// A canvas-rendered text editor inspired by rxi/lite',
+      '//',
+      '// Features:',
+      '//   - Font atlas rendering (device pixel ratio aware)',
+      '//   - Multi-line selection with mouse drag',
+      '//   - Full undo/redo with merge support',
+      '//   - Syntax highlighting for JS, HTML, CSS, Python, Lua, C/C++, Rust, JSON, Markdown',
+      '//   - Smart indent / outdent',
+      '//   - Ctrl+D to duplicate line',
+      '//   - Drag & drop files to open them',
+      '//   - Top menu bar with File, Edit, View',
+      '//   - Scrollbar with drag support',
+      '//',
+      '// Drop any source file onto this window to open it!',
+      '',
+      'class Greeter {',
+      '  constructor(name) {',
+      '    this.name = name;',
+      '  }',
+      '',
+      '  greet() {',
+      '    const msg = `Hello, ${this.name}!`;',
+      '    console.log(msg);',
+      '    return msg;',
+      '  }',
+      '}',
+      '',
+      'const greeter = new Greeter("World");',
+      'greeter.greet();',
+      '',
+      'for (let i = 0; i < 10; i++) {',
+      '  const fib = (n) => n <= 1 ? n : fib(n - 1) + fib(n - 2);',
+      '  console.log(`fib(${i}) = ${fib(i)}`);',
+      '}',
+      '',
+      '// Try editing this code!',
+      '// Keyboard shortcuts:',
+      '//   Ctrl+Z / Ctrl+Shift+Z  -  Undo / Redo',
+      '//   Ctrl+S  -  Save file',
+      '//   Ctrl+O  -  Open file',
+      '//   Ctrl+N  -  New file',
+      '//   Ctrl+D  -  Duplicate line',
+      '//   Ctrl+A  -  Select all',
+      '//   Tab / Shift+Tab  -  Indent / Outdent',
+      '//   Home (smart)  -  First non-whitespace or col 0',
+      '//   Ctrl+Left/Right  -  Word navigation',
+      '//   Ctrl+Home/End  -  Start/End of file',
+      '',
+    ].join("\n");
+
+    this.doc = new Doc(welcomeText, "welcome.js");
+    this.menu = this._createMenu();
+    this.scrollY = 0;
+    this.scrollX = 0;
+    this.scrollbarWidth = 12;
+    this.highlightEnabled = true;
+
+    this.cursorBlink = 0;
+    this.lastTime = 0;
+    this.needsRedraw = true;
+    this._lastBlinkOn = true;
+
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.mouseDown = false;
+    this.isDraggingSelection = false;
+    this.isDraggingScrollbar = false;
+    this.scrollbarDragOffset = 0;
+    this.showDropOverlay = false;
+
+    this.activeMenu = -1;
+    this.menuHoverItem = -1;
+
+    // Layout (computed)
+    this.menuBarH = 0;
+    this.statusBarH = 0;
+    this.gutterW = 0;
+    this.textAreaX = 0;
+    this.textAreaY = 0;
+    this.textAreaW = 0;
+    this.textAreaH = 0;
+    this.lineH = 0;
+    this.charW = 0;
+
+    this._resize();
+    this._bindEvents();
+    this._loop(performance.now());
+  }
+
+  _createMenu() {
+    return [
+      { label: "File", children: [
+        { label: "New", action: "new", shortcut: "Ctrl+N" },
+        { label: "Open...", action: "open", shortcut: "Ctrl+O" },
+        { label: "Save", action: "save", shortcut: "Ctrl+S" },
+        { type: "separator" },
+        { label: "Close", action: "close" },
+      ]},
+      { label: "Edit", children: [
+        { label: "Undo", action: "undo", shortcut: "Ctrl+Z" },
+        { label: "Redo", action: "redo", shortcut: "Ctrl+Y" },
+        { type: "separator" },
+        { label: "Cut", action: "cut", shortcut: "Ctrl+X" },
+        { label: "Copy", action: "copy", shortcut: "Ctrl+C" },
+        { label: "Paste", action: "paste", shortcut: "Ctrl+V" },
+        { type: "separator" },
+        { label: "Select All", action: "selectAll", shortcut: "Ctrl+A" },
+        { label: "Duplicate Line", action: "duplicateLine", shortcut: "Ctrl+D" },
+      ]},
+      { label: "View", children: [
+        { label: "Zoom In", action: "zoomIn", shortcut: "Ctrl+=" },
+        { label: "Zoom Out", action: "zoomOut", shortcut: "Ctrl+-" },
+        { label: "Reset Zoom", action: "zoomReset" },
+        { type: "separator" },
+        { label: "Syntax Highlighting", action: "toggleHighlight",
+          checked: () => this.highlightEnabled },
+        { type: "separator" },
+        ...this._buildSyntaxMenuItems(),
+      ]},
+    ];
+  }
+
+  _buildSyntaxMenuItems() {
+    const items = [];
+    for (let i = 0; i < Syntaxes.length; i++) {
+      const syn = Syntaxes[i];
+      items.push({
+        label: syn.name,
+        action: "syntax_" + i,
+        checked: () => this.doc.syntax === syn,
+      });
+    }
+    return items;
+  }
+
+  _setSyntax(syntaxIdx) {
+    if (syntaxIdx < 0 || syntaxIdx >= Syntaxes.length) return;
+    this.doc.syntax = Syntaxes[syntaxIdx];
+    this.doc.tokenizer.setSyntax(this.doc.syntax);
+    this.doc.hlCache = [];
+    this.doc._highlightAll();
+    this.needsRedraw = true;
+  }
+
+  _resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.canvas.width = w * this.dpr;
+    this.canvas.height = h * this.dpr;
+    this.canvas.style.width = w + "px";
+    this.canvas.style.height = h + "px";
+    this.screenW = w;
+    this.screenH = h;
+
+    this.lineH = this.atlas.charHeight;
+    this.charW = this.atlas.charWidth;
+    this.menuBarH = Math.round(28 * this.dpr);
+    this.statusBarH = Math.round(24 * this.dpr);
+
+    this._computeGutter();
+
+    this.textAreaX = this.gutterW;
+    this.textAreaY = this.menuBarH;
+    this.textAreaW = this.canvas.width - this.gutterW - Math.round(this.scrollbarWidth * this.dpr);
+    this.textAreaH = this.canvas.height - this.menuBarH - this.statusBarH;
+
+    this.needsRedraw = true;
+  }
+
+  _computeGutter() {
+    const digits = Math.max(3, String(this.doc.lineCount).length);
+    this.gutterW = Math.round(
+      (Config.gutterPaddingLeft + digits * (this.charW / this.dpr) + Config.gutterPaddingRight) * this.dpr
+    );
+  }
+
+  // ---- Events ----
+  _bindEvents() {
+    window.addEventListener("resize", () => {
+      this.dpr = window.devicePixelRatio || 1;
+      this.atlas = new FontAtlas(Config.fontFamily, Config.fontSize, this.dpr);
+      this._resize();
+    });
+
+    this.canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
+    this.canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
+    window.addEventListener("mouseup", () => this._onMouseUp());
+    this.canvas.addEventListener("wheel", (e) => this._onWheel(e), { passive: false });
+    this.canvas.addEventListener("dblclick", (e) => this._onDoubleClick(e));
+    window.addEventListener("keydown", (e) => this._onKeyDown(e));
+
+    this.canvas.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      this.showDropOverlay = true;
+      this.needsRedraw = true;
+    });
+    this.canvas.addEventListener("dragleave", () => {
+      this.showDropOverlay = false;
+      this.needsRedraw = true;
+    });
+    this.canvas.addEventListener("drop", (e) => {
+      e.preventDefault();
+      this.showDropOverlay = false;
+      this.needsRedraw = true;
+      if (e.dataTransfer.files.length > 0) this._openFile(e.dataTransfer.files[0]);
+    });
+
+    document.getElementById("fileInput").addEventListener("change", (e) => {
+      if (e.target.files.length > 0) {
+        this._openFile(e.target.files[0]);
+        e.target.value = "";
+      }
+    });
+
+    window.addEventListener("paste", (e) => {
+      const text = e.clipboardData.getData("text/plain");
+      if (text) { this._insertTextAtCursor(text); this.needsRedraw = true; }
+      e.preventDefault();
+    });
+
+    window.addEventListener("copy", (e) => {
+      if (this.doc.hasSelection()) {
+        e.clipboardData.setData("text/plain", this.doc.getSelectedText());
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener("cut", (e) => {
+      if (this.doc.hasSelection()) {
+        e.clipboardData.setData("text/plain", this.doc.getSelectedText());
+        this.doc.deleteSelection();
+        this.needsRedraw = true;
+        e.preventDefault();
+      }
+    });
+  }
+
+  _openFile(file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      this.doc = new Doc(ev.target.result, file.name);
+      this.scrollX = 0;
+      this.scrollY = 0;
+      this._computeGutter();
+      this.needsRedraw = true;
+    };
+    reader.readAsText(file);
+  }
+
+  _toCanvas(e) {
+    return { x: e.clientX * this.dpr, y: e.clientY * this.dpr };
+  }
+
+  _canvasToTextPos(cx, cy) {
+    const line = Math.floor((cy - this.textAreaY + this.scrollY) / this.lineH);
+    const col = Math.round((cx - this.gutterW - Config.textPaddingLeft * this.dpr + this.scrollX) / this.charW);
+    return {
+      line: Math.max(0, Math.min(line, this.doc.lineCount - 1)),
+      col: Math.max(0, col)
+    };
+  }
+
+  _onMouseDown(e) {
+    const p = this._toCanvas(e);
+    this.mouseX = p.x;
+    this.mouseY = p.y;
+    this.mouseDown = true;
+
+    // Dropdown click?
+    if (this.activeMenu >= 0) {
+      if (this._handleDropdownClick(p.x, p.y)) return;
+      // Click on menu bar for different menu?
+      if (p.y < this.menuBarH) {
+        this._handleMenuBarClick(p.x);
+        return;
+      }
+      // Click outside dropdown
+      this.activeMenu = -1;
+      this.menuHoverItem = -1;
+      this.needsRedraw = true;
+      return;
+    }
+
+    // Menu bar?
+    if (p.y < this.menuBarH) {
+      this._handleMenuBarClick(p.x);
+      return;
+    }
+
+    // Scrollbar?
+    const sbRect = this._getScrollbarRect();
+    if (sbRect && p.x >= this.canvas.width - Math.round(this.scrollbarWidth * this.dpr)) {
+      this.isDraggingScrollbar = true;
+      if (p.y >= sbRect.y && p.y <= sbRect.y + sbRect.h) {
+        this.scrollbarDragOffset = p.y - sbRect.y;
+      } else {
+        this.scrollbarDragOffset = sbRect.h / 2;
+        this._updateScrollFromDrag(p.y);
+      }
+      return;
+    }
+
+    // Text area
+    if (p.y >= this.textAreaY && p.y < this.textAreaY + this.textAreaH) {
+      const pos = this._canvasToTextPos(p.x, p.y);
+      pos.col = Math.min(pos.col, this.doc.getLine(pos.line).length);
+      this.doc.setCursor(pos.line, pos.col);
+
+      if (e.shiftKey) {
+        if (!this.doc.selectionActive) {
+          this.doc.selectionActive = true;
+          this.doc.selStartLine = this.doc.cursorLine;
+          this.doc.selStartCol = this.doc.cursorCol;
+        }
+        this.doc.setCursor(pos.line, pos.col);
+        this.doc.updateSelectionEnd();
+      } else {
+        this.doc.clearSelection();
+        this.doc.startSelection();
+        this.isDraggingSelection = true;
+      }
+      this.cursorBlink = 0;
+      this.needsRedraw = true;
+    }
+  }
+
+  _onMouseMove(e) {
+    const p = this._toCanvas(e);
+    this.mouseX = p.x;
+    this.mouseY = p.y;
+
+    if (this.isDraggingScrollbar) {
+      this._updateScrollFromDrag(p.y);
+      this.needsRedraw = true;
+      return;
+    }
+
+    if (this.isDraggingSelection) {
+      const pos = this._canvasToTextPos(p.x, p.y);
+      pos.col = Math.min(pos.col, this.doc.getLine(pos.line).length);
+      this.doc.setCursor(pos.line, pos.col);
+      this.doc.selEndLine = pos.line;
+      this.doc.selEndCol = pos.col;
+      this.doc.selectionActive = true;
+      this.cursorBlink = 0;
+      this.needsRedraw = true;
+
+      // Auto-scroll
+      if (p.y < this.textAreaY + this.lineH) {
+        this.scrollY = Math.max(0, this.scrollY - this.lineH * 0.5);
+      } else if (p.y > this.textAreaY + this.textAreaH - this.lineH) {
+        const maxScroll = Math.max(0, this.doc.lineCount * this.lineH - this.textAreaH);
+        this.scrollY = Math.min(maxScroll, this.scrollY + this.lineH * 0.5);
+      }
+      return;
+    }
+
+    if (this.activeMenu >= 0) {
+      this.needsRedraw = true;
+    }
+  }
+
+  _onMouseUp() {
+    this.mouseDown = false;
+    this.isDraggingSelection = false;
+    this.isDraggingScrollbar = false;
+  }
+
+  _onWheel(e) {
+    e.preventDefault();
+
+    // If a dropdown is open, scroll it instead
+    if (this.activeMenu >= 0) {
+      const mi = this.activeMenu;
+      const children = this.menu[mi].children;
+      const itemH = Math.round(26 * this.dpr);
+      const sepH = Math.round(8 * this.dpr);
+      let totalH = 0;
+      for (let i = 0; i < children.length; i++) {
+        totalH += children[i].type === "separator" ? sepH : itemH;
+      }
+      const maxH = this.canvas.height - this.menuBarH - Math.round(8 * this.dpr);
+      if (totalH > maxH) {
+        if (!this._dropdownScrollY) this._dropdownScrollY = 0;
+        this._dropdownScrollY += e.deltaY * this.dpr;
+        this._dropdownScrollY = Math.max(0, Math.min(this._dropdownScrollY, totalH - maxH));
+        this.needsRedraw = true;
+        return;
+      }
+    }
+
+    this.scrollY += e.deltaY * this.dpr;
+    const maxScroll = Math.max(0, this.doc.lineCount * this.lineH - this.textAreaH);
+    this.scrollY = Math.max(0, Math.min(this.scrollY, maxScroll));
+    this.needsRedraw = true;
+  }
+
+  _onDoubleClick(e) {
+    const p = this._toCanvas(e);
+    if (p.y >= this.textAreaY && p.y < this.textAreaY + this.textAreaH) {
+      const pos = this._canvasToTextPos(p.x, p.y);
+      const line = this.doc.getLine(pos.line);
+      pos.col = Math.min(pos.col, line.length);
+
+      const left = this.doc.wordBoundaryLeft(pos.line, pos.col + 1);
+      const right = this.doc.wordBoundaryRight(pos.line, pos.col);
+      this.doc.selectionActive = true;
+      this.doc.selStartLine = left.line;
+      this.doc.selStartCol = left.col;
+      this.doc.selEndLine = right.line;
+      this.doc.selEndCol = right.col;
+      this.doc.setCursor(right.line, right.col);
+      this.needsRedraw = true;
+    }
+  }
+
+  _updateScrollFromDrag(mouseY) {
+    const totalH = this.doc.lineCount * this.lineH;
+    const sbHeight = Math.max(30 * this.dpr, (this.textAreaH / totalH) * this.textAreaH);
+    const scrollableTrack = this.textAreaH - sbHeight;
+    if (scrollableTrack <= 0) return;
+    const ratio = Math.max(0, Math.min(1,
+      (mouseY - this.textAreaY - this.scrollbarDragOffset) / scrollableTrack));
+    this.scrollY = ratio * Math.max(0, totalH - this.textAreaH);
+  }
+
+  // ---- Menu ----
+  _getMenuItemX(idx) {
+    let x = Math.round(12 * this.dpr);
+    for (let i = 0; i < idx; i++) {
+      x += this.menu[i].label.length * this.charW + Math.round(16 * this.dpr);
+    }
+    return x;
+  }
+
+  _getMenuItemW(idx) {
+    return this.menu[idx].label.length * this.charW + Math.round(16 * this.dpr);
+  }
+
+  _handleMenuBarClick(px) {
+    let x = Math.round(12 * this.dpr);
+    for (let i = 0; i < this.menu.length; i++) {
+      const w = this._getMenuItemW(i);
+      if (px >= x && px < x + w) {
+        this.activeMenu = (this.activeMenu === i) ? -1 : i;
+        this.menuHoverItem = -1;
+        this._dropdownScrollY = 0;
+        this.needsRedraw = true;
+        return;
+      }
+      x += w;
+    }
+    this.activeMenu = -1;
+    this.needsRedraw = true;
+  }
+
+  _handleDropdownClick(px, py) {
+    const mi = this.activeMenu;
+    const children = this.menu[mi].children;
+    const dropX = this._getMenuItemX(mi);
+    const dropY = this.menuBarH;
+    const dropW = Math.round(220 * this.dpr);
+    const itemH = Math.round(26 * this.dpr);
+    const sepH = Math.round(8 * this.dpr);
+
+    let totalH = 0;
+    for (let i = 0; i < children.length; i++) {
+      totalH += children[i].type === "separator" ? sepH : itemH;
+    }
+
+    const maxH = this.canvas.height - dropY - Math.round(8 * this.dpr);
+    const clampedH = Math.min(totalH, maxH);
+
+    if (px < dropX || px >= dropX + dropW || py < dropY || py >= dropY + clampedH) {
+      return false;
+    }
+
+    const scrollOff = this._dropdownScrollY || 0;
+    let y = dropY - scrollOff;
+    for (let i = 0; i < children.length; i++) {
+      const h = children[i].type === "separator" ? sepH : itemH;
+      if (py >= y && py < y + h && py >= dropY && py < dropY + clampedH
+          && children[i].type !== "separator") {
+        this._executeMenuAction(children[i].action);
+        this.activeMenu = -1;
+        this.menuHoverItem = -1;
+        this.needsRedraw = true;
+        return true;
+      }
+      y += h;
+    }
+    return true;
+  }
+
+  _executeMenuAction(action) {
+    switch (action) {
+      case "new":
+        this.doc = new Doc("", "untitled");
+        this.scrollX = 0; this.scrollY = 0;
+        this._computeGutter();
+        break;
+      case "open":
+        document.getElementById("fileInput").click();
+        break;
+      case "save":
+        this._saveFile();
+        break;
+      case "close":
+        this.doc = new Doc("", "untitled");
+        this.scrollX = 0; this.scrollY = 0;
+        this._computeGutter();
+        break;
+      case "undo": this.doc.undo(); break;
+      case "redo": this.doc.redo(); break;
+      case "cut":
+        if (this.doc.hasSelection()) {
+          navigator.clipboard.writeText(this.doc.getSelectedText());
+          this.doc.deleteSelection();
+        }
+        break;
+      case "copy":
+        if (this.doc.hasSelection()) {
+          navigator.clipboard.writeText(this.doc.getSelectedText());
+        }
+        break;
+      case "paste":
+        navigator.clipboard.readText().then(text => {
+          if (text) { this._insertTextAtCursor(text); this.needsRedraw = true; }
+        });
+        break;
+      case "selectAll": this._selectAll(); break;
+      case "duplicateLine": this._duplicateLine(); break;
+      case "zoomIn":
+        Config.fontSize = Math.min(40, Config.fontSize + 1);
+        this._rebuildAtlas();
+        break;
+      case "zoomOut":
+        Config.fontSize = Math.max(8, Config.fontSize - 1);
+        this._rebuildAtlas();
+        break;
+      case "zoomReset":
+        Config.fontSize = 15;
+        this._rebuildAtlas();
+        break;
+      case "toggleHighlight":
+        this.highlightEnabled = !this.highlightEnabled;
+        break;
+      default:
+        if (action && action.startsWith("syntax_")) {
+          const idx = parseInt(action.substring(7));
+          this._setSyntax(idx);
+        }
+        break;
+    }
+    this.needsRedraw = true;
+  }
+
+  _rebuildAtlas() {
+    this.atlas = new FontAtlas(Config.fontFamily, Config.fontSize, this.dpr);
+    this._resize();
+  }
+
+  _saveFile() {
+    const blob = new Blob([this.doc.lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = this.doc.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    this.doc.dirty = false;
+  }
+
+  // ---- Keyboard ----
+  _onKeyDown(e) {
+    if (this.activeMenu >= 0) {
+      this._handleMenuKeyDown(e);
+      return;
+    }
+
+    const ctrl = e.ctrlKey || e.metaKey;
+    const shift = e.shiftKey;
+    const key = e.key;
+
+    if (ctrl) {
+      switch (key.toLowerCase()) {
+        case "a": e.preventDefault(); this._selectAll(); return;
+        case "z":
+          e.preventDefault();
+          if (shift) this.doc.redo(); else this.doc.undo();
+          this.needsRedraw = true; this._ensureCursorVisible(); return;
+        case "y": e.preventDefault(); this.doc.redo(); this.needsRedraw = true; this._ensureCursorVisible(); return;
+        case "s": e.preventDefault(); this._saveFile(); return;
+        case "n": e.preventDefault(); this._executeMenuAction("new"); return;
+        case "o": e.preventDefault(); document.getElementById("fileInput").click(); return;
+        case "d": e.preventDefault(); this._duplicateLine(); this.needsRedraw = true; return;
+        case "=": case "+":
+          e.preventDefault(); this._executeMenuAction("zoomIn"); return;
+        case "-": case "_":
+          e.preventDefault(); this._executeMenuAction("zoomOut"); return;
+      }
+    }
+
+    const navKeys = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"];
+    if (navKeys.indexOf(key) >= 0) {
+      e.preventDefault();
+      if (shift && !this.doc.selectionActive) {
+        this.doc.startSelection();
+      }
+
+      // Handle non-shift arrow with active selection: jump to edge
+      if (!shift && this.doc.hasSelection()) {
+        const sel = this.doc.getNormalizedSelection();
+        if (key === "ArrowLeft" || key === "Home" || key === "ArrowUp") {
+          this.doc.setCursor(sel.fromLine, sel.fromCol);
+        } else {
+          this.doc.setCursor(sel.toLine, sel.toCol);
+        }
+        this.doc.clearSelection();
+        this.cursorBlink = 0;
+        this.needsRedraw = true;
+        this._ensureCursorVisible();
+        if (key === "ArrowLeft" || key === "ArrowRight") return;
+      }
+
+      this._handleNavigation(key, ctrl, shift);
+      if (shift) {
+        this.doc.updateSelectionEnd();
+      } else {
+        this.doc.clearSelection();
+      }
+      this.cursorBlink = 0;
+      this.needsRedraw = true;
+      this._ensureCursorVisible();
+      return;
+    }
+
+    if (key === "Tab") {
+      e.preventDefault();
+      if (this.doc.hasSelection() && !shift) {
+        this._indentSelection();
+      } else if (this.doc.hasSelection() && shift) {
+        this._outdentSelection();
+      } else if (shift) {
+        this._outdentCurrentLine();
+      } else {
+        this._insertTextAtCursor(" ".repeat(Config.tabSize));
+      }
+      this.needsRedraw = true;
+      return;
+    }
+
+    if (key === "Enter") {
+      e.preventDefault();
+      const line = this.doc.getLine(this.doc.cursorLine);
+      let indent = "";
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === " " || line[i] === "\t") indent += line[i];
+        else break;
+      }
+      const beforeCursor = line.substring(0, this.doc.cursorCol).trimEnd();
+      if (beforeCursor.endsWith("{") || beforeCursor.endsWith(":") || beforeCursor.endsWith("(")) {
+        indent += " ".repeat(Config.tabSize);
+      }
+      this._insertTextAtCursor("\n" + indent);
+      this.needsRedraw = true;
+      this._ensureCursorVisible();
+      return;
+    }
+
+    if (key === "Backspace") {
+      e.preventDefault();
+      this._handleBackspace(ctrl);
+      this.needsRedraw = true;
+      this._ensureCursorVisible();
+      return;
+    }
+
+    if (key === "Delete") {
+      e.preventDefault();
+      this._handleDelete(ctrl);
+      this.needsRedraw = true;
+      return;
+    }
+
+    if (key === "Escape") {
+      this.doc.clearSelection();
+      this.activeMenu = -1;
+      this.needsRedraw = true;
+      return;
+    }
+
+    // Printable character
+    if (key.length === 1 && !ctrl) {
+      e.preventDefault();
+      this._insertTextAtCursor(key);
+      this.needsRedraw = true;
+      this._ensureCursorVisible();
+    }
+  }
+
+  _handleMenuKeyDown(e) {
+    const mi = this.activeMenu;
+    const children = this.menu[mi].children;
+    if (e.key === "Escape") {
+      this.activeMenu = -1;
+      this.needsRedraw = true;
+    } else if (e.key === "ArrowDown") {
+      let next = this.menuHoverItem + 1;
+      while (next < children.length && children[next].type === "separator") next++;
+      if (next < children.length) this.menuHoverItem = next;
+      this._scrollDropdownToItem(children);
+      this.needsRedraw = true;
+    } else if (e.key === "ArrowUp") {
+      let prev = this.menuHoverItem - 1;
+      while (prev >= 0 && children[prev].type === "separator") prev--;
+      if (prev >= 0) this.menuHoverItem = prev;
+      this._scrollDropdownToItem(children);
+      this.needsRedraw = true;
+    } else if (e.key === "Enter") {
+      if (this.menuHoverItem >= 0 && children[this.menuHoverItem].type !== "separator") {
+        this._executeMenuAction(children[this.menuHoverItem].action);
+        this.activeMenu = -1;
+        this.menuHoverItem = -1;
+      }
+    } else if (e.key === "ArrowLeft") {
+      this.activeMenu = (mi - 1 + this.menu.length) % this.menu.length;
+      this.menuHoverItem = -1;
+      this._dropdownScrollY = 0;
+      this.needsRedraw = true;
+    } else if (e.key === "ArrowRight") {
+      this.activeMenu = (mi + 1) % this.menu.length;
+      this.menuHoverItem = -1;
+      this._dropdownScrollY = 0;
+      this.needsRedraw = true;
+    }
+    e.preventDefault();
+  }
+
+  _scrollDropdownToItem(children) {
+    const itemH = Math.round(26 * this.dpr);
+    const sepH = Math.round(8 * this.dpr);
+    const maxH = this.canvas.height - this.menuBarH - Math.round(8 * this.dpr);
+
+    let totalH = 0;
+    for (let i = 0; i < children.length; i++) {
+      totalH += children[i].type === "separator" ? sepH : itemH;
+    }
+    if (totalH <= maxH) return;
+
+    // Find Y of hovered item
+    let y = 0;
+    for (let i = 0; i < this.menuHoverItem; i++) {
+      y += children[i].type === "separator" ? sepH : itemH;
+    }
+    const h = children[this.menuHoverItem].type === "separator" ? sepH : itemH;
+
+    if (!this._dropdownScrollY) this._dropdownScrollY = 0;
+    if (y < this._dropdownScrollY) {
+      this._dropdownScrollY = y;
+    } else if (y + h > this._dropdownScrollY + maxH) {
+      this._dropdownScrollY = y + h - maxH;
+    }
+  }
+
+  _handleNavigation(key, ctrl) {
+    const doc = this.doc;
+    const line = doc.cursorLine;
+    const col = doc.cursorCol;
+
+    switch (key) {
+      case "ArrowLeft":
+        if (ctrl) {
+          const wb = doc.wordBoundaryLeft(line, col);
+          doc.setCursor(wb.line, wb.col);
+        } else {
+          if (col > 0) doc.setCursor(line, col - 1);
+          else if (line > 0) doc.setCursor(line - 1, doc.getLine(line - 1).length);
+        }
+        break;
+      case "ArrowRight":
+        if (ctrl) {
+          const wb = doc.wordBoundaryRight(line, col);
+          doc.setCursor(wb.line, wb.col);
+        } else {
+          if (col < doc.getLine(line).length) doc.setCursor(line, col + 1);
+          else if (line < doc.lineCount - 1) doc.setCursor(line + 1, 0);
+        }
+        break;
+      case "ArrowUp":
+        doc.setCursor(line - 1, doc.desiredCol, false);
+        break;
+      case "ArrowDown":
+        doc.setCursor(line + 1, doc.desiredCol, false);
+        break;
+      case "Home":
+        if (ctrl) { doc.setCursor(0, 0); }
+        else {
+          const lineText = doc.getLine(line);
+          let firstNonWs = 0;
+          while (firstNonWs < lineText.length && (lineText[firstNonWs] === " " || lineText[firstNonWs] === "\t")) firstNonWs++;
+          doc.setCursor(line, col === firstNonWs ? 0 : firstNonWs);
+        }
+        break;
+      case "End":
+        if (ctrl) doc.setCursor(doc.lineCount - 1, doc.getLine(doc.lineCount - 1).length);
+        else doc.setCursor(line, doc.getLine(line).length);
+        break;
+      case "PageUp": {
+        const n = Math.floor(this.textAreaH / this.lineH);
+        doc.setCursor(line - n, doc.desiredCol, false);
+        this.scrollY = Math.max(0, this.scrollY - n * this.lineH);
+        break;
+      }
+      case "PageDown": {
+        const n = Math.floor(this.textAreaH / this.lineH);
+        doc.setCursor(line + n, doc.desiredCol, false);
+        const max = Math.max(0, doc.lineCount * this.lineH - this.textAreaH);
+        this.scrollY = Math.min(max, this.scrollY + n * this.lineH);
+        break;
+      }
+    }
+  }
+
+  _insertTextAtCursor(text) {
+    if (this.doc.hasSelection()) this.doc.deleteSelection();
+    const l = this.doc.cursorLine;
+    const c = this.doc.cursorCol;
+    this.doc.insertText(l, c, text);
+    const lines = text.split("\n");
+    if (lines.length === 1) {
+      this.doc.setCursor(l, c + text.length);
+    } else {
+      this.doc.setCursor(l + lines.length - 1, lines[lines.length - 1].length);
+    }
+    this._computeGutter();
+  }
+
+  _handleBackspace(ctrl) {
+    if (this.doc.hasSelection()) { this.doc.deleteSelection(); return; }
+    const l = this.doc.cursorLine;
+    const c = this.doc.cursorCol;
+    if (ctrl) {
+      const wb = this.doc.wordBoundaryLeft(l, c);
+      this.doc.deleteRange(wb.line, wb.col, l, c);
+      this.doc.setCursor(wb.line, wb.col);
+    } else if (c > 0) {
+      const line = this.doc.getLine(l);
+      const before = line.substring(0, c);
+      let deleteCount = 1;
+      if (before.trimEnd().length === 0 && before.length > 0) {
+        deleteCount = ((c - 1) % Config.tabSize) + 1;
+        deleteCount = Math.min(deleteCount, c);
+      }
+      this.doc.deleteRange(l, c - deleteCount, l, c);
+      this.doc.setCursor(l, c - deleteCount);
+    } else if (l > 0) {
+      const prevLen = this.doc.getLine(l - 1).length;
+      this.doc.deleteRange(l - 1, prevLen, l, 0);
+      this.doc.setCursor(l - 1, prevLen);
+    }
+    this._computeGutter();
+  }
+
+  _handleDelete(ctrl) {
+    if (this.doc.hasSelection()) { this.doc.deleteSelection(); return; }
+    const l = this.doc.cursorLine;
+    const c = this.doc.cursorCol;
+    if (ctrl) {
+      const wb = this.doc.wordBoundaryRight(l, c);
+      this.doc.deleteRange(l, c, wb.line, wb.col);
+    } else {
+      const lineLen = this.doc.getLine(l).length;
+      if (c < lineLen) {
+        this.doc.deleteRange(l, c, l, c + 1);
+      } else if (l < this.doc.lineCount - 1) {
+        this.doc.deleteRange(l, c, l + 1, 0);
+      }
+    }
+    this._computeGutter();
+  }
+
+  _selectAll() {
+    const lastLine = this.doc.lineCount - 1;
+    const lastCol = this.doc.getLine(lastLine).length;
+    this.doc.selectionActive = true;
+    this.doc.selStartLine = 0;
+    this.doc.selStartCol = 0;
+    this.doc.selEndLine = lastLine;
+    this.doc.selEndCol = lastCol;
+    this.doc.setCursor(lastLine, lastCol);
+    this.needsRedraw = true;
+  }
+
+  _duplicateLine() {
+    const l = this.doc.cursorLine;
+    const lineText = this.doc.getLine(l);
+    this.doc.insertText(l, this.doc.getLine(l).length, "\n" + lineText);
+    this.doc.setCursor(l + 1, this.doc.cursorCol);
+    this._computeGutter();
+  }
+
+  _indentSelection() {
+    const sel = this.doc.getNormalizedSelection();
+    const spaces = " ".repeat(Config.tabSize);
+    for (let i = sel.toLine; i >= sel.fromLine; i--) {
+      this.doc.insertText(i, 0, spaces);
+    }
+  }
+
+  _outdentSelection() {
+    const sel = this.doc.getNormalizedSelection();
+    for (let i = sel.fromLine; i <= sel.toLine; i++) {
+      const line = this.doc.getLine(i);
+      let remove = 0;
+      for (let j = 0; j < Config.tabSize && j < line.length; j++) {
+        if (line[j] === " ") remove++;
+        else break;
+      }
+      if (remove > 0) this.doc.deleteRange(i, 0, i, remove);
+    }
+  }
+
+  _outdentCurrentLine() {
+    const l = this.doc.cursorLine;
+    const line = this.doc.getLine(l);
+    let remove = 0;
+    for (let j = 0; j < Config.tabSize && j < line.length; j++) {
+      if (line[j] === " ") remove++;
+      else break;
+    }
+    if (remove > 0) {
+      this.doc.deleteRange(l, 0, l, remove);
+      this.doc.setCursor(l, Math.max(0, this.doc.cursorCol - remove));
+    }
+  }
+
+  _ensureCursorVisible() {
+    const cursorY = this.doc.cursorLine * this.lineH;
+    const cursorX = this.doc.cursorCol * this.charW;
+
+    if (cursorY < this.scrollY) {
+      this.scrollY = cursorY;
+    } else if (cursorY + this.lineH > this.scrollY + this.textAreaH) {
+      this.scrollY = cursorY + this.lineH - this.textAreaH;
+    }
+
+    const effectiveX = cursorX + Config.textPaddingLeft * this.dpr;
+    if (effectiveX - this.scrollX < 0) {
+      this.scrollX = Math.max(0, effectiveX - this.charW * 4);
+    } else if (effectiveX - this.scrollX > this.textAreaW - this.charW * 2) {
+      this.scrollX = effectiveX - this.textAreaW + this.charW * 8;
+    }
+
+    this.needsRedraw = true;
+  }
+
+  _getScrollbarRect() {
+    const totalH = this.doc.lineCount * this.lineH;
+    if (totalH <= this.textAreaH) return null;
+    const ratio = this.textAreaH / totalH;
+    const sbH = Math.max(30 * this.dpr, ratio * this.textAreaH);
+    const scrollRatio = this.scrollY / (totalH - this.textAreaH);
+    const sbY = this.textAreaY + scrollRatio * (this.textAreaH - sbH);
+    return {
+      x: this.canvas.width - Math.round(this.scrollbarWidth * this.dpr),
+      y: sbY,
+      w: Math.round(this.scrollbarWidth * this.dpr),
+      h: sbH,
+    };
+  }
+
+  // ---- Render Loop ----
+  _loop(time) {
+    const dt = (time - this.lastTime) / 1000;
+    this.lastTime = time;
+    this.cursorBlink += dt;
+    if (this.cursorBlink >= Config.cursorBlinkRate * 2) this.cursorBlink = 0;
+
+    const blinkOn = this.cursorBlink < Config.cursorBlinkRate;
+    if (this._lastBlinkOn !== blinkOn) {
+      this.needsRedraw = true;
+      this._lastBlinkOn = blinkOn;
+    }
+
+    if (this.needsRedraw) {
+      this._draw();
+      this.needsRedraw = false;
+    }
+    requestAnimationFrame((t) => this._loop(t));
+  }
+
+  // ---- Drawing ----
+  _draw() {
+    const ctx = this.ctx;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+
+    ctx.fillStyle = Theme.background;
+    ctx.fillRect(0, 0, W, H);
+
+    this._drawGutter(ctx);
+    this._drawTextArea(ctx);
+    this._drawScrollbar(ctx);
+    this._drawMenuBar(ctx);
+    this._drawStatusBar(ctx);
+
+    if (this.activeMenu >= 0) {
+      this._drawDropdown(ctx);
+    }
+
+    if (this.showDropOverlay) {
+      this._drawDropOverlay(ctx, W, H);
+    }
+  }
+
+  _drawMenuBar(ctx) {
+    const W = this.canvas.width;
+    const h = this.menuBarH;
+
+    ctx.fillStyle = Theme.menuBg;
+    ctx.fillRect(0, 0, W, h);
+    ctx.fillStyle = Theme.menuBorder;
+    ctx.fillRect(0, h - this.dpr, W, this.dpr);
+
+    let x = Math.round(12 * this.dpr);
+    const textY = Math.round((h - this.atlas.charHeight) / 2);
+
+    for (let i = 0; i < this.menu.length; i++) {
+      const item = this.menu[i];
+      const itemW = this._getMenuItemW(i);
+
+      const isActive = this.activeMenu === i;
+      const isHover = this.mouseX >= x && this.mouseX < x + itemW && this.mouseY >= 0 && this.mouseY < h;
+
+      if (isActive || isHover) {
+        ctx.fillStyle = Theme.menuHover;
+        ctx.fillRect(x, 0, itemW, h);
+      }
+
+      const color = (isActive || isHover) ? Theme.menuTextHover : Theme.menuText;
+      this.atlas._drawTintedRun(ctx, item.label, x + Math.round(8 * this.dpr), textY, color);
+      x += itemW;
+    }
+  }
+
+  _drawDropdown(ctx) {
+    const mi = this.activeMenu;
+    const children = this.menu[mi].children;
+    const dropX = this._getMenuItemX(mi);
+    const dropY = this.menuBarH;
+    const dropW = Math.round(220 * this.dpr);
+    const itemH = Math.round(26 * this.dpr);
+    const sepH = Math.round(8 * this.dpr);
+    const checkCol = Math.round(12 * this.dpr);
+    const labelCol = Math.round(26 * this.dpr);
+
+    let totalH = 0;
+    for (let i = 0; i < children.length; i++) {
+      totalH += children[i].type === "separator" ? sepH : itemH;
+    }
+
+    // Clamp dropdown height to viewport
+    const maxH = this.canvas.height - dropY - Math.round(8 * this.dpr);
+    const clampedH = Math.min(totalH, maxH);
+    const needsScroll = totalH > maxH;
+
+    // Initialize dropdown scroll if needed
+    if (!this._dropdownScrollY) this._dropdownScrollY = 0;
+    if (!needsScroll) this._dropdownScrollY = 0;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(dropX + 3 * this.dpr, dropY + 3 * this.dpr, dropW, clampedH);
+
+    ctx.fillStyle = Theme.dropdownBg;
+    ctx.fillRect(dropX, dropY, dropW, clampedH);
+    ctx.strokeStyle = Theme.dropdownBorder;
+    ctx.lineWidth = this.dpr;
+    ctx.strokeRect(dropX + 0.5, dropY + 0.5, dropW - 1, clampedH - 1);
+
+    // Clip to dropdown area
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(dropX, dropY, dropW, clampedH);
+    ctx.clip();
+
+    let y = dropY - this._dropdownScrollY;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child.type === "separator") {
+        ctx.fillStyle = Theme.dropdownBorder;
+        ctx.fillRect(dropX + 8 * this.dpr, y + sepH / 2, dropW - 16 * this.dpr, this.dpr);
+        y += sepH;
+        continue;
+      }
+
+      const isHover = this.mouseX >= dropX && this.mouseX < dropX + dropW &&
+                       this.mouseY >= y && this.mouseY < y + itemH &&
+                       this.mouseY >= dropY && this.mouseY < dropY + clampedH;
+      const isKeyHover = this.menuHoverItem === i;
+
+      if (isHover || isKeyHover) {
+        ctx.fillStyle = Theme.dropdownHover;
+        ctx.fillRect(dropX + 1, y, dropW - 2, itemH);
+      }
+
+      const textY = y + Math.round((itemH - this.atlas.charHeight) / 2);
+      const color = (isHover || isKeyHover) ? Theme.menuTextHover : Theme.menuText;
+
+      // Check indicator
+      const hasCheck = typeof child.checked === "function";
+      if (hasCheck) {
+        const isChecked = child.checked();
+        if (isChecked) {
+          this.atlas._drawTintedRun(ctx, "\u2022", dropX + checkCol, textY, Theme.caret);
+        }
+        this.atlas._drawTintedRun(ctx, child.label, dropX + labelCol, textY, color);
+      } else {
+        this.atlas._drawTintedRun(ctx, child.label, dropX + Math.round(12 * this.dpr), textY, color);
+      }
+
+      if (child.shortcut) {
+        const scW = child.shortcut.length * this.charW;
+        this.atlas._drawTintedRun(ctx, child.shortcut,
+          dropX + dropW - scW - Math.round(12 * this.dpr), textY, Theme.gutterText);
+      }
+
+      y += itemH;
+    }
+
+    ctx.restore();
+
+    // Scroll indicators if needed
+    if (needsScroll) {
+      if (this._dropdownScrollY > 0) {
+        ctx.fillStyle = Theme.dropdownBg;
+        ctx.fillRect(dropX + 1, dropY, dropW - 2, Math.round(12 * this.dpr));
+        this.atlas._drawTintedRun(ctx, "^", dropX + dropW / 2 - this.charW / 2,
+          dropY, Theme.gutterText);
+      }
+      if (this._dropdownScrollY < totalH - clampedH) {
+        const bottomY = dropY + clampedH - Math.round(12 * this.dpr);
+        ctx.fillStyle = Theme.dropdownBg;
+        ctx.fillRect(dropX + 1, bottomY, dropW - 2, Math.round(12 * this.dpr));
+        this.atlas._drawTintedRun(ctx, "v", dropX + dropW / 2 - this.charW / 2,
+          bottomY, Theme.gutterText);
+      }
+    }
+  }
+
+  _drawGutter(ctx) {
+    const startLine = Math.floor(this.scrollY / this.lineH);
+    const visibleLines = Math.ceil(this.textAreaH / this.lineH) + 1;
+    const endLine = Math.min(this.doc.lineCount, startLine + visibleLines);
+
+    ctx.fillStyle = Theme.gutterBg;
+    ctx.fillRect(0, this.menuBarH, this.gutterW, this.textAreaH);
+
+    ctx.fillStyle = Theme.menuBorder;
+    ctx.fillRect(this.gutterW - this.dpr, this.menuBarH, this.dpr, this.textAreaH);
+
+    for (let i = startLine; i < endLine; i++) {
+      const y = this.menuBarH + (i * this.lineH - this.scrollY);
+      if (y + this.lineH < this.menuBarH || y > this.menuBarH + this.textAreaH) continue;
+
+      const num = String(i + 1);
+      const color = i === this.doc.cursorLine ? Theme.gutterActiveLine : Theme.gutterText;
+      const numWidth = num.length * this.charW;
+      const x = this.gutterW - Config.gutterPaddingRight * this.dpr - numWidth;
+      this.atlas._drawTintedRun(ctx, num, x, y, color);
+    }
+  }
+
+  _drawTextArea(ctx) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.gutterW, this.menuBarH, this.textAreaW, this.textAreaH);
+    ctx.clip();
+
+    const startLine = Math.floor(this.scrollY / this.lineH);
+    const visibleLines = Math.ceil(this.textAreaH / this.lineH) + 1;
+    const endLine = Math.min(this.doc.lineCount, startLine + visibleLines);
+    const textX = this.gutterW + Config.textPaddingLeft * this.dpr;
+
+    // Active line highlight
+    const cursorScreenY = this.menuBarH + (this.doc.cursorLine * this.lineH - this.scrollY);
+    if (cursorScreenY + this.lineH > this.menuBarH && cursorScreenY < this.menuBarH + this.textAreaH) {
+      ctx.fillStyle = Theme.lineHighlight;
+      ctx.fillRect(this.gutterW, cursorScreenY, this.textAreaW, this.lineH);
+    }
+
+    // Selection
+    if (this.doc.hasSelection()) {
+      this._drawSelection(ctx, startLine, endLine, textX);
+    }
+
+    // Lines
+    for (let i = startLine; i < endLine; i++) {
+      const y = this.menuBarH + (i * this.lineH - this.scrollY);
+      if (y + this.lineH < this.menuBarH || y > this.menuBarH + this.textAreaH) continue;
+
+      const tokens = this.doc.getTokensForLine(i);
+      const runs = [];
+      for (let t = 0; t < tokens.length; t++) {
+        const color = this.highlightEnabled ? tokenTypeToColor(tokens[t].type) : Theme.normal;
+        runs.push({ text: tokens[t].text, color: color });
+      }
+      this.atlas.drawColoredText(ctx, runs, textX - this.scrollX, y);
+    }
+
+    // Cursor
+    if (this._lastBlinkOn) {
+      const cx = textX + this.doc.cursorCol * this.charW - this.scrollX;
+      const cy = this.menuBarH + (this.doc.cursorLine * this.lineH - this.scrollY);
+      ctx.fillStyle = Theme.caret;
+      ctx.fillRect(cx, cy + 2 * this.dpr, Math.max(2, this.dpr), this.lineH - 4 * this.dpr);
+    }
+
+    ctx.restore();
+  }
+
+  _drawSelection(ctx, startLine, endLine, textX) {
+    const sel = this.doc.getNormalizedSelection();
+    ctx.fillStyle = Theme.selection;
+
+    for (let i = Math.max(startLine, sel.fromLine); i <= Math.min(endLine - 1, sel.toLine); i++) {
+      const y = this.menuBarH + (i * this.lineH - this.scrollY);
+      let x1, x2;
+
+      if (i === sel.fromLine && i === sel.toLine) {
+        x1 = sel.fromCol * this.charW;
+        x2 = sel.toCol * this.charW;
+      } else if (i === sel.fromLine) {
+        x1 = sel.fromCol * this.charW;
+        x2 = (this.doc.getLine(i).length + 1) * this.charW;
+      } else if (i === sel.toLine) {
+        x1 = 0;
+        x2 = sel.toCol * this.charW;
+      } else {
+        x1 = 0;
+        x2 = (this.doc.getLine(i).length + 1) * this.charW;
+      }
+
+      ctx.fillRect(textX + x1 - this.scrollX, y, x2 - x1, this.lineH);
+    }
+  }
+
+  _drawScrollbar(ctx) {
+    const sbRect = this._getScrollbarRect();
+    if (!sbRect) return;
+
+    const x = this.canvas.width - Math.round(this.scrollbarWidth * this.dpr);
+    ctx.fillStyle = Theme.background;
+    ctx.fillRect(x, this.menuBarH, Math.round(this.scrollbarWidth * this.dpr), this.textAreaH);
+
+    const isHover = this.mouseX >= x;
+    ctx.fillStyle = (isHover || this.isDraggingScrollbar) ? Theme.scrollbarHover : Theme.scrollbar;
+    this._drawRoundRect(ctx, sbRect.x + 2 * this.dpr, sbRect.y,
+      sbRect.w - 4 * this.dpr, sbRect.h, Math.round(3 * this.dpr));
+  }
+
+  _drawRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  _drawStatusBar(ctx) {
+    const W = this.canvas.width;
+    const y = this.canvas.height - this.statusBarH;
+
+    ctx.fillStyle = Theme.statusBg;
+    ctx.fillRect(0, y, W, this.statusBarH);
+
+    const textY = y + Math.round((this.statusBarH - this.atlas.charHeight) / 2);
+
+    let leftText = this.doc.filename;
+    if (this.doc.dirty) leftText += " [modified]";
+    this.atlas._drawTintedRun(ctx, leftText, Math.round(10 * this.dpr), textY, Theme.statusText);
+
+    const c = this.doc;
+    const syntaxLabel = this.highlightEnabled ? this.doc.syntax.name : this.doc.syntax.name + " (off)";
+    const rightText = syntaxLabel + "  Ln " + (c.cursorLine + 1) + ", Col " + (c.cursorCol + 1) + "  " + c.lineCount + " lines";
+    const rightW = rightText.length * this.charW;
+    this.atlas._drawTintedRun(ctx, rightText, W - rightW - Math.round(10 * this.dpr), textY, Theme.statusText);
+  }
+
+  _drawDropOverlay(ctx, W, H) {
+    ctx.fillStyle = "rgba(80, 140, 255, 0.1)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "#508CFF";
+    ctx.lineWidth = 3 * this.dpr;
+    const inset = 20 * this.dpr;
+    ctx.setLineDash([8 * this.dpr, 6 * this.dpr]);
+    ctx.strokeRect(inset, inset, W - inset * 2, H - inset * 2);
+    ctx.setLineDash([]);
+
+    ctx.font = Math.round(18 * this.dpr) + "px " + Config.fontFamily;
+    ctx.fillStyle = "#508CFF";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Drop file to open", W / 2, H / 2);
+    ctx.textAlign = "start";
+  }
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+const editor = new Editor(document.getElementById("canvas"));
+</script>
+</body>
+</html>
