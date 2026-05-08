@@ -164,6 +164,7 @@ test("fresh workspaces start without default files", async ({ page }, testInfo) 
   await resetAndLoad(page, testInfo, { seed: false });
   await expect.poll(() => page.evaluate(() => window.__slugApp!.vfs.listAllFiles().then((files) => files.map((file) => file.path)))).toEqual([]);
   await expect.poll(async () => (await appState<CanvasTargets>(page)).fileTargets.map((item) => item.path)).toEqual([]);
+  await expect.poll(async () => (await appState<CanvasTargets>(page)).filePanelEmptyHint).toBe("right click or double tap header to create file");
 });
 
 test("restores open files and dock layout on reload", async ({ page, browserName }) => {
@@ -4826,6 +4827,7 @@ type CanvasTargets = {
   aiEndpointFieldState: "ok" | "error" | null;
   fileTargets: CanvasTarget[];
   folderTargets: FolderCanvasTarget[];
+  filePanelEmptyHint: string | null;
   filesRootTarget: CanvasRect | null;
   renamePath: string | null;
   renameText: string;
